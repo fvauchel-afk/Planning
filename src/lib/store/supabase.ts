@@ -228,7 +228,11 @@ export async function supabaseCreateChantier(
     if (phaseError) {
       if (isMissingColumnError(phaseError, "heure_debut")) {
         const { error: retry } = await supabase.from("phases_planning").insert(
-          rows.map(({ heure_debut: _ignored, ...rest }) => rest),
+          rows.map((row) => {
+            const payload = { ...row };
+            delete (payload as { heure_debut?: string | null }).heure_debut;
+            return payload;
+          }),
         );
         if (retry) throw wrapSupabaseError(retry);
       } else {

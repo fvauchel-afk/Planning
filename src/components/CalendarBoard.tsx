@@ -28,7 +28,7 @@ import {
 import { formatClock, hoursForSlot, workWindowsForRow } from "@/lib/engine/hours";
 import { halfFromLabel } from "@/lib/engine/slots";
 import { usePlanning } from "@/lib/planning-context";
-import { PHASE_LABELS, PRIORITE_LABELS, type Employee } from "@/lib/types";
+import { PRIORITE_LABELS, type Employee } from "@/lib/types";
 
 type ViewMode = "overview" | "week" | "day";
 
