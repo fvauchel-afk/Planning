@@ -1,0 +1,149 @@
+const JOURS_COURTS = ["dim.", "lun.", "mar.", "mer.", "jeu.", "ven.", "sam."];
+const MOIS_COURTS = [
+  "janv.",
+  "févr.",
+  "mars",
+  "avr.",
+  "mai",
+  "juin",
+  "juil.",
+  "août",
+  "sept.",
+  "oct.",
+  "nov.",
+  "déc.",
+];
+
+export function toISODate(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+export function parseISODate(iso: string): Date {
+  const [y, m, d] = iso.split("-").map(Number);
+  return new Date(y, (m ?? 1) - 1, d ?? 1);
+}
+
+export function addDays(iso: string, days: number): string {
+  const date = parseISODate(iso);
+  date.setDate(date.getDate() + days);
+  return toISODate(date);
+}
+
+export function startOfWeekMonday(date: Date): Date {
+  const copy = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const day = copy.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  copy.setDate(copy.getDate() + diff);
+  return copy;
+}
+
+export function eachDay(fromIso: string, count: number): string[] {
+  return Array.from({ length: count }, (_, i) => addDays(fromIso, i));
+}
+
+export function formatDayHeader(iso: string): { weekday: string; date: string } {
+  const date = parseISODate(iso);
+  return {
+    weekday: JOURS_COURTS[date.getDay()],
+    date: `${date.getDate()} ${MOIS_COURTS[date.getMonth()]}`,
+  };
+}
+
+export function formatLongDate(iso: string): string {
+  const date = parseISODate(iso);
+  return `${JOURS_COURTS[date.getDay()]} ${date.getDate()} ${MOIS_COURTS[date.getMonth()]} ${date.getFullYear()}`;
+}
+
+export function isWeekend(iso: string): boolean {
+  const day = parseISODate(iso).getDay();
+  return day === 0 || day === 6;
+}
+
+export function isSunday(iso: string): boolean {
+  return parseISODate(iso).getDay() === 0;
+}
+
+/** Lundi = 1 … dimanche = 7. */
+export function isoWeekday(iso: string): number {
+  const day = parseISODate(iso).getDay();
+  return day === 0 ? 7 : day;
+}
+
+export function datesOverlap(
+  startA: string,
+  endA: string,
+  startB: string,
+  endB: string,
+): boolean {
+  return startA <= endB && startB <= endA;
+}
+
+export function dateInRange(iso: string, start: string, end: string): boolean {
+  return iso >= start && iso <= end;
+}
+
+export function nextWorkingDay(iso: string): string {
+  let cursor = addDays(iso, 1);
+  while (isWeekend(cursor)) {
+    cursor = addDays(cursor, 1);
+  }
+  return cursor;
+}
+
+/** `n` jours ouvrés après `iso` (week-end exclus, `iso` non compté). `n` peut être négatif. */
+export function addWorkingDays(iso: string, n: number): string {
+  if (n === 0) return iso;
+  if (n < 0) {
+    let cursor = iso;
+    let left = -n;
+    while (left > 0) {
+      cursor = addDays(cursor, -1);
+      if (!isWeekend(cursor)) left -= 1;
+    }
+    return cursor;
+  }
+  let cursor = iso;
+  let added = 0;
+  while (added < n) {
+    cursor = addDays(cursor, 1);
+    if (!isWeekend(cursor)) added += 1;
+  }
+  return cursor;
+}
+
+/** Plus petit entier relatif `s` tel que `addWorkingDays(from, s) >= target`. */
+export function shiftToReach(from: string, target: string): number {
+  if (target === from) return 0;
+  if (target > from) return workingDaysBetween(from, target);
+  return -workingDaysBetween(target, from);
+}
+
+export function workingDaysBetween(startIso: string, endIso: string): number {
+  if (endIso <= startIso) return 0;
+  let count = 0;
+  let cursor = addDays(startIso, 1);
+  while (cursor <= endIso) {
+    if (!isWeekend(cursor)) count += 1;
+    cursor = addDays(cursor, 1);
+  }
+  return count;
+}
+
+export function startOfWeekIso(iso: string): string {
+  return toISODate(startOfWeekMonday(parseISODate(iso)));
+}
+
+export function compareIso(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+export function formatOvertimeHours(hours: number): string {
+  const rounded = Math.round(hours * 10) / 10;
+  const body = Number.isInteger(rounded)
+    ? String(rounded)
+    : rounded.toFixed(1).replace(".", ",");
+  return `+${body}h`;
+}
