@@ -1,19 +1,14 @@
-import { cookies } from "next/headers";
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getOnedriveConfig, ONEDRIVE_SCOPES } from "@/lib/onedrive/config";
+import {
+  ONEDRIVE_OAUTH_STATE_COOKIE,
+  oauthStateCookieOptions,
+} from "@/lib/onedrive/oauth-state";
 
-const STATE_COOKIE = "onedrive_oauth_state";
-
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const cfg = getOnedriveConfig();
     const state = crypto.randomUUID();
-    cookies().set(STATE_COOKIE, state, {
-      httpOnly: true,
-      sameSite: "lax",
-      path: "/",
-      maxAge: 600,
-    });
     const url = new URL(
       `https://login.microsoftonline.com/${cfg.tenant}/oauth2/v2.0/authorize`,
     );
@@ -24,12 +19,18 @@ export async function GET() {
     url.searchParams.set("scope", ONEDRIVE_SCOPES);
     url.searchParams.set("state", state);
     url.searchParams.set("prompt", "select_account");
-    return NextResponse.redirect(url.toString());
+    const response = NextResponse.redirect(url.toString());
+    response.cookies.set(
+      ONEDRIVE_OAUTH_STATE_COOKIE,
+      state,
+      oauthStateCookieOptions(request.nextUrl.protocol === "https:"),
+    );
+    return response;
   } catch (err) {
     const message = err instanceof Error ? err.message : "Connexion OneDrive impossible.";
     const origin =
       process.env.ONEDRIVE_REDIRECT_URI?.replace(/\/api\/onedrive\/callback\/?$/, "") ||
-      "http://localhost:3000";
+      request.nextUrl.origin;
     return NextResponse.redirect(
       `${origin}/admin/onedrive?error=${encodeURIComponent(message)}`,
     );

@@ -1,25 +1,33 @@
-import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { persistAccountLabel } from "@/lib/onedrive/graph";
+import {
+  ONEDRIVE_OAUTH_STATE_COOKIE,
+  clearOauthStateCookie,
+} from "@/lib/onedrive/oauth-state";
 import { exchangeAuthorizationCode } from "@/lib/onedrive/tokens";
 
-const STATE_COOKIE = "onedrive_oauth_state";
 const ADMIN = "/admin/onedrive";
 
 export async function GET(request: NextRequest) {
   const url = request.nextUrl;
+  const secure = url.protocol === "https:";
   const error = url.searchParams.get("error_description") || url.searchParams.get("error");
   if (error) {
-    return NextResponse.redirect(new URL(`${ADMIN}?error=${encodeURIComponent(error)}`, url.origin));
+    const response = NextResponse.redirect(
+      new URL(`${ADMIN}?error=${encodeURIComponent(error)}`, url.origin),
+    );
+    clearOauthStateCookie(response, secure);
+    return response;
   }
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
-  const expected = cookies().get(STATE_COOKIE)?.value;
-  cookies().set(STATE_COOKIE, "", { path: "/", maxAge: 0 });
+  const expected = request.cookies.get(ONEDRIVE_OAUTH_STATE_COOKIE)?.value;
   if (!code || !state || !expected || state !== expected) {
-    return NextResponse.redirect(
+    const response = NextResponse.redirect(
       new URL(`${ADMIN}?error=${encodeURIComponent("État OAuth invalide. Réessayez.")}`, url.origin),
     );
+    clearOauthStateCookie(response, secure);
+    return response;
   }
   try {
     await exchangeAuthorizationCode(code);
@@ -28,12 +36,16 @@ export async function GET(request: NextRequest) {
     } catch {
       // Compte connecté même si /me échoue.
     }
-    return NextResponse.redirect(new URL(`${ADMIN}?connected=1`, url.origin));
+    const response = NextResponse.redirect(new URL(`${ADMIN}?connected=1`, url.origin));
+    clearOauthStateCookie(response, secure);
+    return response;
   } catch (err) {
     const message =
       err instanceof Error ? err.message : "Enregistrement du jeton OneDrive impossible.";
-    return NextResponse.redirect(
+    const response = NextResponse.redirect(
       new URL(`${ADMIN}?error=${encodeURIComponent(message)}`, url.origin),
     );
+    clearOauthStateCookie(response, secure);
+    return response;
   }
 }
