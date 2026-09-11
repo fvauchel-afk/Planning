@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getSessionFromRequest } from "@/lib/auth/guard";
 import { runPlanningBackup } from "@/lib/backup/run";
 import { isMissingSchemaError } from "@/lib/supabase/errors";
 
@@ -23,21 +24,23 @@ function bearerMatches(header: string | null, secret: string | undefined): boole
   return timingSafeEqual(token, secret);
 }
 
-function isAuthorized(request: NextRequest): boolean {
+async function isAuthorized(request: NextRequest): Promise<boolean> {
   const auth = request.headers.get("authorization");
   if (bearerMatches(auth, process.env.BACKUP_CRON_SECRET)) return true;
   if (bearerMatches(auth, process.env.CRON_SECRET)) return true;
 
-  // Bouton admin : même origine, sans exposer le secret au navigateur.
   if (request.method === "POST") {
     const origin = request.headers.get("origin");
-    if (origin && origin === request.nextUrl.origin) return true;
+    if (origin && origin === request.nextUrl.origin) {
+      const session = await getSessionFromRequest(request);
+      return Boolean(session?.isAdmin);
+    }
   }
   return false;
 }
 
 async function handle(request: NextRequest) {
-  if (!isAuthorized(request)) {
+  if (!(await isAuthorized(request))) {
     return NextResponse.json({ error: "Non autorisé." }, { status: 401 });
   }
   try {

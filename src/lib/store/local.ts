@@ -146,6 +146,7 @@ export function localUpsertEmployee(
             roles: input.roles,
             actif: input.actif,
             horaires: normalizeHorairesEmploye(input.horaires),
+            is_admin: Boolean(input.is_admin),
           }
         : employee,
     );
@@ -155,6 +156,7 @@ export function localUpsertEmployee(
       nom: input.nom,
       roles: input.roles,
       actif: input.actif,
+      is_admin: Boolean(input.is_admin),
       horaires: normalizeHorairesEmploye(input.horaires),
     };
     next.employees.push(employee);

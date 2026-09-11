@@ -165,6 +165,8 @@ export function EmployeesPage() {
   const [horaires, setHoraires] = useState<HorairesEmploye>(
     defaultHorairesEmploye(),
   );
+  const [pin, setPin] = useState("");
+  const [isAdmin, setIsAdmin] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -176,6 +178,8 @@ export function EmployeesPage() {
     setNom(employee.nom);
     setRoles(employee.roles);
     setActif(employee.actif);
+    setIsAdmin(Boolean(employee.is_admin));
+    setPin("");
     setHoraires(normalizeHorairesEmploye(employee.horaires));
   }
 
@@ -184,6 +188,8 @@ export function EmployeesPage() {
     setNom("");
     setRoles([]);
     setActif(true);
+    setIsAdmin(false);
+    setPin("");
     setHoraires(defaultHorairesEmploye());
   }
 
@@ -223,12 +229,18 @@ export function EmployeesPage() {
       setError("Nom et au moins un rôle sont obligatoires.");
       return;
     }
+    if (pin && !/^\d{4}$/.test(pin)) {
+      setError("Le code PIN doit contenir 4 chiffres.");
+      return;
+    }
     setError(null);
     await upsertEmployee({
       id: editing?.id,
       nom: nom.trim(),
       roles,
       actif,
+      is_admin: isAdmin,
+      pin: pin || undefined,
       horaires,
     });
     resetForm();
@@ -329,6 +341,7 @@ export function EmployeesPage() {
                   <th className="px-3 py-2 font-medium">Rôles</th>
                   <th className="px-3 py-2 font-medium">Horaires</th>
                   <th className="px-3 py-2 font-medium">Statut</th>
+                  <th className="px-3 py-2 font-medium">Droits</th>
                   <th className="px-3 py-2" />
                 </tr>
               </thead>
@@ -344,6 +357,9 @@ export function EmployeesPage() {
                     </td>
                     <td className="px-3 py-2">
                       {employee.actif ? "Actif" : "Inactif"}
+                    </td>
+                    <td className="px-3 py-2">
+                      {employee.is_admin ? "Admin" : "Salarié"}
                     </td>
                     <td className="px-3 py-2 text-right">
                       <button
@@ -409,6 +425,28 @@ export function EmployeesPage() {
               onChange={(event) => setActif(event.target.checked)}
             />
             Actif
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={isAdmin}
+              onChange={(event) => setIsAdmin(event.target.checked)}
+            />
+            Administrateur (accès complet)
+          </label>
+          <label className="block text-sm">
+            <span className="mb-1 block">Code PIN (4 chiffres)</span>
+            <input
+              inputMode="numeric"
+              pattern="\d{4}"
+              maxLength={4}
+              value={pin}
+              onChange={(event) =>
+                setPin(event.target.value.replace(/\D/g, "").slice(0, 4))
+              }
+              placeholder={editing ? "Laisser vide pour ne pas changer" : "1234 par défaut"}
+              className="w-full rounded border border-stone-300 px-3 py-2"
+            />
           </label>
           <div className="flex gap-2">
             <button

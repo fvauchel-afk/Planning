@@ -1,4 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { forbidden, requireSession } from "@/lib/auth/guard";
+import { fetchSupabaseSnapshot } from "@/lib/store/supabase";
+import { isSupabaseServerConfigured } from "@/lib/supabase/server";
 import { sanitizeOnedriveName } from "@/lib/onedrive/sanitize";
 import {
   loadChantierLinkByPhase,
@@ -14,6 +17,9 @@ function dataUrlToBuffer(dataUrl: string): Buffer {
 }
 
 export async function POST(request: NextRequest) {
+  const { session, response } = await requireSession(request);
+  if (response || !session) return response ?? NextResponse.json({ error: "Non authentifié." }, { status: 401 });
+
   const body = (await request.json()) as {
     phaseId?: string;
     receptionId?: string;
@@ -39,6 +45,13 @@ export async function POST(request: NextRequest) {
   try {
     if (!phaseId || !body.pngDataUrl) {
       return NextResponse.json({ error: "phaseId et pngDataUrl requis." }, { status: 400 });
+    }
+    if (!session.isAdmin && isSupabaseServerConfigured()) {
+      const snapshot = await fetchSupabaseSnapshot();
+      const phase = snapshot.phases.find((item) => item.id === phaseId);
+      if (!phase || phase.employe_id !== session.employeeId) {
+        return forbidden("Cette pose ne vous est pas attribuée.");
+      }
     }
     const tokens = await loadOnedriveTokens();
     if (!tokens?.refresh_token) {

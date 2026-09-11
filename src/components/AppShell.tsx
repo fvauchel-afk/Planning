@@ -1,5 +1,9 @@
+"use client";
+
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { OnedriveBanner } from "@/components/OnedriveBanner";
+import { useSession } from "@/lib/auth/session-context";
 
 const LINKS: { href: string; label: string; desktopOnly?: boolean }[] = [
   { href: "/", label: "Planning" },
@@ -19,6 +23,15 @@ export function AppShell({
   children: React.ReactNode;
   currentPath: string;
 }) {
+  const router = useRouter();
+  const { session } = useSession();
+
+  async function logout() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    router.replace("/connexion");
+    router.refresh();
+  }
+
   return (
     <div className="min-h-screen">
       <header className="sticky top-0 z-20 border-b border-stone-800 bg-stone-900 text-stone-100">
@@ -30,8 +43,11 @@ export function AppShell({
             <h1 className="font-serif text-xl leading-tight text-stone-50">
               Ferronnerie Vauchel
             </h1>
+            {session?.nom && (
+              <p className="text-xs text-stone-400">{session.nom}</p>
+            )}
           </div>
-          <nav className="flex flex-wrap gap-1">
+          <nav className="flex flex-wrap items-center gap-1">
             {LINKS.map((link) => {
               const active =
                 link.href === "/"
@@ -53,6 +69,13 @@ export function AppShell({
                 </Link>
               );
             })}
+            <button
+              type="button"
+              onClick={() => void logout()}
+              className="rounded-md px-3 py-1.5 text-sm text-stone-400 hover:bg-stone-800 hover:text-white"
+            >
+              Déconnexion
+            </button>
           </nav>
         </div>
       </header>

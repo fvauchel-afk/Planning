@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useSalarieId } from "@/lib/use-salarie";
+import { useSession } from "@/lib/auth/session-context";
 
 export function MobileShell({
   children,
@@ -11,7 +11,14 @@ export function MobileShell({
   employeeName?: string;
 }) {
   const router = useRouter();
-  const { setEmployeeId } = useSalarieId();
+  const { session } = useSession();
+  const name = employeeName ?? session?.nom;
+
+  async function logout() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    router.replace("/connexion");
+    router.refresh();
+  }
 
   return (
     <div className="min-h-screen bg-[#f3efe6]">
@@ -21,16 +28,13 @@ export function MobileShell({
         </p>
         <div className="mt-0.5 flex items-baseline justify-between gap-3">
           <h1 className="font-serif text-xl">Mon planning</h1>
-          {employeeName && (
+          {name && (
             <button
               type="button"
               className="text-xs text-amber-200 underline"
-              onClick={() => {
-                setEmployeeId(null);
-                router.push("/moi?changer=1");
-              }}
+              onClick={() => void logout()}
             >
-              {employeeName} · changer
+              {name} · déconnexion
             </button>
           )}
         </div>

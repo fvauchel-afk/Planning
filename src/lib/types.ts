@@ -71,6 +71,7 @@ export type Employee = {
   roles: Role[];
   actif: boolean;
   horaires?: HorairesEmploye | null;
+  is_admin?: boolean;
 };
 
 export type Chantier = {
@@ -195,6 +196,8 @@ export type NewEmployeeInput = {
   roles: Role[];
   actif: boolean;
   horaires?: HorairesEmploye | null;
+  is_admin?: boolean;
+  pin?: string;
 };
 
 export type NewAbsenceInput = {

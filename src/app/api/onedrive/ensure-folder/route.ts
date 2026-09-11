@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireAdmin } from "@/lib/auth/guard";
 import { updateChantierOnedriveLink } from "@/lib/onedrive/db";
 import { createClientFolder } from "@/lib/onedrive/graph";
 import { loadOnedriveTokens } from "@/lib/onedrive/tokens";
 
 export async function POST(request: NextRequest) {
+  const { response } = await requireAdmin(request);
+  if (response) return response;
   try {
     const body = (await request.json()) as {
       chantierId?: string;

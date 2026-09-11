@@ -1,5 +1,6 @@
+import "server-only";
 import { defaultHoraires, normalizeHoraire, normalizeHorairesEmploye } from "@/lib/engine/hours";
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
   asIsoDate,
   isMissingColumnError,
@@ -35,11 +36,17 @@ type EmployeeRow = {
   roles: Role[];
   actif: boolean;
   horaires?: Employee["horaires"];
+  is_admin?: boolean;
 };
 
 let inflightSnapshot: Promise<PlanningSnapshot> | null = null;
 let lastSnapshot: { at: number; data: PlanningSnapshot } | null = null;
 const SNAPSHOT_TTL_MS = 2500;
+
+export function invalidateSupabaseSnapshotCache() {
+  lastSnapshot = null;
+  inflightSnapshot = null;
+}
 
 export async function fetchSupabaseSnapshot(): Promise<PlanningSnapshot> {
   if (lastSnapshot && Date.now() - lastSnapshot.at < SNAPSHOT_TTL_MS) {
@@ -59,19 +66,37 @@ export async function fetchSupabaseSnapshot(): Promise<PlanningSnapshot> {
 }
 
 async function fetchSupabaseSnapshotOnce(): Promise<PlanningSnapshot> {
-  const supabase = createSupabaseBrowserClient();
-  const [employees, chantiers, elements, phases, absences, horaires] =
-    await Promise.all([
-      supabase.from("employees").select("*").order("nom"),
-      supabase.from("chantiers").select("*").order("date_creation"),
-      supabase.from("elements_chantier").select("*"),
-      supabase.from("phases_planning").select("*"),
-      supabase.from("absences").select("*"),
-      supabase.from("horaires_saisonniers").select("*").order("ordre"),
-    ]);
+  const supabase = createSupabaseServerClient();
+  let employeeRows: EmployeeRow[] | null = null;
+  const employeesWithAdmin = await supabase
+    .from("employees")
+    .select("id, nom, roles, actif, horaires, is_admin")
+    .order("nom");
+  if (employeesWithAdmin.error && isMissingColumnError(employeesWithAdmin.error, "is_admin")) {
+    const fallback = await supabase
+      .from("employees")
+      .select("id, nom, roles, actif, horaires")
+      .order("nom");
+    if (fallback.error) {
+      logSupabaseError("fetchSnapshot", fallback.error);
+      throw wrapSupabaseError(fallback.error);
+    }
+    employeeRows = (fallback.data ?? []) as EmployeeRow[];
+  } else if (employeesWithAdmin.error) {
+    logSupabaseError("fetchSnapshot", employeesWithAdmin.error);
+    throw wrapSupabaseError(employeesWithAdmin.error);
+  } else {
+    employeeRows = (employeesWithAdmin.data ?? []) as EmployeeRow[];
+  }
+  const [chantiers, elements, phases, absences, horaires] = await Promise.all([
+    supabase.from("chantiers").select("*").order("date_creation"),
+    supabase.from("elements_chantier").select("*"),
+    supabase.from("phases_planning").select("*"),
+    supabase.from("absences").select("*"),
+    supabase.from("horaires_saisonniers").select("*").order("ordre"),
+  ]);
 
   const firstError =
-    employees.error ||
     chantiers.error ||
     elements.error ||
     phases.error ||
@@ -100,12 +125,13 @@ async function fetchSupabaseSnapshotOnce(): Promise<PlanningSnapshot> {
       : ((signalements.data ?? []) as Signalement[]);
 
   return {
-    employees: (employees.data ?? []).map((row: EmployeeRow) => ({
+    employees: (employeeRows ?? []).map((row: EmployeeRow) => ({
       id: row.id,
       nom: row.nom,
       roles: row.roles ?? [],
       actif: row.actif,
       horaires: normalizeHorairesEmploye(row.horaires),
+      is_admin: Boolean(row.is_admin),
     })),
     chantiers: ((chantiers.data ?? []) as Chantier[]).map((chantier) => ({
       ...chantier,
@@ -169,7 +195,7 @@ function optionalTable<T>(result: {
 export async function supabaseCreateChantier(
   input: NewChantierInput,
 ): Promise<string> {
-  const supabase = createSupabaseBrowserClient();
+  const supabase = createSupabaseServerClient();
   const { data: chantier, error: chantierError } = await supabase
     .from("chantiers")
     .insert({
@@ -248,48 +274,84 @@ export async function supabaseCreateChantier(
 export async function supabaseUpsertEmployee(
   input: NewEmployeeInput & { id?: string },
 ): Promise<void> {
-  const supabase = createSupabaseBrowserClient();
-  const payload = {
+  const supabase = createSupabaseServerClient();
+  const payload: Record<string, unknown> = {
     nom: input.nom,
     roles: input.roles,
     actif: input.actif,
     horaires: normalizeHorairesEmploye(input.horaires),
+    is_admin: Boolean(input.is_admin),
   };
+  let employeeId = input.id;
   if (input.id) {
-    const { error } = await supabase.from("employees").update(payload).eq("id", input.id);
-    if (!error) return;
-    if (isMissingColumnError(error, "horaires")) {
-      const { error: retry } = await supabase
-        .from("employees")
-        .update({
+    const { error } = await supabase
+      .from("employees")
+      .update(payload)
+      .eq("id", input.id);
+    if (error) {
+      if (isMissingColumnError(error, "is_admin") || isMissingColumnError(error, "horaires")) {
+        const { error: retry } = await supabase
+          .from("employees")
+          .update({
+            nom: payload.nom,
+            roles: payload.roles,
+            actif: payload.actif,
+            ...(isMissingColumnError(error, "horaires")
+              ? {}
+              : { horaires: payload.horaires }),
+            ...(isMissingColumnError(error, "is_admin")
+              ? {}
+              : { is_admin: payload.is_admin }),
+          })
+          .eq("id", input.id);
+        if (retry) throw wrapSupabaseError(retry);
+      } else {
+        throw wrapSupabaseError(error);
+      }
+    }
+  } else {
+    const { data, error } = await supabase
+      .from("employees")
+      .insert(payload)
+      .select("id")
+      .single();
+    if (error) {
+      if (isMissingColumnError(error, "is_admin") || isMissingColumnError(error, "horaires")) {
+        const slim = {
           nom: payload.nom,
           roles: payload.roles,
           actif: payload.actif,
-        })
-        .eq("id", input.id);
-      if (retry) throw wrapSupabaseError(retry);
-      return;
+          ...(isMissingColumnError(error, "horaires")
+            ? {}
+            : { horaires: payload.horaires }),
+          ...(isMissingColumnError(error, "is_admin")
+            ? {}
+            : { is_admin: payload.is_admin }),
+        };
+        const retry = await supabase.from("employees").insert(slim).select("id").single();
+        if (retry.error) throw wrapSupabaseError(retry.error);
+        employeeId = retry.data?.id;
+      } else {
+        throw wrapSupabaseError(error);
+      }
+    } else {
+      employeeId = data?.id;
     }
-    throw wrapSupabaseError(error);
   }
-  const { error } = await supabase.from("employees").insert(payload);
-  if (!error) return;
-  if (isMissingColumnError(error, "horaires")) {
-    const { error: retry } = await supabase.from("employees").insert({
-      nom: payload.nom,
-      roles: payload.roles,
-      actif: payload.actif,
+  const pin = input.pin?.trim();
+  if (pin && employeeId) {
+    const { error: pinError } = await supabase.rpc("set_employee_pin", {
+      p_id: employeeId,
+      p_pin: pin,
     });
-    if (retry) throw wrapSupabaseError(retry);
-    return;
+    if (pinError) throw wrapSupabaseError(pinError);
   }
-  throw wrapSupabaseError(error);
 }
 
 export async function supabaseCreateAbsence(
   input: NewAbsenceInput,
 ): Promise<void> {
-  const supabase = createSupabaseBrowserClient();
+  const supabase = createSupabaseServerClient();
   const { error } = await supabase.from("absences").insert({
     employe_id: input.employe_id,
     date_debut: input.date_debut,
@@ -302,7 +364,7 @@ export async function supabaseCreateAbsence(
 }
 
 export async function supabaseDeleteAbsence(id: string): Promise<void> {
-  const supabase = createSupabaseBrowserClient();
+  const supabase = createSupabaseServerClient();
   const { error } = await supabase.from("absences").delete().eq("id", id);
   if (error) throw wrapSupabaseError(error);
 }
@@ -310,7 +372,7 @@ export async function supabaseDeleteAbsence(id: string): Promise<void> {
 export async function supabaseApplyPhasePatches(
   patches: PhasePatch[],
 ): Promise<void> {
-  const supabase = createSupabaseBrowserClient();
+  const supabase = createSupabaseServerClient();
   for (const patch of patches) {
     const { error } = await supabase
       .from("phases_planning")
@@ -347,7 +409,7 @@ export async function supabaseApplyPhasePatches(
 export async function supabaseCreateSignalement(
   input: NewSignalementInput,
 ): Promise<void> {
-  const supabase = createSupabaseBrowserClient();
+  const supabase = createSupabaseServerClient();
   const payload = {
     employe_id: input.employe_id,
     phase_id: input.phase_id,
@@ -374,7 +436,7 @@ export async function supabaseSetSignalementStatut(
   id: string,
   statut: StatutSignalement,
 ): Promise<void> {
-  const supabase = createSupabaseBrowserClient();
+  const supabase = createSupabaseServerClient();
   const { error } = await supabase
     .from("signalements")
     .update({ statut })
@@ -385,7 +447,7 @@ export async function supabaseSetSignalementStatut(
 export async function supabaseCreateReception(
   input: NewReceptionInput,
 ): Promise<string | undefined> {
-  const supabase = createSupabaseBrowserClient();
+  const supabase = createSupabaseServerClient();
   const { data, error } = await supabase
     .from("receptions_chantier")
     .insert({
@@ -407,7 +469,7 @@ export async function supabaseCreateReception(
 export async function supabaseReplaceHoraires(
   rows: HoraireSaison[],
 ): Promise<void> {
-  const supabase = createSupabaseBrowserClient();
+  const supabase = createSupabaseServerClient();
   const { error: delError } = await supabase
     .from("horaires_saisonniers")
     .delete()

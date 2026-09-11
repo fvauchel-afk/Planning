@@ -27,6 +27,7 @@ export function createSeedSnapshot(): PlanningSnapshot {
         nom: "Jonathan",
         roles: ["administratif"],
         actif: true,
+        is_admin: true,
         horaires: defaultHorairesEmploye(),
       },
       {
@@ -34,6 +35,7 @@ export function createSeedSnapshot(): PlanningSnapshot {
         nom: "Michael",
         roles: ["administratif"],
         actif: true,
+        is_admin: true,
         horaires: defaultHorairesEmploye(),
       },
       {
@@ -41,6 +43,7 @@ export function createSeedSnapshot(): PlanningSnapshot {
         nom: "Alexis",
         roles: ["fabrication", "pose"],
         actif: true,
+        is_admin: true,
         horaires: defaultHorairesEmploye(),
       },
       {

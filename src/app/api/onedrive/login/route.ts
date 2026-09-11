@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireAdmin } from "@/lib/auth/guard";
 import { getOnedriveConfig, ONEDRIVE_SCOPES } from "@/lib/onedrive/config";
 import {
   ONEDRIVE_OAUTH_REDIRECT_COOKIE,
@@ -9,6 +10,8 @@ import {
 } from "@/lib/onedrive/oauth-state";
 
 export async function GET(request: NextRequest) {
+  const { response } = await requireAdmin(request);
+  if (response) return response;
   try {
     const cfg = getOnedriveConfig();
     const state = crypto.randomUUID();

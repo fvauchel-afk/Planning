@@ -17,6 +17,10 @@ export async function GET() {
     NEXT_PUBLIC_SUPABASE_URL: Boolean(url),
     NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: publishable,
     NEXT_PUBLIC_SUPABASE_ANON_KEY: anon,
+    SUPABASE_SERVICE_ROLE_KEY: Boolean(
+      process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() ||
+        process.env.SUPABASE_SECRET_KEY?.trim(),
+    ),
     supabaseHost: host,
   };
   console.info("[supabase-health] env", env);
@@ -29,6 +33,18 @@ export async function GET() {
       error: "Variables NEXT_PUBLIC_SUPABASE_URL et clé publishable/anon absentes côté serveur.",
     };
     console.error("[supabase-health] missing-env", payload);
+    return NextResponse.json(payload, { status: 500 });
+  }
+
+  if (!env.SUPABASE_SERVICE_ROLE_KEY) {
+    const payload = {
+      ok: false,
+      env,
+      query: null as null,
+      error:
+        "SUPABASE_SERVICE_ROLE_KEY (ou SUPABASE_SECRET_KEY) absente. Obligatoire : plus aucun accès table via la clé anon.",
+    };
+    console.error("[supabase-health] missing-service-role", payload);
     return NextResponse.json(payload, { status: 500 });
   }
 

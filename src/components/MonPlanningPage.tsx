@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
 import { MobileShell } from "@/components/MobileShell";
 import { colorForChantier } from "@/lib/colors";
 import {
@@ -21,13 +20,10 @@ import { PHASE_LABELS } from "@/lib/types";
 import { useSalarieId } from "@/lib/use-salarie";
 
 export function MonPlanningPage() {
-  const router = useRouter();
-  const params = useSearchParams();
   const { snapshot, loading } = usePlanning();
-  const { employeeId, setEmployeeId, ready } = useSalarieId();
+  const { employeeId, ready } = useSalarieId();
   const [weeks, setWeeks] = useState<1 | 2 | 3>(2);
   const [anchor, setAnchor] = useState(() => startOfWeekMonday(new Date()));
-  const forcePicker = params.get("changer") === "1";
 
   const employee = snapshot.employees.find((item) => item.id === employeeId);
   const rangeStart = toISODate(anchor);
@@ -62,31 +58,13 @@ export function MonPlanningPage() {
     );
   }
 
-  if (forcePicker || !employeeId || !employee) {
-    const actifs = snapshot.employees.filter((item) => item.actif);
+  if (!employeeId || !employee) {
     return (
       <MobileShell>
-        <h2 className="font-serif text-2xl text-stone-900">Qui êtes-vous ?</h2>
-        <p className="mt-1 mb-4 text-sm text-stone-600">
-          Choisissez votre nom. Il sera mémorisé sur ce téléphone.
+        <p className="text-sm text-stone-600">
+          Impossible d’afficher votre planning. Reconnectez-vous avec votre code
+          PIN.
         </p>
-        <select
-          className="w-full min-h-11 rounded-lg border border-stone-300 bg-white px-3 py-2 text-base"
-          defaultValue=""
-          onChange={(event) => {
-            if (event.target.value) {
-              setEmployeeId(event.target.value);
-              router.replace("/moi");
-            }
-          }}
-        >
-          <option value="">Choisir…</option>
-          {actifs.map((item) => (
-            <option key={item.id} value={item.id}>
-              {item.nom}
-            </option>
-          ))}
-        </select>
       </MobileShell>
     );
   }

@@ -28,24 +28,9 @@ import {
   localUpsertEmployee,
   loadLocalSnapshot,
 } from "@/lib/store/local";
-import {
-  fetchSupabaseSnapshot,
-  supabaseApplyPhasePatches,
-  supabaseCreateAbsence,
-  supabaseCreateChantier,
-  supabaseCreateReception,
-  supabaseCreateSignalement,
-  supabaseDeleteAbsence,
-  supabaseReplaceHoraires,
-  supabaseSetSignalementStatut,
-  supabaseUpsertEmployee,
-} from "@/lib/store/supabase";
+import { fetchPlanningSnapshot, planningMutate } from "@/lib/planning/api";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
-import {
-  errorMessage,
-  isMissingSchemaError,
-  wrapSupabaseError,
-} from "@/lib/supabase/errors";
+import { wrapSupabaseError } from "@/lib/supabase/errors";
 import type {
   NewAbsenceInput,
   NewChantierInput,
@@ -144,34 +129,22 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
         setError(null);
         return;
       }
-      try {
-        setSnapshot(loadLocalSnapshot());
-      } catch {
-        // Conservé : snapshot seed déjà en mémoire.
+      const remote = await Promise.race([
+        fetchPlanningSnapshot(),
+        new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error("Chargement trop long.")), 20000);
+        }),
+      ]);
+      if (!remote.usingSupabase || !remote.snapshot) {
+        throw new Error("Impossible de charger le planning depuis le serveur.");
       }
-      setLoading(false);
-      try {
-        const remote = await Promise.race([
-          fetchSupabaseSnapshot(),
-          new Promise<never>((_, reject) => {
-            setTimeout(() => reject(new Error("Chargement Supabase trop long.")), 20000);
-          }),
-        ]);
-        setSnapshot(remote);
-        setLiveSupabase(true);
-        setError(null);
-      } catch (err) {
-        console.error("[supabase] refresh client", err);
-        setLiveSupabase(false);
-        setError(wrapSupabaseError(err).message);
-      }
+      setSnapshot(remote.snapshot as PlanningSnapshot);
+      setLiveSupabase(true);
+      setError(null);
     } catch (err) {
-      setError(errorMessage(err) || "Erreur de chargement");
-      try {
-        setSnapshot(loadLocalSnapshot());
-      } catch {
-        setSnapshot(createSeedSnapshot());
-      }
+      console.error("[planning] refresh", err);
+      setLiveSupabase(false);
+      setError(wrapSupabaseError(err).message);
     } finally {
       setLoading(false);
     }
@@ -183,19 +156,15 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
 
   const createChantier = useCallback(
     async (input: NewChantierInput) => {
-      if (liveSupabase) {
-        try {
-          const chantierId = await supabaseCreateChantier(input);
-          await attachOnedriveFolder(input, chantierId);
-          await refresh();
-          return;
-        } catch (err) {
-          if (!isMissingSchemaError(err)) {
-            throw wrapSupabaseError(err);
-          }
-          setLiveSupabase(false);
-          setError(wrapSupabaseError(err).message);
-        }
+      if (supabaseConfigured) {
+        const created = await planningMutate<{ chantierId?: string }>({
+          action: "createChantier",
+          input,
+        });
+        const chantierId = created.chantierId ?? "";
+        if (chantierId) await attachOnedriveFolder(input, chantierId);
+        await refresh();
+        return;
       }
       let chantierId = "";
       setSnapshot((current) => {
@@ -210,94 +179,70 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
         );
       }
     },
-    [liveSupabase, refresh],
+    [supabaseConfigured, refresh],
   );
 
   const upsertEmployee = useCallback(
     async (input: NewEmployeeInput & { id?: string }) => {
-      if (liveSupabase) {
-        try {
-          await supabaseUpsertEmployee(input);
-          await refresh();
-          return;
-        } catch (err) {
-          if (!isMissingSchemaError(err)) throw wrapSupabaseError(err);
-          setLiveSupabase(false);
-        }
+      if (supabaseConfigured) {
+        await planningMutate({ action: "upsertEmployee", input });
+        await refresh();
+        return;
       }
       setSnapshot((current) => localUpsertEmployee(current, input));
     },
-    [liveSupabase, refresh],
+    [supabaseConfigured, refresh],
   );
 
   const createAbsence = useCallback(
     async (input: NewAbsenceInput) => {
-      if (liveSupabase) {
-        try {
-          await supabaseCreateAbsence(input);
-          await refresh();
-          return;
-        } catch (err) {
-          if (!isMissingSchemaError(err)) throw wrapSupabaseError(err);
-          setLiveSupabase(false);
-        }
+      if (supabaseConfigured) {
+        await planningMutate({ action: "createAbsence", input });
+        await refresh();
+        return;
       }
       setSnapshot((current) => localCreateAbsence(current, input));
     },
-    [liveSupabase, refresh],
+    [supabaseConfigured, refresh],
   );
 
   const deleteAbsence = useCallback(
     async (id: string) => {
-      if (liveSupabase) {
-        try {
-          await supabaseDeleteAbsence(id);
-          await refresh();
-          return;
-        } catch (err) {
-          if (!isMissingSchemaError(err)) throw wrapSupabaseError(err);
-          setLiveSupabase(false);
-        }
+      if (supabaseConfigured) {
+        await planningMutate({ action: "deleteAbsence", id });
+        await refresh();
+        return;
       }
       setSnapshot((current) => localDeleteAbsence(current, id));
     },
-    [liveSupabase, refresh],
+    [supabaseConfigured, refresh],
   );
 
   const applyPhasePatches = useCallback(
     async (patches: PhasePatch[]) => {
       if (patches.length === 0) return;
-      if (liveSupabase) {
-        try {
-          await supabaseApplyPhasePatches(patches);
-          await refresh();
-          return;
-        } catch (err) {
-          if (!isMissingSchemaError(err)) throw wrapSupabaseError(err);
-          setLiveSupabase(false);
-        }
+      if (supabaseConfigured) {
+        await planningMutate({ action: "applyPhasePatches", patches });
+        await refresh();
+        return;
       }
       setSnapshot((current) => localApplyPhasePatches(current, patches));
     },
-    [liveSupabase, refresh],
+    [supabaseConfigured, refresh],
   );
 
   const createChantierWithPatches = useCallback(
     async (input: NewChantierInput, patches: PhasePatch[]) => {
-      if (liveSupabase) {
-        try {
-          if (patches.length > 0) {
-            await supabaseApplyPhasePatches(patches);
-          }
-          const chantierId = await supabaseCreateChantier(input);
-          await attachOnedriveFolder(input, chantierId);
-          await refresh();
-          return;
-        } catch (err) {
-          if (!isMissingSchemaError(err)) throw wrapSupabaseError(err);
-          setLiveSupabase(false);
-          setError(wrapSupabaseError(err).message);
-        }
+      if (supabaseConfigured) {
+        const created = await planningMutate<{ chantierId?: string }>(
+          patches.length > 0
+            ? { action: "createChantierWithPatches", input, patches }
+            : { action: "createChantier", input },
+        );
+        const chantierId = created.chantierId ?? "";
+        if (chantierId) await attachOnedriveFolder(input, chantierId);
+        await refresh();
+        return;
       }
       let chantierId = "";
       setSnapshot((current) => {
@@ -314,59 +259,39 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
         );
       }
     },
-    [liveSupabase, refresh],
+    [supabaseConfigured, refresh],
   );
 
   const createSignalement = useCallback(
     async (input: NewSignalementInput) => {
-      if (liveSupabase) {
-        try {
-          await supabaseCreateSignalement(input);
-          await refresh();
-          return;
-        } catch (err) {
-          if (!isMissingSchemaError(err)) throw wrapSupabaseError(err);
-          setLiveSupabase(false);
-          setError(wrapSupabaseError(err).message);
-        }
+      if (supabaseConfigured) {
+        await planningMutate({ action: "createSignalement", input });
+        await refresh();
+        return;
       }
       setSnapshot((current) => localCreateSignalement(current, input));
     },
-    [liveSupabase, refresh],
+    [supabaseConfigured, refresh],
   );
 
   const setSignalementStatut = useCallback(
     async (id: string, statut: StatutSignalement) => {
-      if (liveSupabase) {
-        try {
-          await supabaseSetSignalementStatut(id, statut);
-          await refresh();
-          return;
-        } catch (err) {
-          if (!isMissingSchemaError(err)) throw wrapSupabaseError(err);
-          setLiveSupabase(false);
-        }
+      if (supabaseConfigured) {
+        await planningMutate({ action: "setSignalementStatut", id, statut });
+        await refresh();
+        return;
       }
       setSnapshot((current) => localSetSignalementStatut(current, id, statut));
     },
-    [liveSupabase, refresh],
+    [supabaseConfigured, refresh],
   );
 
   const validateSignalement = useCallback(
     async (id: string, patches: PhasePatch[]) => {
-      if (liveSupabase) {
-        try {
-          if (patches.length > 0) {
-            await supabaseApplyPhasePatches(patches);
-          }
-          await supabaseSetSignalementStatut(id, "valide");
-          await refresh();
-          return;
-        } catch (err) {
-          if (!isMissingSchemaError(err)) throw wrapSupabaseError(err);
-          setLiveSupabase(false);
-          setError(wrapSupabaseError(err).message);
-        }
+      if (supabaseConfigured) {
+        await planningMutate({ action: "validateSignalement", id, patches });
+        await refresh();
+        return;
       }
       setSnapshot((current) => {
         const shifted =
@@ -374,31 +299,22 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
         return localSetSignalementStatut(shifted, id, "valide");
       });
     },
-    [liveSupabase, refresh],
+    [supabaseConfigured, refresh],
   );
 
   const createReception = useCallback(
     async (input: NewReceptionInput) => {
       const snapForUpload = snapshot;
-      let usedSupabase = liveSupabase;
-      if (usedSupabase) {
-        try {
-          await supabaseCreateReception(input);
-          await refresh();
-        } catch (err) {
-          if (!isMissingSchemaError(err)) throw wrapSupabaseError(err);
-          usedSupabase = false;
-          setLiveSupabase(false);
-          setError(wrapSupabaseError(err).message);
-          setSnapshot((current) => localCreateReception(current, input));
-        }
+      if (supabaseConfigured) {
+        await planningMutate({ action: "createReception", input });
+        await refresh();
       } else {
         setSnapshot((current) => localCreateReception(current, input));
       }
       const upload = await uploadReceptionPng(input, snapForUpload);
       if (!upload.ok) {
         const message = upload.error ?? "Envoi OneDrive impossible.";
-        if (usedSupabase) {
+        if (supabaseConfigured) {
           setSnapshot((current) => ({
             ...current,
             receptions: (current.receptions ?? []).map((row) =>
@@ -412,28 +328,23 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
             localSetReceptionOnedriveErreur(current, input.phase_id, message),
           );
         }
-      } else if (usedSupabase) {
+      } else if (supabaseConfigured) {
         await refresh();
       }
     },
-    [liveSupabase, refresh, snapshot],
+    [supabaseConfigured, refresh, snapshot],
   );
 
   const saveHoraires = useCallback(
     async (rows: HoraireSaison[]) => {
-      if (liveSupabase) {
-        try {
-          await supabaseReplaceHoraires(rows);
-          await refresh();
-          return;
-        } catch (err) {
-          if (!isMissingSchemaError(err)) throw wrapSupabaseError(err);
-          setLiveSupabase(false);
-        }
+      if (supabaseConfigured) {
+        await planningMutate({ action: "saveHoraires", rows });
+        await refresh();
+        return;
       }
       setSnapshot((current) => localReplaceHoraires(current, rows));
     },
-    [liveSupabase, refresh],
+    [supabaseConfigured, refresh],
   );
 
   const value = useMemo(
