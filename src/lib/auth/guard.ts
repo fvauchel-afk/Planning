@@ -1,5 +1,7 @@
 import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
+import { lookupEmployeeAccess } from "@/lib/auth/employee-access";
+import { asAdminFlag, normalizeId } from "@/lib/auth/ids";
 import {
   decodeSession,
   SESSION_COOKIE,
@@ -22,6 +24,19 @@ export async function getSession(): Promise<SessionPayload | null> {
   return decodeSession(cookies().get(SESSION_COOKIE)?.value);
 }
 
+export async function resolveSession(
+  session: SessionPayload | null,
+): Promise<SessionPayload | null> {
+  if (!session) return null;
+  const access = await lookupEmployeeAccess(session.employeeId);
+  if (access && !access.actif) return null;
+  return {
+    ...session,
+    employeeId: normalizeId(session.employeeId) || session.employeeId,
+    isAdmin: access ? access.isAdmin : asAdminFlag(session.isAdmin),
+  };
+}
+
 export function unauthorized(message = "Non authentifié.") {
   return NextResponse.json({ error: message }, { status: 401 });
 }
@@ -31,9 +46,10 @@ export function forbidden(message = "Accès refusé.") {
 }
 
 export async function requireSession(request?: NextRequest) {
-  const session = request
+  const raw = request
     ? await getSessionFromRequest(request)
     : await getSession();
+  const session = await resolveSession(raw);
   if (!session) return { session: null, response: unauthorized() };
   return { session, response: null };
 }

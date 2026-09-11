@@ -1,7 +1,7 @@
-"use client";
-
 import { EmployeesPage } from "@/components/EmployeesPage";
+import { requireAdminPage } from "@/lib/auth/require-admin-page";
 
-export default function EmployesRoute() {
+export default async function EmployesRoute() {
+  await requireAdminPage();
   return <EmployeesPage />;
 }

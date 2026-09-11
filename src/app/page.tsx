@@ -1,7 +1,7 @@
-"use client";
-
 import { CalendarBoard } from "@/components/CalendarBoard";
+import { requireAdminPage } from "@/lib/auth/require-admin-page";
 
-export default function HomePage() {
+export default async function HomePage() {
+  await requireAdminPage();
   return <CalendarBoard />;
 }

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { filterSnapshotForSession } from "@/lib/auth/scope";
-import { getSession, unauthorized } from "@/lib/auth/guard";
+import { getSession, resolveSession, unauthorized } from "@/lib/auth/guard";
 import { fetchSupabaseSnapshot } from "@/lib/store/supabase";
 import {
   hasSupabaseServiceRole,
@@ -12,7 +12,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const session = await getSession();
+  const session = await resolveSession(await getSession());
   if (!session) return unauthorized();
 
   if (!isSupabaseUrlConfigured()) {

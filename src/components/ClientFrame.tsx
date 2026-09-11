@@ -2,13 +2,26 @@
 
 import { usePathname } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
-import { SessionProvider } from "@/lib/auth/session-context";
+import { SessionProvider, useSession } from "@/lib/auth/session-context";
 import { PlanningProvider } from "@/lib/planning-context";
+
+function Shell({
+  pathname,
+  children,
+}: {
+  pathname: string;
+  children: React.ReactNode;
+}) {
+  const { session, ready } = useSession();
+  const salarie = ready && session && !session.isAdmin;
+  const mobile = pathname.startsWith("/moi");
+  if (salarie || mobile) return <>{children}</>;
+  return <AppShell currentPath={pathname}>{children}</AppShell>;
+}
 
 export function ClientFrame({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const login = pathname === "/connexion";
-  const mobile = pathname.startsWith("/moi");
 
   if (login) {
     return <SessionProvider>{children}</SessionProvider>;
@@ -17,7 +30,7 @@ export function ClientFrame({ children }: { children: React.ReactNode }) {
   return (
     <SessionProvider>
       <PlanningProvider>
-        {mobile ? children : <AppShell currentPath={pathname}>{children}</AppShell>}
+        <Shell pathname={pathname}>{children}</Shell>
       </PlanningProvider>
     </SessionProvider>
   );

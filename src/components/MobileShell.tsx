@@ -1,6 +1,7 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
 import { useSession } from "@/lib/auth/session-context";
 
 export function MobileShell({
@@ -11,6 +12,7 @@ export function MobileShell({
   employeeName?: string;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
   const { session } = useSession();
   const name = employeeName ?? session?.nom;
 
@@ -38,6 +40,28 @@ export function MobileShell({
             </button>
           )}
         </div>
+        <nav className="mt-3 flex gap-1">
+          <Link
+            href="/moi"
+            className={`rounded-md px-3 py-1.5 text-sm ${
+              pathname === "/moi"
+                ? "bg-amber-700 text-amber-50"
+                : "text-stone-300 hover:bg-stone-800"
+            }`}
+          >
+            Mon planning
+          </Link>
+          <Link
+            href="/moi/retard"
+            className={`rounded-md px-3 py-1.5 text-sm ${
+              pathname.startsWith("/moi/retard")
+                ? "bg-amber-700 text-amber-50"
+                : "text-stone-300 hover:bg-stone-800"
+            }`}
+          >
+            Signalements
+          </Link>
+        </nav>
       </header>
       <main className="mx-auto max-w-lg px-4 py-4">{children}</main>
     </div>

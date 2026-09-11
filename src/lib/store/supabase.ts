@@ -1,4 +1,5 @@
 import "server-only";
+import { asAdminFlag } from "@/lib/auth/ids";
 import { defaultHoraires, normalizeHoraire, normalizeHorairesEmploye } from "@/lib/engine/hours";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
@@ -131,7 +132,7 @@ async function fetchSupabaseSnapshotOnce(): Promise<PlanningSnapshot> {
       roles: row.roles ?? [],
       actif: row.actif,
       horaires: normalizeHorairesEmploye(row.horaires),
-      is_admin: Boolean(row.is_admin),
+      is_admin: asAdminFlag(row.is_admin),
     })),
     chantiers: ((chantiers.data ?? []) as Chantier[]).map((chantier) => ({
       ...chantier,

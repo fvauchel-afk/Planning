@@ -6,6 +6,7 @@ import {
   sessionCookieOptions,
   SESSION_COOKIE,
 } from "@/lib/auth/session";
+import { asAdminFlag, normalizeId } from "@/lib/auth/ids";
 import {
   createSupabaseAnonClient,
   createSupabaseServerClient,
@@ -118,9 +119,9 @@ export async function POST(request: NextRequest) {
       const row = Array.isArray(data) ? data[0] : data;
       if (row?.id) {
         user = {
-          id: row.id,
+          id: normalizeId(String(row.id)) || String(row.id),
           nom: row.nom,
-          is_admin: Boolean(row.is_admin),
+          is_admin: asAdminFlag(row.is_admin),
         };
       }
     } else {
@@ -129,7 +130,7 @@ export async function POST(request: NextRequest) {
         user = {
           id: local.id,
           nom: local.nom,
-          is_admin: Boolean(local.is_admin),
+          is_admin: asAdminFlag(local.is_admin),
         };
       }
     }

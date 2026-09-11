@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { forbidden, getSession, unauthorized } from "@/lib/auth/guard";
+import { forbidden, getSession, resolveSession, unauthorized } from "@/lib/auth/guard";
+import { idsEqual } from "@/lib/auth/ids";
 import {
   invalidateSupabaseSnapshotCache,
   supabaseApplyPhasePatches,
@@ -43,7 +44,7 @@ type MutateBody =
   | { action: "saveHoraires"; rows: HoraireSaison[] };
 
 export async function POST(request: NextRequest) {
-  const session = await getSession();
+  const session = await resolveSession(await getSession());
   if (!session) return unauthorized();
 
   if (isSupabaseUrlConfigured() && !hasSupabaseServiceRole()) {
@@ -112,7 +113,7 @@ export async function POST(request: NextRequest) {
       if (!session.isAdmin) {
         const snapshot = await fetchSupabaseSnapshot();
         const phase = snapshot.phases.find((item) => item.id === input.phase_id);
-        if (!phase || phase.employe_id !== session.employeeId) {
+        if (!phase || !idsEqual(phase.employe_id, session.employeeId)) {
           return forbidden("Cette tâche ne vous est pas attribuée.");
         }
       }
@@ -130,7 +131,7 @@ export async function POST(request: NextRequest) {
         );
         if (
           !phase ||
-          phase.employe_id !== session.employeeId ||
+          !idsEqual(phase.employe_id, session.employeeId) ||
           phase.type_phase !== "pose"
         ) {
           return forbidden("Réception impossible pour cette pose.");

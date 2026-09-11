@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { OnedriveBanner } from "@/components/OnedriveBanner";
 import { useSession } from "@/lib/auth/session-context";
 
-const LINKS: { href: string; label: string; desktopOnly?: boolean }[] = [
+const ADMIN_LINKS: { href: string; label: string; desktopOnly?: boolean }[] = [
   { href: "/", label: "Planning" },
   { href: "/synthese", label: "Synthèse" },
   { href: "/chantiers/nouveau", label: "Nouveau chantier" },
@@ -16,6 +16,11 @@ const LINKS: { href: string; label: string; desktopOnly?: boolean }[] = [
   { href: "/moi", label: "Mon planning" },
 ];
 
+const SALARIE_LINKS: { href: string; label: string }[] = [
+  { href: "/moi", label: "Mon planning" },
+  { href: "/moi/retard", label: "Signalements" },
+];
+
 export function AppShell({
   children,
   currentPath,
@@ -24,13 +29,20 @@ export function AppShell({
   currentPath: string;
 }) {
   const router = useRouter();
-  const { session } = useSession();
+  const { session, ready } = useSession();
 
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
     router.replace("/connexion");
     router.refresh();
   }
+
+  const links =
+    !ready || !session
+      ? []
+      : session.isAdmin
+        ? ADMIN_LINKS
+        : SALARIE_LINKS;
 
   return (
     <div className="min-h-screen">
@@ -48,17 +60,19 @@ export function AppShell({
             )}
           </div>
           <nav className="flex flex-wrap items-center gap-1">
-            {LINKS.map((link) => {
+            {links.map((link) => {
               const active =
                 link.href === "/"
                   ? currentPath === "/"
                   : currentPath.startsWith(link.href);
+              const desktopOnly =
+                "desktopOnly" in link ? Boolean(link.desktopOnly) : false;
               return (
                 <Link
                   key={link.href}
                   href={link.href}
                   className={`rounded-md px-3 py-1.5 text-sm ${
-                    link.desktopOnly ? "hidden md:inline-flex" : ""
+                    desktopOnly ? "hidden md:inline-flex" : ""
                   } ${
                     active
                       ? "bg-amber-700 text-amber-50"

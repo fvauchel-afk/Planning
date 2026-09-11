@@ -15,17 +15,29 @@ import {
   toISODate,
 } from "@/lib/dates";
 import { assignmentsForCell } from "@/lib/calendar";
+import { idsEqual } from "@/lib/auth/ids";
 import { usePlanning } from "@/lib/planning-context";
 import { PHASE_LABELS } from "@/lib/types";
+import { useSession } from "@/lib/auth/session-context";
 import { useSalarieId } from "@/lib/use-salarie";
 
 export function MonPlanningPage() {
   const { snapshot, loading } = usePlanning();
+  const { session, ready: sessionReady } = useSession();
   const { employeeId, ready } = useSalarieId();
   const [weeks, setWeeks] = useState<1 | 2 | 3>(2);
   const [anchor, setAnchor] = useState(() => startOfWeekMonday(new Date()));
 
-  const employee = snapshot.employees.find((item) => item.id === employeeId);
+  const employee =
+    snapshot.employees.find((item) => idsEqual(item.id, employeeId)) ??
+    snapshot.employees.find(
+      (item) =>
+        session?.nom &&
+        item.nom.trim().toLowerCase() === session.nom.trim().toLowerCase(),
+    ) ??
+    (!session?.isAdmin && snapshot.employees.length === 1
+      ? snapshot.employees[0]
+      : undefined);
   const rangeStart = toISODate(anchor);
   const days = useMemo(
     () => eachDay(rangeStart, weeks * 7),
@@ -50,7 +62,7 @@ export function MonPlanningPage() {
     setAnchor(startOfWeekMonday(new Date(year, month - 1, 1)));
   }
 
-  if (!ready || loading) {
+  if (!ready || !sessionReady || loading) {
     return (
       <MobileShell>
         <p className="text-sm text-stone-500">Chargement…</p>
@@ -58,7 +70,7 @@ export function MonPlanningPage() {
     );
   }
 
-  if (!employeeId || !employee) {
+  if (!employee) {
     return (
       <MobileShell>
         <p className="text-sm text-stone-600">

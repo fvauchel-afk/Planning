@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth/guard";
+import { getSession, resolveSession } from "@/lib/auth/guard";
 import { hasSupabaseServiceRole } from "@/lib/supabase/server";
 
 export async function GET() {
-  const session = await getSession();
+  const session = await resolveSession(await getSession());
   if (!session) {
     return NextResponse.json({ user: null }, { status: 401 });
   }

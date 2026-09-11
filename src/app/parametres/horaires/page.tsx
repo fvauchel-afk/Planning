@@ -1,5 +1,7 @@
+import { requireAdminPage } from "@/lib/auth/require-admin-page";
 import { redirect } from "next/navigation";
 
-export default function HorairesRedirect() {
+export default async function HorairesRedirect() {
+  await requireAdminPage();
   redirect("/employes");
 }
