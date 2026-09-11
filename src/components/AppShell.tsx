@@ -1,18 +1,19 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { OnedriveBanner } from "@/components/OnedriveBanner";
 import { useSession } from "@/lib/auth/session-context";
 
-const ADMIN_LINKS: { href: string; label: string; desktopOnly?: boolean }[] = [
+const ADMIN_LINKS: { href: string; label: string }[] = [
   { href: "/", label: "Planning" },
   { href: "/synthese", label: "Synthèse" },
   { href: "/chantiers/nouveau", label: "Nouveau chantier" },
   { href: "/employes", label: "Employés" },
   { href: "/absences", label: "Absences" },
-  { href: "/signalements", label: "Signalements", desktopOnly: true },
-  { href: "/admin/onedrive", label: "OneDrive", desktopOnly: true },
+  { href: "/signalements", label: "Signalements" },
+  { href: "/admin/onedrive", label: "OneDrive" },
   { href: "/moi", label: "Mon planning" },
 ];
 
@@ -20,6 +21,10 @@ const SALARIE_LINKS: { href: string; label: string }[] = [
   { href: "/moi", label: "Mon planning" },
   { href: "/moi/retard", label: "Signalements" },
 ];
+
+function linkActive(href: string, currentPath: string) {
+  return href === "/" ? currentPath === "/" : currentPath.startsWith(href);
+}
 
 export function AppShell({
   children,
@@ -30,8 +35,14 @@ export function AppShell({
 }) {
   const router = useRouter();
   const { session, ready } = useSession();
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  useEffect(() => {
+    setMenuOpen(false);
+  }, [currentPath]);
 
   async function logout() {
+    setMenuOpen(false);
     await fetch("/api/auth/logout", { method: "POST" });
     router.replace("/connexion");
     router.refresh();
@@ -46,9 +57,9 @@ export function AppShell({
 
   return (
     <div className="min-h-screen">
-      <header className="sticky top-0 z-20 border-b border-stone-800 bg-stone-900 text-stone-100">
-        <div className="mx-auto flex max-w-[1600px] items-center justify-between gap-6 px-4 py-3">
-          <div>
+      <header className="sticky top-0 z-30 border-b border-stone-800 bg-stone-900 text-stone-100">
+        <div className="mx-auto flex max-w-[1600px] items-center justify-between gap-3 px-4 py-3">
+          <div className="min-w-0">
             <p className="text-[11px] uppercase tracking-[0.22em] text-amber-500">
               Métallerie
             </p>
@@ -56,24 +67,18 @@ export function AppShell({
               Ferronnerie Vauchel
             </h1>
             {session?.nom && (
-              <p className="text-xs text-stone-400">{session.nom}</p>
+              <p className="truncate text-xs text-stone-400">{session.nom}</p>
             )}
           </div>
-          <nav className="flex flex-wrap items-center gap-1">
+
+          <nav className="hidden flex-wrap items-center justify-end gap-1 md:flex">
             {links.map((link) => {
-              const active =
-                link.href === "/"
-                  ? currentPath === "/"
-                  : currentPath.startsWith(link.href);
-              const desktopOnly =
-                "desktopOnly" in link ? Boolean(link.desktopOnly) : false;
+              const active = linkActive(link.href, currentPath);
               return (
                 <Link
                   key={link.href}
                   href={link.href}
                   className={`rounded-md px-3 py-1.5 text-sm ${
-                    desktopOnly ? "hidden md:inline-flex" : ""
-                  } ${
                     active
                       ? "bg-amber-700 text-amber-50"
                       : "text-stone-300 hover:bg-stone-800 hover:text-white"
@@ -91,7 +96,60 @@ export function AppShell({
               Déconnexion
             </button>
           </nav>
+
+          <div className="flex shrink-0 items-center gap-2 md:hidden">
+            <button
+              type="button"
+              onClick={() => void logout()}
+              className="rounded-md px-2 py-2 text-xs text-stone-300 hover:bg-stone-800"
+            >
+              Déconnexion
+            </button>
+            <button
+              type="button"
+              aria-expanded={menuOpen}
+              aria-controls="app-mobile-menu"
+              aria-label={menuOpen ? "Fermer le menu" : "Ouvrir le menu"}
+              onClick={() => setMenuOpen((open) => !open)}
+              className="inline-flex h-11 w-11 items-center justify-center rounded-md border border-stone-600 text-xl leading-none text-stone-100 hover:bg-stone-800"
+            >
+              {menuOpen ? "×" : "☰"}
+            </button>
+          </div>
         </div>
+
+        {menuOpen && (
+          <div
+            id="app-mobile-menu"
+            className="border-t border-stone-800 bg-stone-900 md:hidden"
+          >
+            <nav className="mx-auto flex max-w-[1600px] flex-col gap-1 px-3 py-3">
+              {links.map((link) => {
+                const active = linkActive(link.href, currentPath);
+                return (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    className={`rounded-md px-3 py-3 text-base ${
+                      active
+                        ? "bg-amber-700 text-amber-50"
+                        : "text-stone-200 hover:bg-stone-800"
+                    }`}
+                  >
+                    {link.label}
+                  </Link>
+                );
+              })}
+              <button
+                type="button"
+                onClick={() => void logout()}
+                className="rounded-md px-3 py-3 text-left text-base text-stone-400 hover:bg-stone-800"
+              >
+                Déconnexion
+              </button>
+            </nav>
+          </div>
+        )}
       </header>
       <main className="mx-auto max-w-[1600px] px-4 py-6">
         <OnedriveBanner />
