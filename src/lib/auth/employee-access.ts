@@ -1,6 +1,8 @@
-import { asAdminFlag } from "@/lib/auth/ids";
+import { asAdminFlag, normalizeId } from "@/lib/auth/ids";
 
 export type EmployeeAccess = {
+  id: string;
+  nom: string;
   isAdmin: boolean;
   actif: boolean;
 };
@@ -14,11 +16,12 @@ export async function lookupEmployeeAccess(
     process.env.SUPABASE_SECRET_KEY ||
     process.env.SUPABASE_SERVICE_KEY
   )?.trim();
-  if (!url || !service || !employeeId) return null;
+  const id = normalizeId(employeeId) || employeeId.trim();
+  if (!url || !service || !id) return null;
 
   const endpoint = new URL("/rest/v1/employees", url);
-  endpoint.searchParams.set("id", `eq.${employeeId}`);
-  endpoint.searchParams.set("select", "is_admin,actif");
+  endpoint.searchParams.set("id", `eq.${id}`);
+  endpoint.searchParams.set("select", "id,nom,is_admin,actif");
   endpoint.searchParams.set("limit", "1");
 
   const response = await fetch(endpoint, {
@@ -31,12 +34,16 @@ export async function lookupEmployeeAccess(
   });
   if (!response.ok) return null;
   const rows = (await response.json()) as Array<{
+    id?: unknown;
+    nom?: unknown;
     is_admin?: unknown;
     actif?: unknown;
   }>;
   const row = rows[0];
-  if (!row) return null;
+  if (!row?.id || row.nom == null) return null;
   return {
+    id: String(row.id),
+    nom: String(row.nom),
     isAdmin: asAdminFlag(row.is_admin),
     actif: row.actif !== false,
   };

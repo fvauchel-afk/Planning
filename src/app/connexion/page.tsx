@@ -1,10 +1,8 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 
 export default function ConnexionPage() {
-  const router = useRouter();
   const [pin, setPin] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -28,8 +26,7 @@ export default function ConnexionPage() {
         setPin("");
         return;
       }
-      router.replace(data.user?.isAdmin ? "/" : "/moi");
-      router.refresh();
+      window.location.assign(data.user?.isAdmin ? "/" : "/moi");
     } catch {
       setError("Connexion impossible.");
       setPin("");

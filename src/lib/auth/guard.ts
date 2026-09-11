@@ -32,7 +32,8 @@ export async function resolveSession(
   if (access && !access.actif) return null;
   return {
     ...session,
-    employeeId: normalizeId(session.employeeId) || session.employeeId,
+    employeeId: normalizeId(access?.id ?? session.employeeId) || session.employeeId,
+    nom: access?.nom?.trim() || session.nom,
     isAdmin: access ? access.isAdmin : asAdminFlag(session.isAdmin),
   };
 }
