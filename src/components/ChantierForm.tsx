@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { ConflictModal } from "@/components/ConflictModal";
+import { compareEmployeesByOrdre } from "@/lib/display-order";
 import { employeeAvailableOnRange } from "@/lib/engine/hours";
 import {
   inspectManualSlotConflict,
@@ -71,7 +72,9 @@ export function ChantierForm() {
   const [slotConflict, setSlotConflict] = useState<SlotConflict | null>(null);
 
   const employeesByRole = useMemo(() => {
-    return snapshot.employees.filter((employee) => employee.actif);
+    return snapshot.employees
+      .filter((employee) => employee.actif)
+      .sort(compareEmployeesByOrdre);
   }, [snapshot.employees]);
 
   function updateElement(key: string, patch: Partial<ElementForm>) {
@@ -513,7 +516,7 @@ export function ChantierForm() {
                       </td>
                       <td className="py-2 pr-2">
                         {phase.type_phase === "logistique" ? (
-                          <span className="text-stone-500">Sous-traitée</span>
+                          <span className="text-stone-500">Thermolaquage</span>
                         ) : (
                           <select
                             value={phase.employe_id}

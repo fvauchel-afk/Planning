@@ -1,3 +1,4 @@
+import { ordreAffichageFromNom } from "@/lib/display-order";
 import { defaultHoraires, normalizeHoraire, normalizeHorairesEmploye } from "@/lib/engine/hours";
 import { createSeedSnapshot } from "@/lib/seed";
 import type {
@@ -51,6 +52,8 @@ export function loadLocalSnapshot(): PlanningSnapshot {
       employees: (parsed.employees ?? []).map((employee) => ({
         ...employee,
         horaires: normalizeHorairesEmploye(employee.horaires),
+        ordre_affichage:
+          employee.ordre_affichage ?? ordreAffichageFromNom(employee.nom),
       })),
       horaires:
         parsed.horaires && parsed.horaires.length > 0
@@ -147,6 +150,7 @@ export function localUpsertEmployee(
             actif: input.actif,
             horaires: normalizeHorairesEmploye(input.horaires),
             is_admin: Boolean(input.is_admin),
+            ordre_affichage: employee.ordre_affichage,
           }
         : employee,
     );
@@ -157,6 +161,8 @@ export function localUpsertEmployee(
       roles: input.roles,
       actif: input.actif,
       is_admin: Boolean(input.is_admin),
+      ordre_affichage:
+        input.ordre_affichage ?? ordreAffichageFromNom(input.nom),
       horaires: normalizeHorairesEmploye(input.horaires),
     };
     next.employees.push(employee);

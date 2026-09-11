@@ -11,6 +11,7 @@ import {
   mmddFromInput,
   normalizeHorairesEmploye,
 } from "@/lib/engine/hours";
+import { compareEmployeesByOrdre } from "@/lib/display-order";
 import { usePlanning } from "@/lib/planning-context";
 import {
   JOURS_OUVRES,
@@ -329,8 +330,8 @@ export function EmployeesPage() {
         <div>
           <h2 className="font-serif text-3xl text-stone-900">Employés</h2>
           <p className="mt-1 mb-4 text-sm text-stone-600">
-            La logistique n&apos;a pas de personne attitrée : elle reste
-            sous-traitée. Les horaires réels (été et hiver) se renseignent en
+            Le thermolaquage n&apos;a pas de personne attitrée : il reste
+            sous-traité. Les horaires réels (été et hiver) se renseignent en
             modifiant un salarié.
           </p>
           <div className="overflow-hidden rounded-lg border border-stone-300 bg-white">
@@ -346,7 +347,7 @@ export function EmployeesPage() {
                 </tr>
               </thead>
               <tbody>
-                {snapshot.employees.map((employee) => (
+                {[...snapshot.employees].sort(compareEmployeesByOrdre).map((employee) => (
                   <tr key={employee.id} className="border-t border-stone-200">
                     <td className="px-3 py-2">{employee.nom}</td>
                     <td className="px-3 py-2 capitalize">

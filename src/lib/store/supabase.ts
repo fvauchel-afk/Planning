@@ -1,5 +1,6 @@
 import "server-only";
 import { asAdminFlag } from "@/lib/auth/ids";
+import { compareEmployeesByOrdre, ordreAffichageFromNom } from "@/lib/display-order";
 import { defaultHoraires, normalizeHoraire, normalizeHorairesEmploye } from "@/lib/engine/hours";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
@@ -38,6 +39,7 @@ type EmployeeRow = {
   actif: boolean;
   horaires?: Employee["horaires"];
   is_admin?: boolean;
+  ordre_affichage?: number | null;
 };
 
 let inflightSnapshot: Promise<PlanningSnapshot> | null = null;
@@ -69,11 +71,33 @@ export async function fetchSupabaseSnapshot(): Promise<PlanningSnapshot> {
 async function fetchSupabaseSnapshotOnce(): Promise<PlanningSnapshot> {
   const supabase = createSupabaseServerClient();
   let employeeRows: EmployeeRow[] | null = null;
-  const employeesWithAdmin = await supabase
+  const employeesFull = await supabase
     .from("employees")
-    .select("id, nom, roles, actif, horaires, is_admin")
+    .select("id, nom, roles, actif, horaires, is_admin, ordre_affichage")
+    .order("ordre_affichage")
     .order("nom");
-  if (employeesWithAdmin.error && isMissingColumnError(employeesWithAdmin.error, "is_admin")) {
+  if (employeesFull.error && isMissingColumnError(employeesFull.error, "ordre_affichage")) {
+    const withoutOrdre = await supabase
+      .from("employees")
+      .select("id, nom, roles, actif, horaires, is_admin")
+      .order("nom");
+    if (withoutOrdre.error && isMissingColumnError(withoutOrdre.error, "is_admin")) {
+      const fallback = await supabase
+        .from("employees")
+        .select("id, nom, roles, actif, horaires")
+        .order("nom");
+      if (fallback.error) {
+        logSupabaseError("fetchSnapshot", fallback.error);
+        throw wrapSupabaseError(fallback.error);
+      }
+      employeeRows = (fallback.data ?? []) as EmployeeRow[];
+    } else if (withoutOrdre.error) {
+      logSupabaseError("fetchSnapshot", withoutOrdre.error);
+      throw wrapSupabaseError(withoutOrdre.error);
+    } else {
+      employeeRows = (withoutOrdre.data ?? []) as EmployeeRow[];
+    }
+  } else if (employeesFull.error && isMissingColumnError(employeesFull.error, "is_admin")) {
     const fallback = await supabase
       .from("employees")
       .select("id, nom, roles, actif, horaires")
@@ -83,11 +107,11 @@ async function fetchSupabaseSnapshotOnce(): Promise<PlanningSnapshot> {
       throw wrapSupabaseError(fallback.error);
     }
     employeeRows = (fallback.data ?? []) as EmployeeRow[];
-  } else if (employeesWithAdmin.error) {
-    logSupabaseError("fetchSnapshot", employeesWithAdmin.error);
-    throw wrapSupabaseError(employeesWithAdmin.error);
+  } else if (employeesFull.error) {
+    logSupabaseError("fetchSnapshot", employeesFull.error);
+    throw wrapSupabaseError(employeesFull.error);
   } else {
-    employeeRows = (employeesWithAdmin.data ?? []) as EmployeeRow[];
+    employeeRows = (employeesFull.data ?? []) as EmployeeRow[];
   }
   const [chantiers, elements, phases, absences, horaires] = await Promise.all([
     supabase.from("chantiers").select("*").order("date_creation"),
@@ -126,14 +150,20 @@ async function fetchSupabaseSnapshotOnce(): Promise<PlanningSnapshot> {
       : ((signalements.data ?? []) as Signalement[]);
 
   return {
-    employees: (employeeRows ?? []).map((row: EmployeeRow) => ({
-      id: row.id,
-      nom: row.nom,
-      roles: row.roles ?? [],
-      actif: row.actif,
-      horaires: normalizeHorairesEmploye(row.horaires),
-      is_admin: asAdminFlag(row.is_admin),
-    })),
+    employees: (employeeRows ?? [])
+      .map((row: EmployeeRow) => ({
+        id: row.id,
+        nom: row.nom,
+        roles: row.roles ?? [],
+        actif: row.actif,
+        horaires: normalizeHorairesEmploye(row.horaires),
+        is_admin: asAdminFlag(row.is_admin),
+        ordre_affichage:
+          typeof row.ordre_affichage === "number"
+            ? row.ordre_affichage
+            : ordreAffichageFromNom(row.nom),
+      }))
+      .sort(compareEmployeesByOrdre),
     chantiers: ((chantiers.data ?? []) as Chantier[]).map((chantier) => ({
       ...chantier,
       date_creation: asIsoDate(chantier.date_creation) ?? chantier.date_creation,
@@ -283,6 +313,11 @@ export async function supabaseUpsertEmployee(
     horaires: normalizeHorairesEmploye(input.horaires),
     is_admin: Boolean(input.is_admin),
   };
+  if (input.ordre_affichage != null) {
+    payload.ordre_affichage = input.ordre_affichage;
+  } else if (!input.id) {
+    payload.ordre_affichage = ordreAffichageFromNom(input.nom);
+  }
   let employeeId = input.id;
   if (input.id) {
     const { error } = await supabase
@@ -290,7 +325,11 @@ export async function supabaseUpsertEmployee(
       .update(payload)
       .eq("id", input.id);
     if (error) {
-      if (isMissingColumnError(error, "is_admin") || isMissingColumnError(error, "horaires")) {
+      if (
+        isMissingColumnError(error, "is_admin") ||
+        isMissingColumnError(error, "horaires") ||
+        isMissingColumnError(error, "ordre_affichage")
+      ) {
         const { error: retry } = await supabase
           .from("employees")
           .update({
@@ -303,6 +342,11 @@ export async function supabaseUpsertEmployee(
             ...(isMissingColumnError(error, "is_admin")
               ? {}
               : { is_admin: payload.is_admin }),
+            ...(isMissingColumnError(error, "ordre_affichage")
+              ? {}
+              : payload.ordre_affichage != null
+                ? { ordre_affichage: payload.ordre_affichage }
+                : {}),
           })
           .eq("id", input.id);
         if (retry) throw wrapSupabaseError(retry);
@@ -317,7 +361,11 @@ export async function supabaseUpsertEmployee(
       .select("id")
       .single();
     if (error) {
-      if (isMissingColumnError(error, "is_admin") || isMissingColumnError(error, "horaires")) {
+      if (
+        isMissingColumnError(error, "is_admin") ||
+        isMissingColumnError(error, "horaires") ||
+        isMissingColumnError(error, "ordre_affichage")
+      ) {
         const slim = {
           nom: payload.nom,
           roles: payload.roles,
@@ -328,6 +376,11 @@ export async function supabaseUpsertEmployee(
           ...(isMissingColumnError(error, "is_admin")
             ? {}
             : { is_admin: payload.is_admin }),
+          ...(isMissingColumnError(error, "ordre_affichage")
+            ? {}
+            : payload.ordre_affichage != null
+              ? { ordre_affichage: payload.ordre_affichage }
+              : {}),
         };
         const retry = await supabase.from("employees").insert(slim).select("id").single();
         if (retry.error) throw wrapSupabaseError(retry.error);

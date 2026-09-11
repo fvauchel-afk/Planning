@@ -166,7 +166,7 @@ export function PhaseFicheModal({
               {PRIORITE_LABELS[chantier.priorite]}
             </p>
             <p className="mt-2 text-sm text-stone-600">
-              {assignee ? assignee.nom : "Logistique sous-traitée"}
+              {assignee ? assignee.nom : "Thermolaquage sous-traité"}
               {phase.date_debut
                 ? ` · ${formatLongDate(phase.date_debut)} → ${formatLongDate(phase.date_fin ?? phase.date_debut)}`
                 : " · pas encore planifiée"}

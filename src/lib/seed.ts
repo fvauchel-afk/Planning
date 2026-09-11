@@ -1,5 +1,6 @@
 import type { PlanningSnapshot } from "./types";
 import { defaultHoraires, defaultHorairesEmploye } from "./engine/hours";
+import { ordreAffichageFromNom } from "./display-order";
 
 const IDS = {
   jonathan: "11111111-1111-4111-8111-111111111111",
@@ -28,6 +29,7 @@ export function createSeedSnapshot(): PlanningSnapshot {
         roles: ["administratif"],
         actif: true,
         is_admin: true,
+        ordre_affichage: ordreAffichageFromNom("Jonathan"),
         horaires: defaultHorairesEmploye(),
       },
       {
@@ -36,6 +38,7 @@ export function createSeedSnapshot(): PlanningSnapshot {
         roles: ["administratif"],
         actif: true,
         is_admin: true,
+        ordre_affichage: ordreAffichageFromNom("Michael"),
         horaires: defaultHorairesEmploye(),
       },
       {
@@ -44,6 +47,7 @@ export function createSeedSnapshot(): PlanningSnapshot {
         roles: ["fabrication", "pose"],
         actif: true,
         is_admin: true,
+        ordre_affichage: ordreAffichageFromNom("Alexis"),
         horaires: defaultHorairesEmploye(),
       },
       {
@@ -51,6 +55,7 @@ export function createSeedSnapshot(): PlanningSnapshot {
         nom: "Romain",
         roles: ["fabrication", "pose"],
         actif: true,
+        ordre_affichage: ordreAffichageFromNom("Romain"),
         horaires: defaultHorairesEmploye(),
       },
       {
@@ -58,6 +63,7 @@ export function createSeedSnapshot(): PlanningSnapshot {
         nom: "Raphaël",
         roles: ["fabrication", "pose"],
         actif: true,
+        ordre_affichage: ordreAffichageFromNom("Raphaël"),
         horaires: defaultHorairesEmploye(),
       },
       {
@@ -65,6 +71,7 @@ export function createSeedSnapshot(): PlanningSnapshot {
         nom: "Ethan",
         roles: ["fabrication", "pose"],
         actif: true,
+        ordre_affichage: ordreAffichageFromNom("Ethan"),
         horaires: defaultHorairesEmploye(),
       },
       {
@@ -72,6 +79,7 @@ export function createSeedSnapshot(): PlanningSnapshot {
         nom: "Louison",
         roles: ["fabrication", "pose"],
         actif: true,
+        ordre_affichage: ordreAffichageFromNom("Louison"),
         horaires: defaultHorairesEmploye(),
       },
       {
@@ -79,6 +87,7 @@ export function createSeedSnapshot(): PlanningSnapshot {
         nom: "Quentin (apprenti)",
         roles: ["fabrication", "pose"],
         actif: true,
+        ordre_affichage: ordreAffichageFromNom("Quentin (apprenti)"),
         horaires: defaultHorairesEmploye({ skipWednesday: true }),
       },
     ],

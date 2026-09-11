@@ -361,7 +361,7 @@ function chantierNames(snapshot: PlanningSnapshot, ids: string[]): string {
 }
 
 function employeeName(snapshot: PlanningSnapshot, id: string | null): string {
-  if (!id) return "la ligne logistique";
+  if (!id) return "la ligne Thermolaquage";
   return snapshot.employees.find((item) => item.id === id)?.nom ?? "cet employé";
 }
 

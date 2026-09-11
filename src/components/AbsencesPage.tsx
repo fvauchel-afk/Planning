@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { formatLongDate } from "@/lib/dates";
+import { compareEmployeesByOrdre } from "@/lib/display-order";
 import { usePlanning } from "@/lib/planning-context";
 import {
   ABSENCE_LABELS,
@@ -119,6 +120,7 @@ export function AbsencesPage() {
             <option value="">Choisir…</option>
             {snapshot.employees
               .filter((employee) => employee.actif)
+              .sort(compareEmployeesByOrdre)
               .map((employee) => (
                 <option key={employee.id} value={employee.id}>
                   {employee.nom}

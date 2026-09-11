@@ -13,6 +13,12 @@ import {
 } from "@/lib/types";
 import { colorForChantier } from "@/lib/colors";
 import { dateInRange, formatOvertimeHours } from "@/lib/dates";
+import {
+  compareEmployeesByOrdre,
+  employeeOrdre,
+  LOGISTIQUE_ROW_LABEL,
+  LOGISTIQUE_ROW_ORDRE,
+} from "@/lib/display-order";
 import { slotsFromExistingPhase, halfFromLabel, type OccupiedSlot } from "@/lib/engine/slots";
 
 export type CalendarAssignment = {
@@ -86,21 +92,36 @@ export type CalendarRow = {
 };
 
 export function planningRows(employees: Employee[]): CalendarRow[] {
-  const active = employees.filter((employee) => employee.actif);
-  return [
-    ...active.map((employee) => ({
+  const people = employees
+    .filter((employee) => employee.actif)
+    .sort(compareEmployeesByOrdre)
+    .map((employee) => ({
       id: employee.id,
       label: employee.nom,
       subtitle: employee.roles.join(" · "),
       employee,
-    })),
+      ordre: employeeOrdre(employee),
+    }));
+  const rows = [
+    ...people,
     {
       id: LOGISTIQUE_ROW_ID,
-      label: "Logistique",
+      label: LOGISTIQUE_ROW_LABEL,
       subtitle: "sous-traitance",
       employee: null,
+      ordre: LOGISTIQUE_ROW_ORDRE,
     },
   ];
+  rows.sort((left, right) => {
+    if (left.ordre !== right.ordre) return left.ordre - right.ordre;
+    return left.label.localeCompare(right.label, "fr");
+  });
+  return rows.map((row) => ({
+    id: row.id,
+    label: row.label,
+    subtitle: row.subtitle,
+    employee: row.employee,
+  }));
 }
 
 export function assignmentsForCell(

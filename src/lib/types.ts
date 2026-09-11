@@ -72,6 +72,7 @@ export type Employee = {
   actif: boolean;
   horaires?: HorairesEmploye | null;
   is_admin?: boolean;
+  ordre_affichage?: number;
 };
 
 export type Chantier = {
@@ -198,6 +199,7 @@ export type NewEmployeeInput = {
   horaires?: HorairesEmploye | null;
   is_admin?: boolean;
   pin?: string;
+  ordre_affichage?: number;
 };
 
 export type NewAbsenceInput = {
@@ -220,13 +222,13 @@ export const ROLE_LABELS: Record<Role, string> = {
   administratif: "Administratif",
   fabrication: "Fabrication",
   pose: "Pose",
-  logistique: "Logistique",
+  logistique: "Thermolaquage",
 };
 
 export const PHASE_LABELS: Record<TypePhase, string> = {
   administratif: "Administratif",
   fabrication: "Fabrication",
-  logistique: "Logistique",
+  logistique: "Thermolaquage",
   pose: "Pose",
 };
 

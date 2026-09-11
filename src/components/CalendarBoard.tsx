@@ -110,8 +110,8 @@ export function CalendarBoard() {
         <div>
           <h2 className="font-serif text-3xl text-stone-900">Planning équipe</h2>
           <p className="mt-1 text-sm text-stone-600">
-            Une ligne par personne, chaque jour en matin / après-midi. La
-            logistique sous-traitée a sa propre ligne.
+            Une ligne par personne, chaque jour en matin / après-midi. Le
+            thermolaquage sous-traité a sa propre ligne.
             {usingSupabase
               ? " Données connectées à Supabase."
               : " Mode local (configurez Supabase pour la base partagée)."}
