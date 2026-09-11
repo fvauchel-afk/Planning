@@ -12,6 +12,10 @@ function isPublicPath(pathname: string): boolean {
   if (pathname === "/api/health/supabase") return true;
   if (pathname === "/api/onedrive/callback") return true;
   if (pathname === "/api/backup/run") return true;
+  if (pathname === "/sw.js") return true;
+  if (pathname === "/manifest.webmanifest" || pathname === "/manifest.json") {
+    return true;
+  }
   return false;
 }
 
@@ -81,6 +85,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|sw\\.js|manifest\\.webmanifest|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
   ],
 };
