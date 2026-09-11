@@ -6,6 +6,34 @@ export function errorMessage(err: unknown): string {
   return "Erreur inconnue";
 }
 
+export type SupabaseErrorInfo = {
+  code: string;
+  message: string;
+  details: string;
+  hint: string;
+};
+
+export function supabaseErrorInfo(err: unknown): SupabaseErrorInfo {
+  const obj = err && typeof err === "object" ? (err as Record<string, unknown>) : {};
+  return {
+    code: obj.code != null ? String(obj.code) : "",
+    message: errorMessage(err),
+    details: obj.details != null ? String(obj.details) : "",
+    hint: obj.hint != null ? String(obj.hint) : "",
+  };
+}
+
+export function formatSupabaseErrorDetail(err: unknown): string {
+  const info = supabaseErrorInfo(err);
+  return [info.code && `code ${info.code}`, info.message, info.details, info.hint]
+    .filter(Boolean)
+    .join(" — ");
+}
+
+export function logSupabaseError(context: string, err: unknown) {
+  console.error(`[supabase] ${context}`, supabaseErrorInfo(err));
+}
+
 export function isMissingSchemaError(err: unknown): boolean {
   if (err == null) return false;
   const message = errorMessage(err);
@@ -40,10 +68,14 @@ export function isMissingColumnError(err: unknown, column: string): boolean {
   );
 }
 export function wrapSupabaseError(err: unknown): Error {
+  logSupabaseError("wrap", err);
+  const detail = formatSupabaseErrorDetail(err);
   if (isMissingSchemaError(err)) {
-    return new Error(SCHEMA_HELP);
+    return new Error(`${SCHEMA_HELP} Détail technique : ${detail}`);
   }
-  return err instanceof Error ? err : new Error(errorMessage(err));
+  return err instanceof Error && !detail.includes(err.message)
+    ? err
+    : new Error(detail || errorMessage(err));
 }
 
 export function asIsoDate(value: string | null | undefined): string | null {

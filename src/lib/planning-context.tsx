@@ -154,13 +154,14 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
         const remote = await Promise.race([
           fetchSupabaseSnapshot(),
           new Promise<never>((_, reject) => {
-            setTimeout(() => reject(new Error("Chargement Supabase trop long.")), 8000);
+            setTimeout(() => reject(new Error("Chargement Supabase trop long.")), 20000);
           }),
         ]);
         setSnapshot(remote);
         setLiveSupabase(true);
         setError(null);
       } catch (err) {
+        console.error("[supabase] refresh client", err);
         setLiveSupabase(false);
         setError(wrapSupabaseError(err).message);
       }

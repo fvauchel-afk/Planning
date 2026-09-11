@@ -98,7 +98,10 @@ async function requestToken(body: URLSearchParams): Promise<TokenResponse> {
   return json;
 }
 
-export async function exchangeAuthorizationCode(code: string): Promise<void> {
+export async function exchangeAuthorizationCode(
+  code: string,
+  redirectUri?: string | null,
+): Promise<void> {
   const cfg = getOnedriveConfig();
   const json = await requestToken(
     new URLSearchParams({
@@ -106,7 +109,7 @@ export async function exchangeAuthorizationCode(code: string): Promise<void> {
       client_secret: cfg.clientSecret,
       grant_type: "authorization_code",
       code,
-      redirect_uri: cfg.redirectUri,
+      redirect_uri: redirectUri?.trim() || cfg.redirectUri,
       scope: ONEDRIVE_SCOPES,
     }),
   );

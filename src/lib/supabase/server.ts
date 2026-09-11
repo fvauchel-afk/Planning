@@ -2,14 +2,16 @@ import "server-only";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 function getSupabaseUrl(): string | undefined {
-  return process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const value = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+  return value || undefined;
 }
 
 function getPublishableKey(): string | undefined {
-  return (
+  const value = (
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-  );
+  )?.trim();
+  return value || undefined;
 }
 
 function isNewApiKey(key: string): boolean {

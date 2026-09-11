@@ -4,6 +4,7 @@ import {
   asIsoDate,
   isMissingColumnError,
   isMissingSchemaError,
+  logSupabaseError,
   wrapSupabaseError,
 } from "@/lib/supabase/errors";
 import type {
@@ -76,6 +77,7 @@ async function fetchSupabaseSnapshotOnce(): Promise<PlanningSnapshot> {
     phases.error ||
     absences.error;
   if (firstError) {
+    logSupabaseError("fetchSnapshot", firstError);
     throw wrapSupabaseError(firstError);
   }
 
