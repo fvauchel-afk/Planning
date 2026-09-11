@@ -192,6 +192,14 @@ export type NewChantierInput = {
   elements: NewElementInput[];
 };
 
+export type ChantierUpdateInput = {
+  id: string;
+  nom_client: string;
+  adresse: string;
+  priorite: Priorite;
+  lien_dossier_onedrive: string | null;
+};
+
 export type NewEmployeeInput = {
   nom: string;
   roles: Role[];

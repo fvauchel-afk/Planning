@@ -18,6 +18,7 @@ import type {
   HoraireSaison,
   NewAbsenceInput,
   NewChantierInput,
+  ChantierUpdateInput,
   NewEmployeeInput,
   NewReceptionInput,
   NewSignalementInput,
@@ -300,6 +301,22 @@ export async function supabaseCreateChantier(
     }
   }
   return chantier.id;
+}
+
+export async function supabaseUpdateChantier(
+  input: ChantierUpdateInput,
+): Promise<void> {
+  const supabase = createSupabaseServerClient();
+  const { error } = await supabase
+    .from("chantiers")
+    .update({
+      nom_client: input.nom_client,
+      adresse: input.adresse,
+      priorite: input.priorite,
+      lien_dossier_onedrive: input.lien_dossier_onedrive,
+    })
+    .eq("id", input.id);
+  if (error) throw wrapSupabaseError(error);
 }
 
 export async function supabaseUpsertEmployee(

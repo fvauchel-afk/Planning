@@ -25,6 +25,7 @@ import {
   localSetChantierOnedriveLink,
   localSetReceptionOnedriveErreur,
   localSetSignalementStatut,
+  localUpdateChantier,
   localUpsertEmployee,
   loadLocalSnapshot,
 } from "@/lib/store/local";
@@ -34,6 +35,7 @@ import { wrapSupabaseError } from "@/lib/supabase/errors";
 import type {
   NewAbsenceInput,
   NewChantierInput,
+  ChantierUpdateInput,
   NewEmployeeInput,
   HoraireSaison,
   NewReceptionInput,
@@ -50,6 +52,7 @@ type PlanningContextValue = {
   usingSupabase: boolean;
   refresh: () => Promise<void>;
   createChantier: (input: NewChantierInput) => Promise<void>;
+  updateChantier: (input: ChantierUpdateInput) => Promise<void>;
   upsertEmployee: (input: NewEmployeeInput & { id?: string }) => Promise<void>;
   createAbsence: (input: NewAbsenceInput) => Promise<void>;
   deleteAbsence: (id: string) => Promise<void>;
@@ -178,6 +181,18 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
           localSetChantierOnedriveLink(current, chantierId, shareUrl),
         );
       }
+    },
+    [supabaseConfigured, refresh],
+  );
+
+  const updateChantier = useCallback(
+    async (input: ChantierUpdateInput) => {
+      if (supabaseConfigured) {
+        await planningMutate({ action: "updateChantier", input });
+        await refresh();
+        return;
+      }
+      setSnapshot((current) => localUpdateChantier(current, input));
     },
     [supabaseConfigured, refresh],
   );
@@ -355,6 +370,7 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
       usingSupabase: liveSupabase,
       refresh,
       createChantier,
+      updateChantier,
       upsertEmployee,
       createAbsence,
       deleteAbsence,
@@ -373,6 +389,7 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
       liveSupabase,
       refresh,
       createChantier,
+      updateChantier,
       upsertEmployee,
       createAbsence,
       deleteAbsence,

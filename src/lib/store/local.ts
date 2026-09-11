@@ -6,6 +6,7 @@ import type {
   HoraireSaison,
   NewAbsenceInput,
   NewChantierInput,
+  ChantierUpdateInput,
   NewEmployeeInput,
   NewReceptionInput,
   NewSignalementInput,
@@ -288,6 +289,26 @@ export function localReplaceHoraires(
       id: row.id || newId(),
       ordre: index,
     }),
+  );
+  saveLocalSnapshot(next);
+  return next;
+}
+
+export function localUpdateChantier(
+  snapshot: PlanningSnapshot,
+  input: ChantierUpdateInput,
+): PlanningSnapshot {
+  const next = clone(snapshot);
+  next.chantiers = next.chantiers.map((chantier) =>
+    chantier.id === input.id
+      ? {
+          ...chantier,
+          nom_client: input.nom_client,
+          adresse: input.adresse,
+          priorite: input.priorite,
+          lien_dossier_onedrive: input.lien_dossier_onedrive,
+        }
+      : chantier,
   );
   saveLocalSnapshot(next);
   return next;

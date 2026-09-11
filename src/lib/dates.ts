@@ -57,6 +57,12 @@ export function formatLongDate(iso: string): string {
   return `${JOURS_COURTS[date.getDay()]} ${date.getDate()} ${MOIS_COURTS[date.getMonth()]} ${date.getFullYear()}`;
 }
 
+export function formatIsoFr(iso: string): string {
+  const [year, month, day] = iso.slice(0, 10).split("-");
+  if (!year || !month || !day) return iso;
+  return `${day}/${month}/${year}`;
+}
+
 export function isWeekend(iso: string): boolean {
   const day = parseISODate(iso).getDay();
   return day === 0 || day === 6;

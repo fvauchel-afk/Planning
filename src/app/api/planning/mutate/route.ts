@@ -6,6 +6,7 @@ import {
   supabaseApplyPhasePatches,
   supabaseCreateAbsence,
   supabaseCreateChantier,
+  supabaseUpdateChantier,
   supabaseCreateReception,
   supabaseCreateSignalement,
   supabaseDeleteAbsence,
@@ -20,6 +21,7 @@ import type {
   HoraireSaison,
   NewAbsenceInput,
   NewChantierInput,
+  ChantierUpdateInput,
   NewEmployeeInput,
   NewReceptionInput,
   NewSignalementInput,
@@ -32,6 +34,7 @@ export const dynamic = "force-dynamic";
 
 type MutateBody =
   | { action: "createChantier"; input: NewChantierInput }
+  | { action: "updateChantier"; input: ChantierUpdateInput }
   | { action: "createChantierWithPatches"; input: NewChantierInput; patches: PhasePatch[] }
   | { action: "upsertEmployee"; input: NewEmployeeInput & { id?: string } }
   | { action: "createAbsence"; input: NewAbsenceInput }
@@ -66,6 +69,7 @@ export async function POST(request: NextRequest) {
 
   const adminOnly = new Set<MutateBody["action"]>([
     "createChantier",
+    "updateChantier",
     "createChantierWithPatches",
     "upsertEmployee",
     "createAbsence",
@@ -85,6 +89,9 @@ export async function POST(request: NextRequest) {
 
     if (body.action === "createChantier") {
       chantierId = await supabaseCreateChantier(body.input);
+    } else if (body.action === "updateChantier") {
+      await supabaseUpdateChantier(body.input);
+      chantierId = body.input.id;
     } else if (body.action === "createChantierWithPatches") {
       if (body.patches?.length) await supabaseApplyPhasePatches(body.patches);
       chantierId = await supabaseCreateChantier(body.input);

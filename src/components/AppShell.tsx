@@ -9,7 +9,7 @@ import { useSession } from "@/lib/auth/session-context";
 const ADMIN_LINKS: { href: string; label: string }[] = [
   { href: "/", label: "Planning" },
   { href: "/synthese", label: "Synthèse" },
-  { href: "/chantiers/nouveau", label: "Nouveau chantier" },
+  { href: "/chantiers", label: "Chantiers" },
   { href: "/employes", label: "Employés" },
   { href: "/absences", label: "Absences" },
   { href: "/signalements", label: "Signalements" },

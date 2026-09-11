@@ -14,6 +14,7 @@ import {
   type CalendarAssignment,
 } from "@/lib/calendar";
 import { AbsenceImprevueModal } from "@/components/AbsenceImprevueModal";
+import { ChantierEditModal } from "@/components/ChantierEditModal";
 import { PhaseFicheModal } from "@/components/PhaseFicheModal";
 import { colorForChantier } from "@/lib/colors";
 import {
@@ -34,8 +35,14 @@ import {
 } from "@/lib/engine/drag-shift";
 import { halfFromLabel } from "@/lib/engine/slots";
 import { usePlanning } from "@/lib/planning-context";
-import { PRIORITE_LABELS, type Employee } from "@/lib/types";
+import { PRIORITE_LABELS, type Chantier, type Employee } from "@/lib/types";
 import { WelcomeBanner } from "@/components/WelcomeBanner";
+import {
+  STATUT_CHANTIER_COLORS,
+  STATUT_CHANTIER_LABELS,
+  STATUTS_CHANTIER,
+  chantierPlanningInfo,
+} from "@/lib/chantier-status";
 
 type ViewMode = "overview" | "week" | "day";
 
@@ -47,6 +54,7 @@ export function CalendarBoard() {
   const [selectedDay, setSelectedDay] = useState(toISODate(new Date()));
   const [selectedPhaseId, setSelectedPhaseId] = useState<string | null>(null);
   const [absenceEmployee, setAbsenceEmployee] = useState<Employee | null>(null);
+  const [editingChantier, setEditingChantier] = useState<Chantier | null>(null);
   const [dragError, setDragError] = useState<string | null>(null);
   const [dragPreview, setDragPreview] = useState<Set<string> | null>(null);
   const dragRef = useRef<{
@@ -324,38 +332,66 @@ export function CalendarBoard() {
         <p className="text-sm text-stone-500">Chargement du planning…</p>
       ) : (
       <>
+      <div className="flex flex-wrap items-center gap-3 text-[11px] text-stone-600">
+        {STATUTS_CHANTIER.map((statut) => (
+          <span key={statut} className="inline-flex items-center gap-1.5">
+            <span
+              className="h-2.5 w-2.5 rounded-full"
+              style={{ backgroundColor: STATUT_CHANTIER_COLORS[statut].dot }}
+            />
+            {STATUT_CHANTIER_LABELS[statut]}
+          </span>
+        ))}
+      </div>
       <div className="flex flex-wrap gap-2">
         {snapshot.chantiers.map((chantier) => {
-          const color = colorForChantier(chantier.id);
+          const info = chantierPlanningInfo(snapshot, chantier.id);
           const inView = chantiersInView.some((item) => item.id === chantier.id);
-          const hasSlot = Boolean(firstChantierOccurrence(snapshot, chantier.id));
+          const planned = info.statut !== "non_planifie";
+          const colors = STATUT_CHANTIER_COLORS[info.statut];
           return (
-            <button
+            <span
               key={chantier.id}
-              type="button"
-              disabled={!hasSlot}
-              onClick={() => jumpToChantier(chantier.id)}
-              className={`inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-xs text-stone-700 ${
+              className={`inline-flex items-center rounded-full border text-xs text-stone-700 ${
                 inView
-                  ? "border-stone-200 bg-white hover:border-amber-400 hover:bg-amber-50"
-                  : "border-dashed border-stone-300 bg-stone-50 hover:border-amber-400 hover:bg-amber-50"
-              } disabled:cursor-default disabled:opacity-60`}
-              title={
-                hasSlot
-                  ? "Aller à la première occurrence dans le planning"
-                  : "Pas encore planifié"
-              }
+                  ? "border-stone-200 bg-white"
+                  : "border-dashed border-stone-300 bg-stone-50"
+              }`}
             >
-              <span
-                className="h-2.5 w-2.5 rounded-full"
-                style={{ backgroundColor: color.bg }}
-              />
-              {chantier.nom_client}
-              <span className="text-stone-400">
-                {PRIORITE_LABELS[chantier.priorite]}
-                {inView ? "" : " · hors période visible"}
-              </span>
-            </button>
+              <button
+                type="button"
+                disabled={!planned}
+                onClick={() => jumpToChantier(chantier.id)}
+                title={info.rangeLabel ?? info.title}
+                className={`inline-flex items-center gap-2 rounded-l-full px-2.5 py-1 ${
+                  planned
+                    ? "hover:bg-amber-50"
+                    : "cursor-default opacity-70"
+                }`}
+              >
+                <span
+                  className="h-2.5 w-2.5 rounded-full"
+                  style={{ backgroundColor: colors.dot }}
+                  title={info.title}
+                />
+                {chantier.nom_client}
+                <span className="text-stone-400">
+                  {PRIORITE_LABELS[chantier.priorite]}
+                  {inView ? "" : " · hors période"}
+                </span>
+              </button>
+              <button
+                type="button"
+                className="rounded-r-full px-2 py-1 text-sm leading-none hover:bg-amber-50"
+                title="Modifier le chantier"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setEditingChantier(chantier);
+                }}
+              >
+                ✏️
+              </button>
+            </span>
           );
         })}
       </div>
@@ -539,6 +575,12 @@ export function CalendarBoard() {
             </tbody>
           </table>
         </div>
+      )}
+      {editingChantier && (
+        <ChantierEditModal
+          chantier={editingChantier}
+          onClose={() => setEditingChantier(null)}
+        />
       )}
       {absenceEmployee && (
         <AbsenceImprevueModal
