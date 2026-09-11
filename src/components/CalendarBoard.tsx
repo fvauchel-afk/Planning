@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 import {
   AbsenceChip,
   AssignmentChip,
@@ -26,6 +26,11 @@ import {
   toISODate,
 } from "@/lib/dates";
 import { formatClock, hoursForSlot, workWindowsForRow } from "@/lib/engine/hours";
+import {
+  previewHalves,
+  shiftChantierBlock,
+  type OccupiedHalf,
+} from "@/lib/engine/drag-shift";
 import { halfFromLabel } from "@/lib/engine/slots";
 import { usePlanning } from "@/lib/planning-context";
 import { PRIORITE_LABELS, type Employee } from "@/lib/types";
@@ -34,12 +39,24 @@ import { WelcomeBanner } from "@/components/WelcomeBanner";
 type ViewMode = "overview" | "week" | "day";
 
 export function CalendarBoard() {
-  const { snapshot, loading, error, usingSupabase } = usePlanning();
+  const { snapshot, loading, error, usingSupabase, applyPhasePatches } =
+    usePlanning();
   const [view, setView] = useState<ViewMode>("overview");
   const [anchor, setAnchor] = useState(() => startOfWeekMonday(new Date()));
   const [selectedDay, setSelectedDay] = useState(toISODate(new Date()));
   const [selectedPhaseId, setSelectedPhaseId] = useState<string | null>(null);
   const [absenceEmployee, setAbsenceEmployee] = useState<Employee | null>(null);
+  const [dragError, setDragError] = useState<string | null>(null);
+  const [dragPreview, setDragPreview] = useState<Set<string> | null>(null);
+  const dragRef = useRef<{
+    pointerId: number;
+    rowId: string;
+    chantierId: string;
+    grab: OccupiedHalf;
+    startX: number;
+    moved: boolean;
+  } | null>(null);
+  const savingDrag = useRef(false);
 
   useEffect(() => {
     const newest = [...snapshot.chantiers].sort((a, b) =>
@@ -90,6 +107,77 @@ export function CalendarBoard() {
     return snapshot.chantiers.filter((chantier) => ids.has(chantier.id));
   }, [days, loading, rows, snapshot]);
 
+  function planCellFromPoint(clientX: number, clientY: number) {
+    const node = document
+      .elementFromPoint(clientX, clientY)
+      ?.closest("[data-plan-cell]");
+    const raw = node?.getAttribute("data-plan-cell");
+    if (!raw) return null;
+    const [rowId, date, halfRaw] = raw.split("|");
+    if (!rowId || !date || (halfRaw !== "0" && halfRaw !== "1")) return null;
+    return { rowId, date, half: Number(halfRaw) as 0 | 1 };
+  }
+
+  function updateDragPreview(clientX: number, clientY: number) {
+    const drag = dragRef.current;
+    if (!drag) return;
+    const drop = planCellFromPoint(clientX, clientY);
+    if (!drop || drop.rowId !== drag.rowId) {
+      setDragPreview(new Set());
+      return;
+    }
+    const result = shiftChantierBlock({
+      snapshot,
+      rowId: drag.rowId,
+      chantierId: drag.chantierId,
+      grab: drag.grab,
+      drop,
+    });
+    const keys = new Set<string>();
+    const delta = result.delta;
+    for (const block of result.chain) {
+      for (const half of previewHalves(block, delta)) {
+        keys.add(`${block.rowId}|${half.date}|${half.half}`);
+      }
+    }
+    if (keys.size === 0) {
+      keys.add(`${drag.rowId}|${drag.grab.date}|${drag.grab.half}`);
+    }
+    setDragPreview(keys);
+  }
+
+  async function finishDrag(clientX: number, clientY: number, phaseId: string) {
+    const drag = dragRef.current;
+    dragRef.current = null;
+    setDragPreview(null);
+    if (!drag) return;
+    if (!drag.moved) {
+      setSelectedPhaseId(phaseId);
+      return;
+    }
+    const drop = planCellFromPoint(clientX, clientY);
+    if (!drop || drop.rowId !== drag.rowId || savingDrag.current) return;
+    const { patches } = shiftChantierBlock({
+      snapshot,
+      rowId: drag.rowId,
+      chantierId: drag.chantierId,
+      grab: drag.grab,
+      drop,
+    });
+    if (patches.length === 0) return;
+    savingDrag.current = true;
+    setDragError(null);
+    try {
+      await applyPhasePatches(patches);
+    } catch (err) {
+      setDragError(
+        err instanceof Error ? err.message : "Déplacement impossible à enregistrer.",
+      );
+    } finally {
+      savingDrag.current = false;
+    }
+  }
+
   function shift(direction: number) {
     if (view === "day") {
       setSelectedDay((current) => addDays(current, direction));
@@ -111,7 +199,8 @@ export function CalendarBoard() {
           <h2 className="font-serif text-3xl text-stone-900">Planning équipe</h2>
           <p className="mt-1 text-sm text-stone-600">
             Une ligne par personne, chaque jour en matin / après-midi. Le
-            thermolaquage sous-traité a sa propre ligne.
+            thermolaquage sous-traité a sa propre ligne. Glissez un chantier
+            sur la même ligne pour le décaler (les blocs collés suivent).
             {usingSupabase
               ? " Données connectées à Supabase."
               : " Mode local (configurez Supabase pour la base partagée)."}
@@ -175,6 +264,11 @@ export function CalendarBoard() {
         </div>
       </div>
 
+      {dragError && (
+        <p className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+          {dragError}
+        </p>
+      )}
       {error && (
         <p className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
           {error}
@@ -220,7 +314,7 @@ export function CalendarBoard() {
           onAbsence={setAbsenceEmployee}
         />
       ) : (
-        <div className="overflow-auto rounded-lg border border-stone-300 bg-white shadow-sm">
+        <div className={`overflow-auto rounded-lg border border-stone-300 bg-white shadow-sm ${dragPreview ? "select-none" : ""}`}>
           <table className="min-w-full border-collapse text-sm">
             <thead>
               <tr className="bg-stone-100">
@@ -308,13 +402,18 @@ export function CalendarBoard() {
                         iso,
                         slot,
                       );
+                      const cellKey = `${row.id}|${iso}|${half}`;
+                      const dropTarget = dragPreview?.has(cellKey);
                       return (
                       <td
                         key={`${row.id}-${iso}-${slot}`}
+                        data-plan-cell={cellKey}
                         className={`h-16 border-b border-l border-stone-200 p-1 ${
-                          isSunday(iso) || slotOff
-                            ? "bg-stone-50/80"
-                            : "bg-white"
+                          dropTarget
+                            ? "bg-amber-100"
+                            : isSunday(iso) || slotOff
+                              ? "bg-stone-50/80"
+                              : "bg-white"
                         }`}
                       >
                         <div className="flex flex-col gap-1">
@@ -330,7 +429,42 @@ export function CalendarBoard() {
                               key={`${assignment.phase.id}-${slot}`}
                               assignment={assignment}
                               compact={compact}
-                              onOpen={setSelectedPhaseId}
+                              dragging={Boolean(dragPreview)}
+                              onPointerDragStart={(event) => {
+                                event.currentTarget.setPointerCapture(
+                                  event.pointerId,
+                                );
+                                dragRef.current = {
+                                  pointerId: event.pointerId,
+                                  rowId: row.id,
+                                  chantierId: assignment.chantier.id,
+                                  grab: { date: iso, half },
+                                  startX: event.clientX,
+                                  moved: false,
+                                };
+                                setDragError(null);
+                              }}
+                              onPointerDragMove={(event) => {
+                                const drag = dragRef.current;
+                                if (!drag || drag.pointerId !== event.pointerId) {
+                                  return;
+                                }
+                                if (
+                                  !drag.moved &&
+                                  Math.abs(event.clientX - drag.startX) < 8
+                                ) {
+                                  return;
+                                }
+                                drag.moved = true;
+                                event.preventDefault();
+                                updateDragPreview(event.clientX, event.clientY);
+                              }}
+                              onPointerDragEnd={(event, phaseId) => {
+                                if (dragRef.current?.pointerId !== event.pointerId) {
+                                  return;
+                                }
+                                void finishDrag(event.clientX, event.clientY, phaseId);
+                              }}
                             />
                           ))}
                         </div>
@@ -517,17 +651,29 @@ function DayDetail({
 function PhaseChipButton({
   assignment,
   compact,
-  onOpen,
+  dragging,
+  onPointerDragStart,
+  onPointerDragMove,
+  onPointerDragEnd,
 }: {
   assignment: CalendarAssignment;
   compact?: boolean;
-  onOpen: (phaseId: string) => void;
+  dragging?: boolean;
+  onPointerDragStart: (event: PointerEvent<HTMLButtonElement>) => void;
+  onPointerDragMove: (event: PointerEvent<HTMLButtonElement>) => void;
+  onPointerDragEnd: (
+    event: PointerEvent<HTMLButtonElement>,
+    phaseId: string,
+  ) => void;
 }) {
   return (
     <button
       type="button"
-      className="block w-full text-left"
-      onClick={() => onOpen(assignment.phase.id)}
+      className={`block w-full touch-none text-left ${dragging ? "cursor-grabbing" : "cursor-grab"}`}
+      onPointerDown={onPointerDragStart}
+      onPointerMove={onPointerDragMove}
+      onPointerUp={(event) => onPointerDragEnd(event, assignment.phase.id)}
+      onPointerCancel={(event) => onPointerDragEnd(event, assignment.phase.id)}
     >
       <AssignmentChip assignment={assignment} compact={compact} />
     </button>
