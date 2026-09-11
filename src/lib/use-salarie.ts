@@ -7,8 +7,5 @@ export function useSalarieId() {
   return {
     employeeId: session?.employeeId ?? null,
     ready,
-    setEmployeeId: (_id: string | null) => {
-      // Identité verrouillée sur la session PIN.
-    },
   };
 }
