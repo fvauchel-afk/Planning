@@ -29,6 +29,7 @@ import { formatClock, hoursForSlot, workWindowsForRow } from "@/lib/engine/hours
 import { halfFromLabel } from "@/lib/engine/slots";
 import { usePlanning } from "@/lib/planning-context";
 import { PRIORITE_LABELS, type Employee } from "@/lib/types";
+import { WelcomeBanner } from "@/components/WelcomeBanner";
 
 type ViewMode = "overview" | "week" | "day";
 
@@ -104,6 +105,7 @@ export function CalendarBoard() {
 
   return (
     <section className="space-y-4">
+      <WelcomeBanner />
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="font-serif text-3xl text-stone-900">Planning équipe</h2>

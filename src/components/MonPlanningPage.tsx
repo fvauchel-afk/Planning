@@ -20,6 +20,7 @@ import { usePlanning } from "@/lib/planning-context";
 import { PHASE_LABELS } from "@/lib/types";
 import { useSession } from "@/lib/auth/session-context";
 import { useSalarieId } from "@/lib/use-salarie";
+import { WelcomeBanner } from "@/components/WelcomeBanner";
 
 export function MonPlanningPage() {
   const { snapshot, loading } = usePlanning();
@@ -83,6 +84,7 @@ export function MonPlanningPage() {
 
   return (
     <MobileShell employeeName={employee.nom}>
+      <WelcomeBanner />
       <div className="mb-3 space-y-2">
         <div className="flex gap-1">
           <button
