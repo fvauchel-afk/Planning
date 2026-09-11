@@ -124,6 +124,34 @@ export function planningRows(employees: Employee[]): CalendarRow[] {
   }));
 }
 
+export function firstChantierOccurrence(
+  snapshot: PlanningSnapshot,
+  chantierId: string,
+): { rowId: string; date: string; half: 0 | 1 } | null {
+  const index = assignmentIndex(snapshot);
+  const rowOrder = new Map(
+    planningRows(snapshot.employees).map((row, position) => [row.id, position]),
+  );
+  let best: { rowId: string; date: string; half: 0 | 1; order: number } | null =
+    null;
+  for (const [key, assignments] of Array.from(index.byCell.entries())) {
+    if (!assignments.some((item) => item.chantier.id === chantierId)) continue;
+    const [rowId, date, halfRaw] = key.split("|");
+    if (!rowId || !date) continue;
+    const half = halfRaw === "1" ? 1 : 0;
+    const order = rowOrder.get(rowId) ?? 999;
+    if (
+      !best ||
+      date < best.date ||
+      (date === best.date && half < best.half) ||
+      (date === best.date && half === best.half && order < best.order)
+    ) {
+      best = { rowId, date, half, order };
+    }
+  }
+  return best ? { rowId: best.rowId, date: best.date, half: best.half } : null;
+}
+
 export function assignmentsForCell(
   snapshot: PlanningSnapshot,
   rowId: string,

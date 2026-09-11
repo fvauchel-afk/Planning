@@ -8,6 +8,7 @@ import {
   assignmentIndex,
   assignmentsForCell,
   assignmentsForDay,
+  firstChantierOccurrence,
   planningRows,
   slotsForPhase,
   type CalendarAssignment,
@@ -57,6 +58,12 @@ export function CalendarBoard() {
     moved: boolean;
   } | null>(null);
   const savingDrag = useRef(false);
+  const [focusCell, setFocusCell] = useState<{
+    rowId: string;
+    date: string;
+    half: 0 | 1;
+    token: number;
+  } | null>(null);
 
   useEffect(() => {
     const newest = [...snapshot.chantiers].sort((a, b) =>
@@ -145,6 +152,45 @@ export function CalendarBoard() {
     }
     setDragPreview(keys);
   }
+
+  function jumpToChantier(chantierId: string) {
+    const first = firstChantierOccurrence(snapshot, chantierId);
+    if (!first) return;
+    const inRange =
+      view === "day"
+        ? first.date === selectedDay
+        : first.date >= rangeStart &&
+          first.date <= addDays(rangeStart, dayCount - 1);
+    if (!inRange) {
+      if (view === "day") {
+        setSelectedDay(first.date);
+      } else {
+        setAnchor(startOfWeekMonday(parseISODate(first.date)));
+      }
+    }
+    setSelectedDay(first.date);
+    setFocusCell({ ...first, token: Date.now() });
+  }
+
+  useEffect(() => {
+    if (!focusCell) return;
+    const key = `${focusCell.rowId}|${focusCell.date}|${focusCell.half}`;
+    const frame = window.setTimeout(() => {
+      const node =
+        document.querySelector(`[data-plan-cell="${key}"]`) ??
+        document.querySelector(`[data-plan-row="${focusCell.rowId}"]`);
+      node?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+        inline: "center",
+      });
+    }, 80);
+    const clear = window.setTimeout(() => setFocusCell(null), 3500);
+    return () => {
+      window.clearTimeout(frame);
+      window.clearTimeout(clear);
+    };
+  }, [focusCell, days, view, selectedDay]);
 
   async function finishDrag(clientX: number, clientY: number, phaseId: string) {
     const drag = dragRef.current;
@@ -282,14 +328,23 @@ export function CalendarBoard() {
         {snapshot.chantiers.map((chantier) => {
           const color = colorForChantier(chantier.id);
           const inView = chantiersInView.some((item) => item.id === chantier.id);
+          const hasSlot = Boolean(firstChantierOccurrence(snapshot, chantier.id));
           return (
-            <span
+            <button
               key={chantier.id}
+              type="button"
+              disabled={!hasSlot}
+              onClick={() => jumpToChantier(chantier.id)}
               className={`inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-xs text-stone-700 ${
                 inView
-                  ? "border-stone-200 bg-white"
-                  : "border-dashed border-stone-300 bg-stone-50"
-              }`}
+                  ? "border-stone-200 bg-white hover:border-amber-400 hover:bg-amber-50"
+                  : "border-dashed border-stone-300 bg-stone-50 hover:border-amber-400 hover:bg-amber-50"
+              } disabled:cursor-default disabled:opacity-60`}
+              title={
+                hasSlot
+                  ? "Aller à la première occurrence dans le planning"
+                  : "Pas encore planifié"
+              }
             >
               <span
                 className="h-2.5 w-2.5 rounded-full"
@@ -300,7 +355,7 @@ export function CalendarBoard() {
                 {PRIORITE_LABELS[chantier.priorite]}
                 {inView ? "" : " · hors période visible"}
               </span>
-            </span>
+            </button>
           );
         })}
       </div>
@@ -309,6 +364,7 @@ export function CalendarBoard() {
         <DayDetail
           iso={selectedDay}
           snapshot={snapshot}
+          focusCell={focusCell}
           onSelectDay={setSelectedDay}
           onOpenPhase={setSelectedPhaseId}
           onAbsence={setAbsenceEmployee}
@@ -404,16 +460,22 @@ export function CalendarBoard() {
                       );
                       const cellKey = `${row.id}|${iso}|${half}`;
                       const dropTarget = dragPreview?.has(cellKey);
+                      const focused =
+                        focusCell?.rowId === row.id &&
+                        focusCell.date === iso &&
+                        focusCell.half === half;
                       return (
                       <td
                         key={`${row.id}-${iso}-${slot}`}
                         data-plan-cell={cellKey}
                         className={`h-16 border-b border-l border-stone-200 p-1 ${
-                          dropTarget
-                            ? "bg-amber-100"
-                            : isSunday(iso) || slotOff
-                              ? "bg-stone-50/80"
-                              : "bg-white"
+                          focused
+                            ? "bg-amber-200 ring-2 ring-inset ring-amber-600"
+                            : dropTarget
+                              ? "bg-amber-100"
+                              : isSunday(iso) || slotOff
+                                ? "bg-stone-50/80"
+                                : "bg-white"
                         }`}
                       >
                         <div className="flex flex-col gap-1">
@@ -499,12 +561,14 @@ export function CalendarBoard() {
 function DayDetail({
   iso,
   snapshot,
+  focusCell,
   onSelectDay,
   onOpenPhase,
   onAbsence,
 }: {
   iso: string;
   snapshot: ReturnType<typeof usePlanning>["snapshot"];
+  focusCell: { rowId: string; date: string; half: 0 | 1 } | null;
   onSelectDay: (iso: string) => void;
   onOpenPhase: (phaseId: string) => void;
   onAbsence: (employee: Employee) => void;
@@ -553,7 +617,12 @@ function DayDetail({
           return (
             <div
               key={row.id}
-              className="grid grid-cols-[200px_1fr] border-b border-stone-200 last:border-b-0"
+              data-plan-row={row.id}
+              className={`grid grid-cols-[200px_1fr] border-b border-stone-200 last:border-b-0 ${
+                focusCell?.rowId === row.id && focusCell.date === iso
+                  ? "bg-amber-50"
+                  : ""
+              }`}
             >
               <div className="bg-stone-50 px-3 py-3">
                 <div className="font-medium">{row.label}</div>
@@ -612,7 +681,14 @@ function DayDetail({
                             <button
                               key={`${assignment.phase.id}-${start}`}
                               type="button"
-                              className="absolute top-1 h-[56px] overflow-hidden rounded px-1.5 py-0.5 text-left text-[11px] leading-tight"
+                              data-plan-cell={`${row.id}|${iso}|${slot.half}`}
+                              className={`absolute top-1 h-[56px] overflow-hidden rounded px-1.5 py-0.5 text-left text-[11px] leading-tight ${
+                                focusCell?.rowId === row.id &&
+                                focusCell.date === iso &&
+                                focusCell.half === slot.half
+                                  ? "ring-2 ring-amber-600"
+                                  : ""
+                              }`}
                               style={{
                                 left: `${((start - dayStart) / span) * 100}%`,
                                 width: `${Math.max(8, ((end - start) / span) * 100)}%`,
