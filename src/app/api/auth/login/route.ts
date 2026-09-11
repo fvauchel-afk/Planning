@@ -50,85 +50,135 @@ function localUserForPin(pin: string) {
   );
 }
 
+function errorDetails(error: unknown) {
+  if (error instanceof Error) {
+    return {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+      cause:
+        error.cause instanceof Error
+          ? { name: error.cause.name, message: error.cause.message }
+          : error.cause ?? null,
+    };
+  }
+  if (error && typeof error === "object") {
+    const obj = error as Record<string, unknown>;
+    return {
+      name: obj.name ?? null,
+      message: obj.message ?? String(error),
+      code: obj.code ?? null,
+      details: obj.details ?? null,
+      hint: obj.hint ?? null,
+      stack: obj.stack ?? null,
+    };
+  }
+  return { message: String(error) };
+}
+
+function debugErrorMessage(error: unknown): string {
+  const details = errorDetails(error);
+  return [
+    details.message,
+    details.code != null ? `code ${String(details.code)}` : "",
+    details.details != null ? String(details.details) : "",
+    details.hint != null ? String(details.hint) : "",
+  ]
+    .filter(Boolean)
+    .join(" — ");
+}
+
 export async function POST(request: NextRequest) {
-  const key = clientKey(request);
-  if (rateLimited(key)) {
-    return NextResponse.json(
-      { error: "Trop de tentatives. Réessayez dans quelques minutes." },
-      { status: 429 },
-    );
-  }
-
-  let pin = "";
   try {
-    const body = (await request.json()) as { pin?: string };
-    pin = String(body.pin ?? "").trim();
-  } catch {
-    return NextResponse.json({ error: "Requête invalide." }, { status: 400 });
-  }
-
-  if (!/^\d{4}$/.test(pin)) {
-    return NextResponse.json(
-      { error: "Le code PIN doit contenir 4 chiffres." },
-      { status: 400 },
-    );
-  }
-
-  let user: { id: string; nom: string; is_admin: boolean } | null = null;
-
-  if (isSupabaseServerConfigured()) {
-    const supabase = hasSupabaseServiceRole()
-      ? createSupabaseServerClient()
-      : createSupabaseAnonClient();
-    const { data, error } = await supabase.rpc("login_with_pin", { p_pin: pin });
-    if (error) {
+    const key = clientKey(request);
+    if (rateLimited(key)) {
       return NextResponse.json(
-        {
-          error:
-            "Connexion impossible. Exécutez le script SQL 015_auth_pin dans Supabase si ce n’est pas déjà fait.",
-        },
-        { status: 500 },
+        { error: "Trop de tentatives. Réessayez dans quelques minutes." },
+        { status: 429 },
       );
     }
-    const row = Array.isArray(data) ? data[0] : data;
-    if (row?.id) {
-      user = {
-        id: row.id,
-        nom: row.nom,
-        is_admin: Boolean(row.is_admin),
-      };
-    }
-  } else {
-    const local = localUserForPin(pin);
-    if (local) {
-      user = {
-        id: local.id,
-        nom: local.nom,
-        is_admin: Boolean(local.is_admin),
-      };
-    }
-  }
 
-  if (!user) {
-    return NextResponse.json({ error: "Code PIN incorrect." }, { status: 401 });
-  }
+    let pin = "";
+    try {
+      const body = (await request.json()) as { pin?: string };
+      pin = String(body.pin ?? "").trim();
+    } catch {
+      return NextResponse.json({ error: "Requête invalide." }, { status: 400 });
+    }
 
-  const token = await encodeSession({
-    employeeId: user.id,
-    nom: user.nom,
-    isAdmin: user.is_admin,
-  });
-  const response = NextResponse.json({
-    user: {
+    if (!/^\d{4}$/.test(pin)) {
+      return NextResponse.json(
+        { error: "Le code PIN doit contenir 4 chiffres." },
+        { status: 400 },
+      );
+    }
+
+    let user: { id: string; nom: string; is_admin: boolean } | null = null;
+
+    if (isSupabaseServerConfigured()) {
+      const supabase = hasSupabaseServiceRole()
+        ? createSupabaseServerClient()
+        : createSupabaseAnonClient();
+      const { data, error } = await supabase.rpc("login_with_pin", { p_pin: pin });
+      if (error) {
+        console.error("LOGIN_ERROR", error, errorDetails(error));
+        return NextResponse.json(
+          {
+            error: debugErrorMessage(error),
+            debug: errorDetails(error),
+          },
+          { status: 500 },
+        );
+      }
+      const row = Array.isArray(data) ? data[0] : data;
+      if (row?.id) {
+        user = {
+          id: row.id,
+          nom: row.nom,
+          is_admin: Boolean(row.is_admin),
+        };
+      }
+    } else {
+      const local = localUserForPin(pin);
+      if (local) {
+        user = {
+          id: local.id,
+          nom: local.nom,
+          is_admin: Boolean(local.is_admin),
+        };
+      }
+    }
+
+    if (!user) {
+      return NextResponse.json({ error: "Code PIN incorrect." }, { status: 401 });
+    }
+
+    const token = await encodeSession({
       employeeId: user.id,
       nom: user.nom,
       isAdmin: user.is_admin,
-    },
-  });
-  response.cookies.set(
-    SESSION_COOKIE,
-    token,
-    sessionCookieOptions(requestIsHttps(request)),
-  );
-  return response;
+    });
+    const response = NextResponse.json({
+      user: {
+        employeeId: user.id,
+        nom: user.nom,
+        isAdmin: user.is_admin,
+      },
+    });
+    response.cookies.set(
+      SESSION_COOKIE,
+      token,
+      sessionCookieOptions(requestIsHttps(request)),
+    );
+    return response;
+  } catch (error) {
+    console.error("LOGIN_ERROR", error, errorDetails(error));
+    return NextResponse.json(
+      {
+        error: debugErrorMessage(error),
+        debug: errorDetails(error),
+      },
+      { status: 500 },
+    );
+  }
 }
