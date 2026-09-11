@@ -76,18 +76,6 @@ function errorDetails(error: unknown) {
   return { message: String(error) };
 }
 
-function debugErrorMessage(error: unknown): string {
-  const details = errorDetails(error);
-  return [
-    details.message,
-    details.code != null ? `code ${String(details.code)}` : "",
-    details.details != null ? String(details.details) : "",
-    details.hint != null ? String(details.hint) : "",
-  ]
-    .filter(Boolean)
-    .join(" — ");
-}
-
 export async function POST(request: NextRequest) {
   try {
     const key = clientKey(request);
@@ -123,10 +111,7 @@ export async function POST(request: NextRequest) {
       if (error) {
         console.error("LOGIN_ERROR", error, errorDetails(error));
         return NextResponse.json(
-          {
-            error: debugErrorMessage(error),
-            debug: errorDetails(error),
-          },
+          { error: "Une erreur est survenue, réessayez." },
           { status: 500 },
         );
       }
@@ -174,10 +159,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error("LOGIN_ERROR", error, errorDetails(error));
     return NextResponse.json(
-      {
-        error: debugErrorMessage(error),
-        debug: errorDetails(error),
-      },
+      { error: "Une erreur est survenue, réessayez." },
       { status: 500 },
     );
   }
