@@ -1,3 +1,4 @@
+import { phaseTypeForRoles } from "@/lib/chantier-status";
 import { ordreAffichageFromNom } from "@/lib/display-order";
 import { defaultHoraires, normalizeHoraire, normalizeHorairesEmploye } from "@/lib/engine/hours";
 import { createSeedSnapshot } from "@/lib/seed";
@@ -7,6 +8,7 @@ import type {
   NewAbsenceInput,
   NewChantierInput,
   ChantierUpdateInput,
+  ScheduleChantierDayInput,
   NewEmployeeInput,
   NewReceptionInput,
   NewSignalementInput,
@@ -310,6 +312,78 @@ export function localUpdateChantier(
         }
       : chantier,
   );
+  saveLocalSnapshot(next);
+  return next;
+}
+
+export function localDeleteChantier(
+  snapshot: PlanningSnapshot,
+  chantierId: string,
+): PlanningSnapshot {
+  const next = clone(snapshot);
+  const elementIds = new Set(
+    next.elements
+      .filter((element) => element.chantier_id === chantierId)
+      .map((element) => element.id),
+  );
+  const phaseIds = new Set(
+    next.phases
+      .filter((phase) => elementIds.has(phase.element_id))
+      .map((phase) => phase.id),
+  );
+  next.signalements = (next.signalements ?? []).filter(
+    (item) => !phaseIds.has(item.phase_id),
+  );
+  next.receptions = (next.receptions ?? []).filter(
+    (item) => !phaseIds.has(item.phase_id),
+  );
+  next.phases = next.phases.filter((phase) => !elementIds.has(phase.element_id));
+  next.elements = next.elements.filter(
+    (element) => element.chantier_id !== chantierId,
+  );
+  next.chantiers = next.chantiers.filter((chantier) => chantier.id !== chantierId);
+  saveLocalSnapshot(next);
+  return next;
+}
+
+export function localScheduleChantierDay(
+  snapshot: PlanningSnapshot,
+  input: ScheduleChantierDayInput,
+): PlanningSnapshot {
+  const next = clone(snapshot);
+  const employee = next.employees.find((item) => item.id === input.employeeId);
+  if (!employee || !employee.actif) {
+    throw new Error("Salarié introuvable ou inactif.");
+  }
+  const typePhase = phaseTypeForRoles(employee.roles);
+  let element = next.elements.find((item) => item.chantier_id === input.chantierId);
+  if (!element) {
+    element = {
+      id: newId(),
+      chantier_id: input.chantierId,
+      nom_element: "Travaux",
+    };
+    next.elements.push(element);
+  }
+  const employeId = typePhase === "logistique" ? null : input.employeeId;
+  for (const slot of [
+    { heure_debut: "07:30", duree_estimee_heures: 4 },
+    { heure_debut: "13:00", duree_estimee_heures: 3 },
+  ] as const) {
+    next.phases.push({
+      id: newId(),
+      element_id: element.id,
+      type_phase: typePhase,
+      duree_estimee_heures: slot.duree_estimee_heures,
+      date_debut: input.date,
+      date_fin: input.date,
+      heure_debut: slot.heure_debut,
+      employe_id: employeId,
+      statut: "a_faire",
+      urgent: false,
+      heures_supplementaires_par_jour: 0,
+    });
+  }
   saveLocalSnapshot(next);
   return next;
 }

@@ -7,6 +7,8 @@ import {
   supabaseCreateAbsence,
   supabaseCreateChantier,
   supabaseUpdateChantier,
+  supabaseDeleteChantier,
+  supabaseScheduleChantierDay,
   supabaseCreateReception,
   supabaseCreateSignalement,
   supabaseDeleteAbsence,
@@ -22,6 +24,7 @@ import type {
   NewAbsenceInput,
   NewChantierInput,
   ChantierUpdateInput,
+  ScheduleChantierDayInput,
   NewEmployeeInput,
   NewReceptionInput,
   NewSignalementInput,
@@ -35,6 +38,8 @@ export const dynamic = "force-dynamic";
 type MutateBody =
   | { action: "createChantier"; input: NewChantierInput }
   | { action: "updateChantier"; input: ChantierUpdateInput }
+  | { action: "deleteChantier"; chantierId: string }
+  | { action: "scheduleChantierDay"; input: ScheduleChantierDayInput }
   | { action: "createChantierWithPatches"; input: NewChantierInput; patches: PhasePatch[] }
   | { action: "upsertEmployee"; input: NewEmployeeInput & { id?: string } }
   | { action: "createAbsence"; input: NewAbsenceInput }
@@ -70,6 +75,8 @@ export async function POST(request: NextRequest) {
   const adminOnly = new Set<MutateBody["action"]>([
     "createChantier",
     "updateChantier",
+    "deleteChantier",
+    "scheduleChantierDay",
     "createChantierWithPatches",
     "upsertEmployee",
     "createAbsence",
@@ -92,6 +99,14 @@ export async function POST(request: NextRequest) {
     } else if (body.action === "updateChantier") {
       await supabaseUpdateChantier(body.input);
       chantierId = body.input.id;
+    } else if (body.action === "deleteChantier") {
+      await supabaseDeleteChantier(body.chantierId);
+    } else if (body.action === "scheduleChantierDay") {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(body.input.date)) {
+        return NextResponse.json({ error: "Date invalide." }, { status: 400 });
+      }
+      await supabaseScheduleChantierDay(body.input);
+      chantierId = body.input.chantierId;
     } else if (body.action === "createChantierWithPatches") {
       if (body.patches?.length) await supabaseApplyPhasePatches(body.patches);
       chantierId = await supabaseCreateChantier(body.input);

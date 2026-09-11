@@ -1,5 +1,5 @@
 import { formatIsoFr, toISODate } from "@/lib/dates";
-import type { PlanningSnapshot } from "@/lib/types";
+import type { PlanningSnapshot, Role, TypePhase } from "@/lib/types";
 
 export const STATUTS_CHANTIER = [
   "non_planifie",
@@ -99,3 +99,10 @@ function runChantierStatusSelfCheck() {
 }
 
 runChantierStatusSelfCheck();
+
+export function phaseTypeForRoles(roles: Role[]): TypePhase {
+  if (roles.includes("pose")) return "pose";
+  if (roles.includes("fabrication")) return "fabrication";
+  if (roles.includes("administratif")) return "administratif";
+  return "logistique";
+}

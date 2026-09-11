@@ -32,8 +32,8 @@ export function ChantiersPage() {
         <div>
           <h2 className="font-serif text-3xl text-stone-900">Chantiers</h2>
           <p className="mt-1 text-sm text-stone-600">
-            Consultez et modifiez les fiches. Pour planifier des phases, utilisez
-            Nouveau chantier.
+            Consultez et modifiez les fiches. Un chantier non planifié peut être
+            daté depuis le formulaire d’édition.
           </p>
         </div>
         <Link

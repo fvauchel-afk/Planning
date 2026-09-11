@@ -200,6 +200,12 @@ export type ChantierUpdateInput = {
   lien_dossier_onedrive: string | null;
 };
 
+export type ScheduleChantierDayInput = {
+  chantierId: string;
+  date: string;
+  employeeId: string;
+};
+
 export type NewEmployeeInput = {
   nom: string;
   roles: Role[];
