@@ -16,6 +16,15 @@ const nextConfig = {
   async headers() {
     return [
       {
+        source: "/api/version",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "no-cache, no-store, must-revalidate",
+          },
+        ],
+      },
+      {
         source: "/sw.js",
         headers: [
           {

@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-12-maj-rapide-sauvegarde-deploy",
+    title: "Mises à jour",
+    items: [
+      "L’écran de nouvelle version s’affiche en quelques secondes, y compris quand vous revenez sur l’onglet.",
+      "À chaque mise en ligne, une copie des données est enregistrée et indiquée comme l’état juste avant cette mise à jour.",
+    ],
+  },
+  {
     id: "2026-09-12-periode-bouton-planning",
     title: "Planning",
     items: [

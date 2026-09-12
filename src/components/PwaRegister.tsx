@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import { CHANGELOG, type ChangelogEntry } from "@/data/changelog";
 import { useSession } from "@/lib/auth/session-context";
 
-const CHECK_MS = 30_000;
+const CHECK_MS = 15_000;
 const STORAGE_BUILD = "vauchel_seen_build";
 const STORAGE_CHANGELOG = "vauchel_seen_changelog";
 const CLIENT_BUILD = process.env.NEXT_PUBLIC_APP_BUILD_ID || "dev";
@@ -75,7 +75,10 @@ export function PwaRegister({
 
     async function checkVersion() {
       try {
-        const response = await fetch("/api/version", { cache: "no-store" });
+        const response = await fetch(`/api/version?t=${Date.now()}`, {
+          cache: "no-store",
+          headers: { Pragma: "no-cache" },
+        });
         if (!response.ok) return;
         const data = (await response.json()) as VersionPayload;
         const buildId = data.buildId || CLIENT_BUILD;
@@ -123,9 +126,9 @@ export function PwaRegister({
           // ignore
         }
       }
-      await checkVersion();
     }
 
+    void checkVersion();
     void setup();
 
     const onVisible = () => {
@@ -133,7 +136,17 @@ export function PwaRegister({
       void registration?.update();
       void checkVersion();
     };
+    const onFocus = () => {
+      void registration?.update();
+      void checkVersion();
+    };
+    const onPageShow = () => {
+      void registration?.update();
+      void checkVersion();
+    };
     document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onFocus);
+    window.addEventListener("pageshow", onPageShow);
     const interval = window.setInterval(() => {
       void registration?.update();
       void checkVersion();
@@ -142,6 +155,8 @@ export function PwaRegister({
     return () => {
       cancelled = true;
       document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onFocus);
+      window.removeEventListener("pageshow", onPageShow);
       window.clearInterval(interval);
     };
   }, []);

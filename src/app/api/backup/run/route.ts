@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/lib/auth/guard";
 import { runPlanningBackup } from "@/lib/backup/run";
+import type { BackupTrigger } from "@/lib/backup/meta";
 import { isMissingSchemaError } from "@/lib/supabase/errors";
 
 export const maxDuration = 60;
@@ -39,18 +40,35 @@ async function isAuthorized(request: NextRequest): Promise<boolean> {
   return false;
 }
 
+async function triggerFromRequest(request: NextRequest): Promise<BackupTrigger> {
+  const query = request.nextUrl.searchParams.get("reason");
+  if (query === "deploy" || query === "daily" || query === "manual") return query;
+  if (request.method === "GET") return "daily";
+  try {
+    const clone = request.clone();
+    const body = (await clone.json()) as { reason?: string };
+    if (body.reason === "deploy" || body.reason === "daily" || body.reason === "manual") {
+      return body.reason;
+    }
+  } catch {
+    // pas de JSON
+  }
+  return "manual";
+}
 async function handle(request: NextRequest) {
   if (!(await isAuthorized(request))) {
     return NextResponse.json({ error: "Non autorisé." }, { status: 401 });
   }
   try {
-    const result = await runPlanningBackup();
+    const trigger = await triggerFromRequest(request);
+    const result = await runPlanningBackup({ trigger });
     return NextResponse.json({
       ok: true,
       fileName: result.fileName,
       createdAt: result.createdAt,
       counts: result.counts,
       totalRows: result.totalRows,
+      trigger: result.trigger,
     });
   } catch (err) {
     const message = isMissingSchemaError(err)
