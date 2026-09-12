@@ -185,6 +185,24 @@ export function localUpsertEmployee(
   return next;
 }
 
+export function localReorderEmployees(
+  snapshot: PlanningSnapshot,
+  rows: { id: string; ordre_affichage: number }[],
+): PlanningSnapshot {
+  const next = clone(snapshot);
+  const ordreById = new Map(
+    rows.map((row) => [row.id, row.ordre_affichage] as const),
+  );
+  next.employees = next.employees.map((employee) => {
+    const ordre = ordreById.get(employee.id);
+    return typeof ordre === "number"
+      ? { ...employee, ordre_affichage: ordre }
+      : employee;
+  });
+  saveLocalSnapshot(next);
+  return next;
+}
+
 export function localCreateAbsence(
   snapshot: PlanningSnapshot,
   input: NewAbsenceInput,

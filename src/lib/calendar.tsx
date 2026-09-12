@@ -14,11 +14,10 @@ import {
 import { colorForChantier } from "@/lib/colors";
 import { dateInRange, formatOvertimeHours } from "@/lib/dates";
 import {
-  compareEmployeesByOrdre,
-  employeeOrdre,
   LOGISTIQUE_ROW_LABEL,
   LOGISTIQUE_ROW_ORDRE,
 } from "@/lib/display-order";
+import { employeeOrdreForPlanning } from "@/lib/employee-row-order";
 import { slotsFromExistingPhase, halfFromLabel, type OccupiedSlot } from "@/lib/engine/slots";
 
 export type CalendarAssignment = {
@@ -94,13 +93,12 @@ export type CalendarRow = {
 export function planningRows(employees: Employee[]): CalendarRow[] {
   const people = employees
     .filter((employee) => employee.actif)
-    .sort(compareEmployeesByOrdre)
     .map((employee) => ({
       id: employee.id,
       label: employee.nom,
       subtitle: employee.roles.join(" · "),
       employee,
-      ordre: employeeOrdre(employee),
+      ordre: employeeOrdreForPlanning(employee),
     }));
   const rows = [
     ...people,

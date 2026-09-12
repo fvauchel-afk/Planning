@@ -31,6 +31,7 @@ import {
   localDeleteChantier,
   localScheduleChantierDay,
   localUpsertEmployee,
+  localReorderEmployees,
   loadLocalSnapshot,
 } from "@/lib/store/local";
 import { fetchPlanningSnapshot, planningMutate } from "@/lib/planning/api";
@@ -63,6 +64,9 @@ type PlanningContextValue = {
   deleteChantier: (chantierId: string) => Promise<void>;
   scheduleChantierDay: (input: ScheduleChantierDayInput) => Promise<void>;
   upsertEmployee: (input: NewEmployeeInput & { id?: string }) => Promise<void>;
+  reorderEmployees: (
+    rows: { id: string; ordre_affichage: number }[],
+  ) => Promise<void>;
   createAbsence: (input: NewAbsenceInput) => Promise<void>;
   updateAbsence: (input: AbsenceUpdateInput) => Promise<void>;
   deleteAbsence: (id: string) => Promise<void>;
@@ -240,6 +244,34 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
         return;
       }
       setSnapshot((current) => localUpsertEmployee(current, input));
+    },
+    [supabaseConfigured, refresh],
+  );
+
+  const reorderEmployees = useCallback(
+    async (rows: { id: string; ordre_affichage: number }[]) => {
+      if (rows.length === 0) return;
+      if (supabaseConfigured) {
+        setSnapshot((current) => ({
+          ...current,
+          employees: current.employees.map((employee) => {
+            const ordre = rows.find((row) => row.id === employee.id)
+              ?.ordre_affichage;
+            return typeof ordre === "number"
+              ? { ...employee, ordre_affichage: ordre }
+              : employee;
+          }),
+        }));
+        try {
+          await planningMutate({ action: "reorderEmployees", rows });
+          await refresh();
+        } catch (err) {
+          await refresh();
+          throw err;
+        }
+        return;
+      }
+      setSnapshot((current) => localReorderEmployees(current, rows));
     },
     [supabaseConfigured, refresh],
   );
@@ -434,6 +466,7 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
       deleteChantier,
       scheduleChantierDay,
       upsertEmployee,
+      reorderEmployees,
       createAbsence,
       updateAbsence,
       deleteAbsence,
@@ -457,6 +490,7 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
       deleteChantier,
       scheduleChantierDay,
       upsertEmployee,
+      reorderEmployees,
       createAbsence,
       updateAbsence,
       deleteAbsence,
