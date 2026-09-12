@@ -28,7 +28,7 @@ export async function restorePlanningBackup(itemId: string): Promise<{
   if (error) {
     if (isMissingSchemaError(error) || /restore_planning_backup/i.test(error.message)) {
       throw new Error(
-        "La fonction de restauration n’est pas encore installée. Exécutez supabase/migrations/019_restore_planning_backup.sql dans l’éditeur SQL Supabase.",
+        "La fonction de restauration n’est pas encore installée. Exécutez supabase/migrations/020_demandes.sql dans l’éditeur SQL Supabase.",
       );
     }
     throw error;
