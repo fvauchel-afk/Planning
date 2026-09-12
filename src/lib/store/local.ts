@@ -11,6 +11,7 @@ import type {
   Employee,
   HoraireSaison,
   NewAbsenceInput,
+  AbsenceUpdateInput,
   NewChantierInput,
   ChantierUpdateInput,
   ScheduleChantierDayInput,
@@ -203,6 +204,28 @@ export function localDeleteAbsence(
 ): PlanningSnapshot {
   const next = clone(snapshot);
   next.absences = next.absences.filter((absence) => absence.id !== id);
+  saveLocalSnapshot(next);
+  return next;
+}
+
+export function localUpdateAbsence(
+  snapshot: PlanningSnapshot,
+  input: AbsenceUpdateInput,
+): PlanningSnapshot {
+  const next = clone(snapshot);
+  next.absences = next.absences.map((absence) =>
+    absence.id === input.id
+      ? {
+          ...absence,
+          employe_id: input.employe_id,
+          date_debut: input.date_debut,
+          date_fin: input.date_fin,
+          type: input.type,
+          motif_precision:
+            input.type === "autre" ? input.motif_precision?.trim() || null : null,
+        }
+      : absence,
+  );
   saveLocalSnapshot(next);
   return next;
 }

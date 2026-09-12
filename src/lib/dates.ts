@@ -160,6 +160,45 @@ export function startOfWeekIso(iso: string): string {
   return toISODate(startOfWeekMonday(parseISODate(iso)));
 }
 
+export function startOfMonthIso(iso: string): string {
+  const date = parseISODate(iso);
+  return toISODate(new Date(date.getFullYear(), date.getMonth(), 1));
+}
+
+export function endOfMonthIso(iso: string): string {
+  const date = parseISODate(iso);
+  return toISODate(new Date(date.getFullYear(), date.getMonth() + 1, 0));
+}
+
+export function addMonths(iso: string, months: number): string {
+  const date = parseISODate(iso);
+  const day = date.getDate();
+  const next = new Date(date.getFullYear(), date.getMonth() + months, 1);
+  const last = new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate();
+  next.setDate(Math.min(day, last));
+  return toISODate(next);
+}
+
+const MOIS_LONGS = [
+  "janvier",
+  "février",
+  "mars",
+  "avril",
+  "mai",
+  "juin",
+  "juillet",
+  "août",
+  "septembre",
+  "octobre",
+  "novembre",
+  "décembre",
+];
+
+export function formatMonthYear(iso: string): string {
+  const date = parseISODate(iso);
+  return `${MOIS_LONGS[date.getMonth()]} ${date.getFullYear()}`;
+}
+
 export function compareIso(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
 }

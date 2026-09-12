@@ -5,6 +5,7 @@ import {
   invalidateSupabaseSnapshotCache,
   supabaseApplyPhasePatches,
   supabaseCreateAbsence,
+  supabaseUpdateAbsence,
   supabaseCreateChantier,
   supabaseUpdateChantier,
   supabaseDeleteChantier,
@@ -22,6 +23,7 @@ import { hasSupabaseServiceRole, isSupabaseUrlConfigured } from "@/lib/supabase/
 import type {
   HoraireSaison,
   NewAbsenceInput,
+  AbsenceUpdateInput,
   NewChantierInput,
   ChantierUpdateInput,
   ScheduleChantierDayInput,
@@ -43,6 +45,7 @@ type MutateBody =
   | { action: "createChantierWithPatches"; input: NewChantierInput; patches: PhasePatch[] }
   | { action: "upsertEmployee"; input: NewEmployeeInput & { id?: string } }
   | { action: "createAbsence"; input: NewAbsenceInput }
+  | { action: "updateAbsence"; input: AbsenceUpdateInput }
   | { action: "deleteAbsence"; id: string }
   | { action: "applyPhasePatches"; patches: PhasePatch[] }
   | { action: "createSignalement"; input: NewSignalementInput }
@@ -80,6 +83,7 @@ export async function POST(request: NextRequest) {
     "createChantierWithPatches",
     "upsertEmployee",
     "createAbsence",
+    "updateAbsence",
     "deleteAbsence",
     "applyPhasePatches",
     "setSignalementStatut",
@@ -127,6 +131,8 @@ export async function POST(request: NextRequest) {
       await supabaseUpsertEmployee(body.input);
     } else if (body.action === "createAbsence") {
       await supabaseCreateAbsence(body.input);
+    } else if (body.action === "updateAbsence") {
+      await supabaseUpdateAbsence(body.input);
     } else if (body.action === "deleteAbsence") {
       await supabaseDeleteAbsence(body.id);
     } else if (body.action === "applyPhasePatches") {

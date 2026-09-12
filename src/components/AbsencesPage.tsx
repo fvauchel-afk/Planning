@@ -8,11 +8,13 @@ import {
   ABSENCE_LABELS,
   TYPES_ABSENCE,
   absenceLabel,
+  type Absence,
   type TypeAbsence,
 } from "@/lib/types";
 
 export function AbsencesPage() {
-  const { snapshot, createAbsence, deleteAbsence } = usePlanning();
+  const { snapshot, createAbsence, updateAbsence, deleteAbsence } = usePlanning();
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [employeId, setEmployeId] = useState("");
   const [type, setType] = useState<TypeAbsence>("conge");
   const [dateDebut, setDateDebut] = useState("");
@@ -23,6 +25,26 @@ export function AbsencesPage() {
   const employeesById = new Map(
     snapshot.employees.map((employee) => [employee.id, employee]),
   );
+
+  function resetForm() {
+    setEditingId(null);
+    setEmployeId("");
+    setType("conge");
+    setDateDebut("");
+    setDateFin("");
+    setMotifPrecision("");
+    setError(null);
+  }
+
+  function startEdit(absence: Absence) {
+    setEditingId(absence.id);
+    setEmployeId(absence.employe_id);
+    setType(absence.type);
+    setDateDebut(absence.date_debut.slice(0, 10));
+    setDateFin(absence.date_fin.slice(0, 10));
+    setMotifPrecision(absence.motif_precision ?? "");
+    setError(null);
+  }
 
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -39,16 +61,19 @@ export function AbsencesPage() {
       return;
     }
     setError(null);
-    await createAbsence({
+    const payload = {
       employe_id: employeId,
       type,
       date_debut: dateDebut,
       date_fin: dateFin,
       motif_precision: type === "autre" ? motifPrecision.trim() : null,
-    });
-    setDateDebut("");
-    setDateFin("");
-    setMotifPrecision("");
+    };
+    if (editingId) {
+      await updateAbsence({ id: editingId, ...payload });
+    } else {
+      await createAbsence(payload);
+    }
+    resetForm();
   }
 
   return (
@@ -79,7 +104,12 @@ export function AbsencesPage() {
                 </tr>
               )}
               {snapshot.absences.map((absence) => (
-                <tr key={absence.id} className="border-t border-stone-200">
+                <tr
+                  key={absence.id}
+                  className={`border-t border-stone-200 ${
+                    editingId === absence.id ? "bg-amber-50" : ""
+                  }`}
+                >
                   <td className="px-3 py-2">
                     {employeesById.get(absence.employe_id)?.nom ?? "—"}
                   </td>
@@ -91,8 +121,18 @@ export function AbsencesPage() {
                   <td className="px-3 py-2 text-right">
                     <button
                       type="button"
+                      className="mr-3 text-amber-800"
+                      onClick={() => startEdit(absence)}
+                    >
+                      Modifier
+                    </button>
+                    <button
+                      type="button"
                       className="text-red-700"
-                      onClick={() => deleteAbsence(absence.id)}
+                      onClick={() => {
+                        if (editingId === absence.id) resetForm();
+                        void deleteAbsence(absence.id);
+                      }}
                     >
                       Supprimer
                     </button>
@@ -108,7 +148,9 @@ export function AbsencesPage() {
         onSubmit={onSubmit}
         className="h-fit space-y-3 rounded-lg border border-stone-300 bg-white p-4"
       >
-        <h3 className="font-medium">Ajouter une absence</h3>
+        <h3 className="font-medium">
+          {editingId ? "Modifier l’absence" : "Ajouter une absence"}
+        </h3>
         {error && <p className="text-sm text-red-700">{error}</p>}
         <label className="block text-sm">
           <span className="mb-1 block">Employé</span>
@@ -119,7 +161,7 @@ export function AbsencesPage() {
           >
             <option value="">Choisir…</option>
             {snapshot.employees
-              .filter((employee) => employee.actif)
+              .filter((employee) => employee.actif || employee.id === employeId)
               .sort(compareEmployeesByOrdre)
               .map((employee) => (
                 <option key={employee.id} value={employee.id}>
@@ -171,12 +213,23 @@ export function AbsencesPage() {
             className="w-full rounded border border-stone-300 px-3 py-2"
           />
         </label>
-        <button
-          type="submit"
-          className="rounded bg-amber-700 px-3 py-2 text-sm text-amber-50"
-        >
-          Enregistrer
-        </button>
+        <div className="flex gap-2">
+          <button
+            type="submit"
+            className="rounded bg-amber-700 px-3 py-2 text-sm text-amber-50"
+          >
+            {editingId ? "Enregistrer les modifications" : "Enregistrer"}
+          </button>
+          {editingId ? (
+            <button
+              type="button"
+              onClick={resetForm}
+              className="rounded border border-stone-300 px-3 py-2 text-sm"
+            >
+              Annuler
+            </button>
+          ) : null}
+        </div>
       </form>
     </div>
   );

@@ -23,6 +23,7 @@ import type {
   Employee,
   HoraireSaison,
   NewAbsenceInput,
+  AbsenceUpdateInput,
   NewChantierInput,
   ChantierUpdateInput,
   ScheduleChantierDayInput,
@@ -542,6 +543,24 @@ export async function supabaseCreateAbsence(
 export async function supabaseDeleteAbsence(id: string): Promise<void> {
   const supabase = createSupabaseServerClient();
   const { error } = await supabase.from("absences").delete().eq("id", id);
+  if (error) throw wrapSupabaseError(error);
+}
+
+export async function supabaseUpdateAbsence(
+  input: AbsenceUpdateInput,
+): Promise<void> {
+  const supabase = createSupabaseServerClient();
+  const { error } = await supabase
+    .from("absences")
+    .update({
+      employe_id: input.employe_id,
+      date_debut: input.date_debut,
+      date_fin: input.date_fin,
+      type: input.type,
+      motif_precision:
+        input.type === "autre" ? input.motif_precision?.trim() || null : null,
+    })
+    .eq("id", input.id);
   if (error) throw wrapSupabaseError(error);
 }
 
