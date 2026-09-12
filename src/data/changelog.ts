@@ -11,12 +11,13 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
-    id: "2026-09-12-mise-a-jour-obligatoire",
-    title: "Mise à jour de l’application",
+    id: "2026-09-12-fin-chantier-ecran-maj",
+    title: "Mise à jour",
     items: [
-      "Quand une nouvelle version arrive, un écran vous demande de mettre à jour avant de continuer.",
-      "Vous voyez ici, en quelques phrases, ce qui a changé.",
-      "Les anciens chantiers déjà en base (importés avant) sont aussi pris en compte, sans devoir tout recréer.",
+      "Vous pouvez modifier la date de fin d’un chantier : les jours de travail sont ajoutés ou enlevés automatiquement (samedi et dimanche exclus).",
+      "Vous pouvez modifier une absence déjà enregistrée.",
+      "Le planning s’ouvre sur le mois, la semaine ou le jour d’aujourd’hui, avec ce jour surligné en jaune.",
+      "Quand une nouvelle version arrive, un écran bloque l’application jusqu’au bouton Mettre à jour, et explique ce qui a changé.",
     ],
   },
   {

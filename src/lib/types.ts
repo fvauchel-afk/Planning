@@ -235,6 +235,25 @@ export type PhasePatch = {
   heure_debut?: string | null;
 };
 
+export type PhaseInsert = {
+  element_id: string;
+  type_phase: TypePhase;
+  duree_estimee_heures: number;
+  date_debut: string | null;
+  date_fin: string | null;
+  heure_debut?: string | null;
+  employe_id: string | null;
+  statut: StatutPhase;
+  urgent: boolean;
+  heures_supplementaires_par_jour?: number;
+};
+
+export type PhaseEdits = {
+  patches?: PhasePatch[];
+  inserts?: PhaseInsert[];
+  deleteIds?: string[];
+};
+
 export const ROLE_LABELS: Record<Role, string> = {
   administratif: "Administratif",
   fabrication: "Fabrication",

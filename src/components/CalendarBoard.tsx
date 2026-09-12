@@ -54,7 +54,7 @@ export function CalendarBoard() {
   const { snapshot, loading, error, usingSupabase, applyPhasePatches } =
     usePlanning();
   const [view, setView] = useState<ViewMode>("overview");
-  const todayIso = toISODate(new Date());
+  const [todayIso, setTodayIso] = useState(() => toISODate(new Date()));
   const [cursorIso, setCursorIso] = useState(todayIso);
   const [selectedPhaseId, setSelectedPhaseId] = useState<string | null>(null);
   const [absenceEmployee, setAbsenceEmployee] = useState<Employee | null>(null);
@@ -76,6 +76,20 @@ export function CalendarBoard() {
     half: 0 | 1;
     token: number;
   } | null>(null);
+
+  useEffect(() => {
+    const tick = () => setTodayIso(toISODate(new Date()));
+    tick();
+    const interval = window.setInterval(tick, 30_000);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") tick();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, []);
 
   const days = useMemo(() => {
     if (view === "day") return [cursorIso];
@@ -254,7 +268,10 @@ export function CalendarBoard() {
               <button
                 key={id}
                 type="button"
-                onClick={() => setView(id)}
+                onClick={() => {
+                  setView(id);
+                  setCursorIso(toISODate(new Date()));
+                }}
                 className={`rounded px-3 py-1.5 text-sm ${
                   view === id
                     ? "bg-stone-900 text-white"

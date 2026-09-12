@@ -6,6 +6,7 @@ import {
 } from "@/lib/engine/schedule-chantier";
 import { ordreAffichageFromNom } from "@/lib/display-order";
 import { defaultHoraires, normalizeHoraire, normalizeHorairesEmploye } from "@/lib/engine/hours";
+import { normalizePhasesForPlanning } from "@/lib/engine/normalize-phases";
 import { createSeedSnapshot } from "@/lib/seed";
 import type {
   Employee,
@@ -18,6 +19,7 @@ import type {
   NewEmployeeInput,
   NewReceptionInput,
   NewSignalementInput,
+  PhaseEdits,
   PhasePatch,
   PlanningSnapshot,
   ReceptionChantier,
@@ -52,12 +54,15 @@ export function loadLocalSnapshot(): PlanningSnapshot {
         origine:
           item.origine === "decalage_admin" ? "decalage_admin" : "salarie",
       })),
-      phases: (parsed.phases ?? []).map((phase) => ({
-        ...phase,
-        heures_supplementaires_par_jour:
-          phase.heures_supplementaires_par_jour ?? 0,
-        heure_debut: phase.heure_debut ?? null,
-      })),
+      phases: normalizePhasesForPlanning(
+        (parsed.phases ?? []).map((phase) => ({
+          ...phase,
+          heures_supplementaires_par_jour:
+            phase.heures_supplementaires_par_jour ?? 0,
+          heure_debut: phase.heure_debut ?? null,
+        })),
+        parsed.elements ?? [],
+      ),
       employees: (parsed.employees ?? []).map((employee) => ({
         ...employee,
         horaires: normalizeHorairesEmploye(employee.horaires),
@@ -234,20 +239,45 @@ export function localApplyPhasePatches(
   snapshot: PlanningSnapshot,
   patches: PhasePatch[],
 ): PlanningSnapshot {
+  return localApplyPhaseEdits(snapshot, { patches });
+}
+
+export function localApplyPhaseEdits(
+  snapshot: PlanningSnapshot,
+  edits: PhaseEdits,
+): PlanningSnapshot {
   const next = clone(snapshot);
-  const byId = new Map(patches.map((patch) => [patch.id, patch]));
-  next.phases = next.phases.map((phase) => {
-    const patch = byId.get(phase.id);
-    if (!patch) return phase;
-    return {
-      ...phase,
-      date_debut: patch.date_debut,
-      date_fin: patch.date_fin,
-      employe_id: patch.employe_id,
-      heure_debut:
-        patch.heure_debut !== undefined ? patch.heure_debut : phase.heure_debut,
-    };
-  });
+  const byId = new Map((edits.patches ?? []).map((patch) => [patch.id, patch]));
+  if (byId.size > 0) {
+    next.phases = next.phases.map((phase) => {
+      const patch = byId.get(phase.id);
+      if (!patch) return phase;
+      return {
+        ...phase,
+        date_debut: patch.date_debut,
+        date_fin: patch.date_fin,
+        employe_id: patch.employe_id,
+        heure_debut:
+          patch.heure_debut !== undefined ? patch.heure_debut : phase.heure_debut,
+      };
+    });
+  }
+  if (edits.deleteIds?.length) {
+    const removed = new Set(edits.deleteIds);
+    next.phases = next.phases.filter((phase) => !removed.has(phase.id));
+    next.signalements = (next.signalements ?? []).filter(
+      (item) => !removed.has(item.phase_id),
+    );
+    next.receptions = (next.receptions ?? []).filter(
+      (item) => !removed.has(item.phase_id),
+    );
+  }
+  for (const row of edits.inserts ?? []) {
+    next.phases.push({
+      id: newId(),
+      ...row,
+    });
+  }
   saveLocalSnapshot(next);
   return next;
 }

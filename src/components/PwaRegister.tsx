@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { usePathname } from "next/navigation";
 import { CHANGELOG, type ChangelogEntry } from "@/data/changelog";
 import { useSession } from "@/lib/auth/session-context";
@@ -9,6 +10,7 @@ const CHECK_MS = 30_000;
 const STORAGE_BUILD = "vauchel_seen_build";
 const STORAGE_CHANGELOG = "vauchel_seen_changelog";
 const CLIENT_BUILD = process.env.NEXT_PUBLIC_APP_BUILD_ID || "dev";
+const GATE_ROOT_ID = "update-gate-root";
 
 type VersionPayload = {
   buildId?: string;
@@ -31,7 +33,11 @@ function unseenEntries(changelog: ChangelogEntry[]): ChangelogEntry[] {
   return changelog.filter((entry) => !seen.has(entry.id));
 }
 
-export function PwaRegister() {
+export function PwaRegister({
+  onLockChange,
+}: {
+  onLockChange?: (locked: boolean) => void;
+}) {
   const pathname = usePathname();
   const { session, ready } = useSession();
   const [pending, setPending] = useState<{
@@ -39,6 +45,12 @@ export function PwaRegister() {
     entries: ChangelogEntry[];
   } | null>(null);
   const [reloading, setReloading] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -134,14 +146,86 @@ export function PwaRegister() {
     };
   }, []);
 
+  const showGate =
+    ready && Boolean(session) && pathname !== "/connexion" && pending !== null;
+
   useEffect(() => {
-    if (!pending) return;
-    const previous = document.body.style.overflow;
+    onLockChange?.(showGate);
+  }, [onLockChange, showGate]);
+
+  useEffect(() => {
+    if (!showGate) return;
+    const html = document.documentElement;
+    const previousHtmlOverflow = html.style.overflow;
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousBodyPosition = document.body.style.position;
+    html.classList.add("update-gate-open");
+    html.style.overflow = "hidden";
     document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = previous;
+    document.body.style.position = "relative";
+    const focusTimer = window.setTimeout(() => buttonRef.current?.focus(), 30);
+
+    const allow = (target: EventTarget | null) => {
+      const node = target as Node | null;
+      const root = document.getElementById(GATE_ROOT_ID);
+      return Boolean(root && node && root.contains(node));
     };
-  }, [pending]);
+
+    const block = (event: Event) => {
+      if (allow(event.target)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+    };
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!allow(event.target)) {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+        buttonRef.current?.focus();
+        return;
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+      if (event.key === "Tab") {
+        event.preventDefault();
+        buttonRef.current?.focus();
+      }
+    };
+
+    const types: Array<keyof DocumentEventMap> = [
+      "pointerdown",
+      "pointerup",
+      "click",
+      "mousedown",
+      "mouseup",
+      "touchstart",
+      "touchmove",
+      "wheel",
+      "scroll",
+    ];
+    for (const type of types) {
+      document.addEventListener(type, block, { capture: true, passive: false });
+    }
+    document.addEventListener("keydown", onKeyDown, true);
+    window.addEventListener("scroll", block, { capture: true, passive: false });
+
+    return () => {
+      window.clearTimeout(focusTimer);
+      html.classList.remove("update-gate-open");
+      html.style.overflow = previousHtmlOverflow;
+      document.body.style.overflow = previousBodyOverflow;
+      document.body.style.position = previousBodyPosition;
+      for (const type of types) {
+        document.removeEventListener(type, block, true);
+      }
+      document.removeEventListener("keydown", onKeyDown, true);
+      window.removeEventListener("scroll", block, true);
+    };
+  }, [showGate]);
 
   async function applyUpdate() {
     if (!pending) return;
@@ -184,25 +268,27 @@ export function PwaRegister() {
     reloadOnce();
   }
 
-  const showGate =
-    ready && Boolean(session) && pathname !== "/connexion" && pending !== null;
+  if (!showGate || !mounted) return null;
 
-  if (!showGate) return null;
-
-  return (
+  return createPortal(
     <div
+      id={GATE_ROOT_ID}
       role="dialog"
       aria-modal="true"
       aria-labelledby="update-gate-title"
-      className="fixed inset-0 z-[9999] flex items-center justify-center bg-stone-950/80 p-4"
+      className="fixed inset-0 z-[2147483647] flex items-center justify-center bg-stone-950/90 p-4"
+      style={{ touchAction: "none" }}
     >
-      <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl">
+      <div
+        className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl"
+        style={{ touchAction: "auto" }}
+      >
         <h2 id="update-gate-title" className="font-serif text-2xl text-stone-900">
           Une nouvelle version est disponible
         </h2>
         <p className="mt-2 text-sm text-stone-600">
-          Cliquez sur Mettre à jour pour continuer. L’application se recharge
-          avec la dernière version.
+          Cliquez sur Mettre à jour pour continuer. Tant que ce n’est pas fait,
+          l’application reste bloquée.
         </p>
         <div className="mt-4 space-y-4">
           {pending.entries.map((entry) => (
@@ -217,6 +303,7 @@ export function PwaRegister() {
           ))}
         </div>
         <button
+          ref={buttonRef}
           type="button"
           disabled={reloading}
           onClick={() => void applyUpdate()}
@@ -225,6 +312,7 @@ export function PwaRegister() {
           {reloading ? "Mise à jour…" : "Mettre à jour"}
         </button>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
