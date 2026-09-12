@@ -234,6 +234,11 @@ export type NewChantierInput = {
   date_debut?: string | null;
   date_fin?: string | null;
   dates_estimatives?: boolean;
+  avec_pose?: boolean;
+  avec_thermolaquage?: boolean;
+  delai_laquage_jours?: number | null;
+  date_laquage_debut?: string | null;
+  date_laquage_fin?: string | null;
   elements: NewElementInput[];
 };
 

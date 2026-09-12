@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-12-pose-thermolaquage",
+    title: "Nouveau chantier",
+    items: [
+      "À la création, vous indiquez si le chantier a une pose et s’il passe au thermolaquage (Oui ou Non obligatoire).",
+      "L’enchaînement est fabrication, puis thermolaquage (5 jours ouvrés par défaut, ou le délai que vous saisissez), puis pose.",
+    ],
+  },
+  {
     id: "2026-09-12-dates-estimatives",
     title: "Nouveau chantier",
     items: [
