@@ -315,3 +315,16 @@ export function createSeedSnapshot(): PlanningSnapshot {
     horaires: defaultHoraires(),
   };
 }
+
+export function createEmptySnapshot(): PlanningSnapshot {
+  return {
+    employees: [],
+    chantiers: [],
+    elements: [],
+    phases: [],
+    absences: [],
+    signalements: [],
+    receptions: [],
+    horaires: defaultHoraires(),
+  };
+}

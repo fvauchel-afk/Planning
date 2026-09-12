@@ -20,7 +20,10 @@ import {
   supabaseReorderEmployees,
   fetchSupabaseSnapshot,
 } from "@/lib/store/supabase";
-import { wrapSupabaseError } from "@/lib/supabase/errors";
+import {
+  DATABASE_UNAVAILABLE_MESSAGE,
+  wrapSupabaseError,
+} from "@/lib/supabase/errors";
 import { hasSupabaseServiceRole, isSupabaseUrlConfigured } from "@/lib/supabase/server";
 import type {
   HoraireSaison,
@@ -66,13 +69,14 @@ export async function POST(request: NextRequest) {
   const session = await resolveSession(await getSession());
   if (!session) return unauthorized();
 
-  if (isSupabaseUrlConfigured() && !hasSupabaseServiceRole()) {
+  if (!isSupabaseUrlConfigured() || !hasSupabaseServiceRole()) {
     return NextResponse.json(
       {
-        error:
-          "Ajoutez SUPABASE_SERVICE_ROLE_KEY (clé service_role du dashboard Supabase) sur le serveur.",
+        error: isSupabaseUrlConfigured()
+          ? "Ajoutez SUPABASE_SERVICE_ROLE_KEY (clé service_role du dashboard Supabase) sur le serveur."
+          : DATABASE_UNAVAILABLE_MESSAGE,
       },
-      { status: 500 },
+      { status: 503 },
     );
   }
 

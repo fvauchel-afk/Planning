@@ -15,3 +15,11 @@ function getPublishableKey(): string | undefined {
 export function isSupabaseConfigured(): boolean {
   return Boolean(getSupabaseUrl() && getPublishableKey());
 }
+
+/** En production / preview Vercel, on n’utilise jamais le jeu d’essai local. */
+export function shouldUseSharedDatabase(): boolean {
+  if (isSupabaseConfigured()) return true;
+  const vercelEnv =
+    process.env.NEXT_PUBLIC_VERCEL_ENV || process.env.VERCEL_ENV;
+  return vercelEnv === "production" || vercelEnv === "preview";
+}

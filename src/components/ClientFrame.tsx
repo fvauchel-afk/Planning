@@ -6,6 +6,7 @@ import { AppShell } from "@/components/AppShell";
 import { PwaRegister } from "@/components/PwaRegister";
 import { SessionProvider, useSession } from "@/lib/auth/session-context";
 import { PlanningProvider } from "@/lib/planning-context";
+import { DatabaseUnavailableGate } from "@/components/DatabaseUnavailableGate";
 
 function Shell({
   pathname,
@@ -56,7 +57,9 @@ function FramedApp({ children }: { children: React.ReactNode }) {
         }
       >
         <PlanningProvider>
-          <Shell pathname={pathname}>{children}</Shell>
+          <DatabaseUnavailableGate>
+            <Shell pathname={pathname}>{children}</Shell>
+          </DatabaseUnavailableGate>
         </PlanningProvider>
       </div>
       <PwaRegister onLockChange={onLockChange} />

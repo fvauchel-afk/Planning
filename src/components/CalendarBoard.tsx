@@ -273,7 +273,7 @@ export function CalendarBoard() {
             pour changer l’ordre d’affichage, enregistré pour tout le monde.
             {usingSupabase
               ? " Données connectées à Supabase."
-              : " Mode local (configurez Supabase pour la base partagée)."}
+              : ""}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">

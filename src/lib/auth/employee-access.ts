@@ -24,27 +24,32 @@ export async function lookupEmployeeAccess(
   endpoint.searchParams.set("select", "id,nom,is_admin,actif");
   endpoint.searchParams.set("limit", "1");
 
-  const response = await fetch(endpoint, {
-    headers: {
-      apikey: service,
-      Authorization: `Bearer ${service}`,
-      Accept: "application/json",
-    },
-    cache: "no-store",
-  });
-  if (!response.ok) return null;
-  const rows = (await response.json()) as Array<{
-    id?: unknown;
-    nom?: unknown;
-    is_admin?: unknown;
-    actif?: unknown;
-  }>;
-  const row = rows[0];
-  if (!row?.id || row.nom == null) return null;
-  return {
-    id: String(row.id),
-    nom: String(row.nom),
-    isAdmin: asAdminFlag(row.is_admin),
-    actif: row.actif !== false,
-  };
+  try {
+    const response = await fetch(endpoint, {
+      headers: {
+        apikey: service,
+        Authorization: `Bearer ${service}`,
+        Accept: "application/json",
+      },
+      cache: "no-store",
+      signal: AbortSignal.timeout(4000),
+    });
+    if (!response.ok) return null;
+    const rows = (await response.json()) as Array<{
+      id?: unknown;
+      nom?: unknown;
+      is_admin?: unknown;
+      actif?: unknown;
+    }>;
+    const row = rows[0];
+    if (!row?.id || row.nom == null) return null;
+    return {
+      id: String(row.id),
+      nom: String(row.nom),
+      isAdmin: asAdminFlag(row.is_admin),
+      actif: row.actif !== false,
+    };
+  } catch {
+    return null;
+  }
 }

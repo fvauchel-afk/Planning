@@ -6,26 +6,31 @@ import {
   hasSupabaseServiceRole,
   isSupabaseUrlConfigured,
 } from "@/lib/supabase/server";
-import { wrapSupabaseError } from "@/lib/supabase/errors";
+import {
+  DATABASE_UNAVAILABLE_MESSAGE,
+  wrapSupabaseError,
+} from "@/lib/supabase/errors";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 30;
 
 export async function GET() {
   const session = await resolveSession(await getSession());
   if (!session) return unauthorized();
 
-  if (!isSupabaseUrlConfigured()) {
-    return NextResponse.json({ usingSupabase: false, snapshot: null });
-  }
-
-  if (!hasSupabaseServiceRole()) {
+  if (!isSupabaseUrlConfigured() || !hasSupabaseServiceRole()) {
+    const missingService =
+      isSupabaseUrlConfigured() && !hasSupabaseServiceRole();
     return NextResponse.json(
       {
-        error:
-          "Ajoutez SUPABASE_SERVICE_ROLE_KEY (clé service_role du dashboard Supabase) sur le serveur. Les pages ne lisent plus Supabase depuis le navigateur.",
+        error: missingService
+          ? "Ajoutez SUPABASE_SERVICE_ROLE_KEY (clé service_role du dashboard Supabase) sur le serveur."
+          : DATABASE_UNAVAILABLE_MESSAGE,
+        usingSupabase: false,
+        snapshot: null,
       },
-      { status: 500 },
+      { status: 503 },
     );
   }
 
@@ -37,8 +42,8 @@ export async function GET() {
     return NextResponse.json({ usingSupabase: true, snapshot });
   } catch (err) {
     return NextResponse.json(
-      { error: wrapSupabaseError(err).message },
-      { status: 500 },
+      { error: wrapSupabaseError(err).message, usingSupabase: false },
+      { status: 503 },
     );
   }
 }

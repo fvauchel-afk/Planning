@@ -59,6 +59,34 @@ function assertServiceRoleKey(key: string, publishable: string | undefined) {
   }
 }
 
+function timedFetch(
+  input: RequestInfo | URL,
+  init: RequestInit | undefined,
+  extraHeaders: Headers,
+): Promise<Response> {
+  const headers = extraHeaders;
+  const timeout = AbortSignal.timeout(12_000);
+  const signal = init?.signal
+    ? abortWhenAny(init.signal, timeout)
+    : timeout;
+  return fetch(input, { ...init, headers, signal });
+}
+
+function abortWhenAny(left: AbortSignal, right: AbortSignal): AbortSignal {
+  if (typeof AbortSignal.any === "function") {
+    return AbortSignal.any([left, right]);
+  }
+  const controller = new AbortController();
+  const onAbort = () => controller.abort();
+  if (left.aborted || right.aborted) {
+    controller.abort();
+    return controller.signal;
+  }
+  left.addEventListener("abort", onAbort, { once: true });
+  right.addEventListener("abort", onAbort, { once: true });
+  return controller.signal;
+}
+
 function createAnonClientWithKey(url: string, key: string): SupabaseClient {
   return createClient(url, key, {
     auth: {
@@ -77,7 +105,7 @@ function createAnonClientWithKey(url: string, key: string): SupabaseClient {
         ) {
           headers.delete("Authorization");
         }
-        return fetch(input, { ...init, headers });
+        return timedFetch(input, init, headers);
       },
     },
   });
@@ -99,7 +127,7 @@ function createServiceClientWithKey(url: string, key: string): SupabaseClient {
         const headers = new Headers(init?.headers);
         headers.set("apikey", key);
         headers.set("Authorization", `Bearer ${key}`);
-        return fetch(input, { ...init, headers });
+        return timedFetch(input, init, headers);
       },
     },
   });

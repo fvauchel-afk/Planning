@@ -9,7 +9,9 @@ npm install
 npm run dev
 ```
 
-Ouvrir [http://localhost:3000](http://localhost:3000). Sans variables Supabase, l’application utilise un stockage local pré-rempli (équipe Vauchel + chantiers d’exemple).
+Sans variables Supabase **en local**, l’application utilise un stockage local pré-rempli (équipe Vauchel + chantiers d’exemple).
+
+**En production**, si la base est injoignable, l’application n’affiche plus ces données d’exemple : un message d’erreur s’affiche et les modifications sont bloquées.
 
 ## Supabase
 

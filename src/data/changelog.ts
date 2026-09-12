@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-12-base-indisponible",
+    title: "Connexion à la base",
+    items: [
+      "Si la base de données est injoignable, un message clair s’affiche. Le planning d’exemple n’apparaît plus à la place des vraies données.",
+      "Tant que la connexion n’est pas rétablie, aucune modification n’est possible.",
+    ],
+  },
+  {
     id: "2026-09-12-ordre-lignes-planning",
     title: "Planning équipe",
     items: [
