@@ -31,6 +31,7 @@ import type {
   NewEmployeeInput,
   NewReceptionInput,
   NewDemandeInput,
+  DemandeUpdateInput,
   NewSignalementInput,
   PhaseEdits,
   PhaseInsert,
@@ -40,6 +41,7 @@ import type {
   ReceptionChantier,
   Demande,
   CategorieDemande,
+  StatutDemande,
   Role,
   Signalement,
   StatutSignalement,
@@ -227,12 +229,16 @@ async function fetchSupabaseSnapshotOnce(): Promise<PlanningSnapshot> {
       .map((row) => {
         const categorie: CategorieDemande =
           row.categorie === "suggestion_site" ? "suggestion_site" : "commande";
+        const statut: StatutDemande =
+          row.statut === "traite" ? "traite" : "en_attente";
         return {
           id: row.id,
           employe_id: row.employe_id,
           categorie,
           message: row.message ?? "",
           date_creation: row.date_creation,
+          statut,
+          archivee: Boolean(row.archivee),
         };
       })
       .sort(
@@ -715,11 +721,45 @@ export async function supabaseCreateDemande(
 ): Promise<void> {
   const supabase = createSupabaseServerClient();
   const message = input.message.trim();
-  const { error } = await supabase.from("demandes").insert({
+  const payload = {
     employe_id: input.employe_id,
     categorie: input.categorie,
     message,
-  });
+    statut: "en_attente" as const,
+    archivee: false,
+  };
+  const { error } = await supabase.from("demandes").insert(payload);
+  if (error && isMissingColumnError(error, "statut")) {
+    const retry = await supabase.from("demandes").insert({
+      employe_id: payload.employe_id,
+      categorie: payload.categorie,
+      message: payload.message,
+    });
+    if (retry.error) throw wrapSupabaseError(retry.error);
+    return;
+  }
+  if (error && isMissingColumnError(error, "archivee")) {
+    const retry = await supabase.from("demandes").insert({
+      employe_id: payload.employe_id,
+      categorie: payload.categorie,
+      message: payload.message,
+      statut: payload.statut,
+    });
+    if (retry.error) throw wrapSupabaseError(retry.error);
+    return;
+  }
+  if (error) throw wrapSupabaseError(error);
+}
+
+export async function supabaseUpdateDemande(
+  input: DemandeUpdateInput,
+): Promise<void> {
+  const supabase = createSupabaseServerClient();
+  const patch: { statut?: StatutDemande; archivee?: boolean } = {};
+  if (input.statut) patch.statut = input.statut;
+  if (input.archivee !== undefined) patch.archivee = input.archivee;
+  if (Object.keys(patch).length === 0) return;
+  const { error } = await supabase.from("demandes").update(patch).eq("id", input.id);
   if (error) throw wrapSupabaseError(error);
 }
 
