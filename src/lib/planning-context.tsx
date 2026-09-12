@@ -17,6 +17,7 @@ import {
 import {
   localApplyPhasePatches,
   localCreateAbsence,
+  localUpdateAbsence,
   localCreateChantier,
   localCreateReception,
   localCreateSignalement,
@@ -36,6 +37,7 @@ import { isSupabaseConfigured } from "@/lib/supabase/client";
 import { wrapSupabaseError } from "@/lib/supabase/errors";
 import type {
   NewAbsenceInput,
+  AbsenceUpdateInput,
   NewChantierInput,
   ChantierUpdateInput,
   ScheduleChantierDayInput,
@@ -60,6 +62,7 @@ type PlanningContextValue = {
   scheduleChantierDay: (input: ScheduleChantierDayInput) => Promise<void>;
   upsertEmployee: (input: NewEmployeeInput & { id?: string }) => Promise<void>;
   createAbsence: (input: NewAbsenceInput) => Promise<void>;
+  updateAbsence: (input: AbsenceUpdateInput) => Promise<void>;
   deleteAbsence: (id: string) => Promise<void>;
   applyPhasePatches: (patches: PhasePatch[]) => Promise<void>;
   createChantierWithPatches: (
@@ -250,6 +253,18 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
     [supabaseConfigured, refresh],
   );
 
+  const updateAbsence = useCallback(
+    async (input: AbsenceUpdateInput) => {
+      if (supabaseConfigured) {
+        await planningMutate({ action: "updateAbsence", input });
+        await refresh();
+        return;
+      }
+      setSnapshot((current) => localUpdateAbsence(current, input));
+    },
+    [supabaseConfigured, refresh],
+  );
+
   const deleteAbsence = useCallback(
     async (id: string) => {
       if (supabaseConfigured) {
@@ -404,6 +419,7 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
       scheduleChantierDay,
       upsertEmployee,
       createAbsence,
+      updateAbsence,
       deleteAbsence,
       applyPhasePatches,
       createChantierWithPatches,
@@ -425,6 +441,7 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
       scheduleChantierDay,
       upsertEmployee,
       createAbsence,
+      updateAbsence,
       deleteAbsence,
       applyPhasePatches,
       createChantierWithPatches,

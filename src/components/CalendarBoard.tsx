@@ -19,12 +19,16 @@ import { PhaseFicheModal } from "@/components/PhaseFicheModal";
 import { colorForChantier } from "@/lib/colors";
 import {
   addDays,
+  addMonths,
   eachDay,
+  eachDayInclusive,
+  endOfMonthIso,
   formatDayHeader,
   formatLongDate,
+  formatMonthYear,
   isSunday,
-  parseISODate,
-  startOfWeekMonday,
+  startOfMonthIso,
+  startOfWeekIso,
   toISODate,
 } from "@/lib/dates";
 import { formatClock, hoursForSlot, workWindowsForRow } from "@/lib/engine/hours";
@@ -50,8 +54,8 @@ export function CalendarBoard() {
   const { snapshot, loading, error, usingSupabase, applyPhasePatches } =
     usePlanning();
   const [view, setView] = useState<ViewMode>("overview");
-  const [anchor, setAnchor] = useState(() => startOfWeekMonday(new Date()));
-  const [selectedDay, setSelectedDay] = useState(toISODate(new Date()));
+  const todayIso = toISODate(new Date());
+  const [cursorIso, setCursorIso] = useState(todayIso);
   const [selectedPhaseId, setSelectedPhaseId] = useState<string | null>(null);
   const [absenceEmployee, setAbsenceEmployee] = useState<Employee | null>(null);
   const [editingChantier, setEditingChantier] = useState<Chantier | null>(null);
@@ -73,33 +77,19 @@ export function CalendarBoard() {
     token: number;
   } | null>(null);
 
-  useEffect(() => {
-    const newest = [...snapshot.chantiers].sort((a, b) =>
-      a.date_creation.localeCompare(b.date_creation),
-    ).at(-1);
-    if (!newest) return;
-    const elementIds = snapshot.elements
-      .filter((element) => element.chantier_id === newest.id)
-      .map((element) => element.id);
-    const starts = snapshot.phases
-      .filter(
-        (phase) =>
-          elementIds.includes(phase.element_id) && Boolean(phase.date_debut),
-      )
-      .map((phase) => phase.date_debut!.slice(0, 10))
-      .sort();
-    if (starts[0]) {
-      setAnchor(startOfWeekMonday(parseISODate(starts[0])));
-      setSelectedDay(starts[0]);
-    }
-  }, [snapshot.chantiers, snapshot.elements, snapshot.phases]);
-
-  const dayCount = view === "overview" ? 56 : view === "week" ? 7 : 1;
-  const rangeStart = useMemo(() => {
-    if (view === "day") return selectedDay;
-    return toISODate(anchor);
-  }, [anchor, selectedDay, view]);
-  const days = useMemo(() => eachDay(rangeStart, dayCount), [dayCount, rangeStart]);
+  const days = useMemo(() => {
+    if (view === "day") return [cursorIso];
+    if (view === "week") return eachDay(startOfWeekIso(cursorIso), 7);
+    return eachDayInclusive(startOfMonthIso(cursorIso), endOfMonthIso(cursorIso));
+  }, [cursorIso, view]);
+  const rangeStart = days[0] ?? cursorIso;
+  const rangeEnd = days[days.length - 1] ?? cursorIso;
+  const periodLabel =
+    view === "overview"
+      ? formatMonthYear(cursorIso)
+      : view === "week"
+        ? `${formatDayHeader(rangeStart).date} – ${formatDayHeader(rangeEnd).date}`
+        : formatLongDate(cursorIso);
   const rows = useMemo(
     () => planningRows(snapshot.employees),
     [snapshot.employees],
@@ -164,19 +154,8 @@ export function CalendarBoard() {
   function jumpToChantier(chantierId: string) {
     const first = firstChantierOccurrence(snapshot, chantierId);
     if (!first) return;
-    const inRange =
-      view === "day"
-        ? first.date === selectedDay
-        : first.date >= rangeStart &&
-          first.date <= addDays(rangeStart, dayCount - 1);
-    if (!inRange) {
-      if (view === "day") {
-        setSelectedDay(first.date);
-      } else {
-        setAnchor(startOfWeekMonday(parseISODate(first.date)));
-      }
-    }
-    setSelectedDay(first.date);
+    const inRange = first.date >= rangeStart && first.date <= rangeEnd;
+    if (!inRange) setCursorIso(first.date);
     setFocusCell({ ...first, token: Date.now() });
   }
 
@@ -198,7 +177,7 @@ export function CalendarBoard() {
       window.clearTimeout(frame);
       window.clearTimeout(clear);
     };
-  }, [focusCell, days, view, selectedDay]);
+  }, [focusCell, days, view, cursorIso]);
 
   async function finishDrag(clientX: number, clientY: number, phaseId: string) {
     const drag = dragRef.current;
@@ -234,15 +213,18 @@ export function CalendarBoard() {
 
   function shift(direction: number) {
     if (view === "day") {
-      setSelectedDay((current) => addDays(current, direction));
+      setCursorIso((current) => addDays(current, direction));
       return;
     }
-    const step = view === "overview" ? 28 : 7;
-    setAnchor((current) => {
-      const next = new Date(current);
-      next.setDate(next.getDate() + direction * step);
-      return startOfWeekMonday(next);
-    });
+    if (view === "week") {
+      setCursorIso((current) => addDays(current, direction * 7));
+      return;
+    }
+    setCursorIso((current) => addMonths(current, direction));
+  }
+
+  function goToday() {
+    setCursorIso(toISODate(new Date()));
   }
 
   return (
@@ -272,12 +254,7 @@ export function CalendarBoard() {
               <button
                 key={id}
                 type="button"
-                onClick={() => {
-                  setView(id);
-                  if (id !== "day") {
-                    setAnchor(startOfWeekMonday(anchor));
-                  }
-                }}
+                onClick={() => setView(id)}
                 className={`rounded px-3 py-1.5 text-sm ${
                   view === id
                     ? "bg-stone-900 text-white"
@@ -298,11 +275,7 @@ export function CalendarBoard() {
             </button>
             <button
               type="button"
-              onClick={() => {
-                const today = startOfWeekMonday(new Date());
-                setAnchor(today);
-                setSelectedDay(toISODate(new Date()));
-              }}
+              onClick={goToday}
               className="rounded border border-stone-300 bg-white px-3 py-1.5 text-sm"
             >
               Aujourd&apos;hui
@@ -314,6 +287,9 @@ export function CalendarBoard() {
             >
               →
             </button>
+            <span className="ml-1 text-sm font-medium capitalize text-stone-700">
+              {periodLabel}
+            </span>
           </div>
         </div>
       </div>
@@ -398,10 +374,11 @@ export function CalendarBoard() {
 
       {view === "day" ? (
         <DayDetail
-          iso={selectedDay}
+          iso={cursorIso}
+          todayIso={todayIso}
           snapshot={snapshot}
           focusCell={focusCell}
-          onSelectDay={setSelectedDay}
+          onSelectDay={setCursorIso}
           onOpenPhase={setSelectedPhaseId}
           onAbsence={setAbsenceEmployee}
         />
@@ -415,19 +392,23 @@ export function CalendarBoard() {
                 </th>
                 {days.map((iso) => {
                   const header = formatDayHeader(iso);
-                  const selected = iso === selectedDay;
+                  const isToday = iso === todayIso;
                   return (
                     <th
                       key={iso}
                       colSpan={2}
                       className={`min-w-[110px] border-b border-l border-stone-300 px-1 py-2 text-center ${
-                        isSunday(iso) ? "bg-stone-50 text-stone-400" : ""
-                      } ${selected ? "bg-amber-50" : ""}`}
+                        isToday
+                          ? "bg-yellow-200 text-stone-900"
+                          : isSunday(iso)
+                            ? "bg-stone-50 text-stone-400"
+                            : ""
+                      }`}
                     >
                       <button
                         type="button"
                         onClick={() => {
-                          setSelectedDay(iso);
+                          setCursorIso(iso);
                           setView("day");
                         }}
                         className="w-full"
@@ -446,13 +427,17 @@ export function CalendarBoard() {
                 {days.flatMap((iso) => [
                   <th
                     key={`${iso}-am`}
-                    className="border-b border-l border-stone-200 px-1 py-1 font-normal"
+                    className={`border-b border-l border-stone-200 px-1 py-1 font-normal ${
+                      iso === todayIso ? "bg-yellow-100" : ""
+                    }`}
                   >
                     Matin
                   </th>,
                   <th
                     key={`${iso}-pm`}
-                    className="border-b border-l border-stone-200 px-1 py-1 font-normal"
+                    className={`border-b border-l border-stone-200 px-1 py-1 font-normal ${
+                      iso === todayIso ? "bg-yellow-100" : ""
+                    }`}
                   >
                     A-midi
                   </th>,
@@ -509,9 +494,11 @@ export function CalendarBoard() {
                             ? "bg-amber-200 ring-2 ring-inset ring-amber-600"
                             : dropTarget
                               ? "bg-amber-100"
-                              : isSunday(iso) || slotOff
-                                ? "bg-stone-50/80"
-                                : "bg-white"
+                              : iso === todayIso
+                                ? "bg-yellow-100"
+                                : isSunday(iso) || slotOff
+                                  ? "bg-stone-50/80"
+                                  : "bg-white"
                         }`}
                       >
                         <div className="flex flex-col gap-1">
@@ -602,6 +589,7 @@ export function CalendarBoard() {
 
 function DayDetail({
   iso,
+  todayIso,
   snapshot,
   focusCell,
   onSelectDay,
@@ -609,6 +597,7 @@ function DayDetail({
   onAbsence,
 }: {
   iso: string;
+  todayIso: string;
   snapshot: ReturnType<typeof usePlanning>["snapshot"];
   focusCell: { rowId: string; date: string; half: 0 | 1 } | null;
   onSelectDay: (iso: string) => void;
@@ -616,11 +605,16 @@ function DayDetail({
   onAbsence: (employee: Employee) => void;
 }) {
   const rows = planningRows(snapshot.employees);
+  const isToday = iso === todayIso;
 
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <h3 className="font-serif text-2xl capitalize text-stone-900">
+        <h3
+          className={`font-serif text-2xl capitalize ${
+            isToday ? "rounded bg-yellow-200 px-2 py-1 text-stone-900" : "text-stone-900"
+          }`}
+        >
           {formatLongDate(iso)}
         </h3>
         <div className="flex gap-1">
@@ -663,7 +657,9 @@ function DayDetail({
               className={`grid grid-cols-[200px_1fr] border-b border-stone-200 last:border-b-0 ${
                 focusCell?.rowId === row.id && focusCell.date === iso
                   ? "bg-amber-50"
-                  : ""
+                  : isToday
+                    ? "bg-yellow-50"
+                    : ""
               }`}
             >
               <div className="bg-stone-50 px-3 py-3">

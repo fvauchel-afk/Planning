@@ -225,6 +225,8 @@ export type NewAbsenceInput = {
   motif_precision?: string | null;
 };
 
+export type AbsenceUpdateInput = NewAbsenceInput & { id: string };
+
 export type PhasePatch = {
   id: string;
   date_debut: string | null;
