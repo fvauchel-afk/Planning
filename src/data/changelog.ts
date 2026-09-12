@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-12-depot-cases-occupees",
+    title: "Planning équipe",
+    items: [
+      "On ne peut plus déposer un chantier sur une case déjà prise (autre chantier, absence ou indisponibilité). Le bloc revient à sa place, et les cases impossibles apparaissent en rouge pendant le glisser.",
+      "Les chantiers collés continuent de se décaler pour laisser la place, comme avant.",
+    ],
+  },
+  {
     id: "2026-09-12-demandes-equipe",
     title: "Demandes",
     items: [
