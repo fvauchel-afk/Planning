@@ -18,11 +18,13 @@ import type {
   ScheduleChantierDayInput,
   NewEmployeeInput,
   NewReceptionInput,
+  NewDemandeInput,
   NewSignalementInput,
   PhaseEdits,
   PhasePatch,
   PlanningSnapshot,
   ReceptionChantier,
+  Demande,
   Signalement,
   StatutSignalement,
 } from "@/lib/types";
@@ -78,6 +80,7 @@ export function loadLocalSnapshot(): PlanningSnapshot {
         motif_precision: absence.motif_precision ?? null,
       })),
       receptions: parsed.receptions ?? [],
+      demandes: parsed.demandes ?? [],
     };
   } catch {
     const seed = createSeedSnapshot();
@@ -330,6 +333,23 @@ export function localSetSignalementStatut(
   next.signalements = (next.signalements ?? []).map((item) =>
     item.id === id ? { ...item, statut } : item,
   );
+  saveLocalSnapshot(next);
+  return next;
+}
+
+export function localCreateDemande(
+  snapshot: PlanningSnapshot,
+  input: NewDemandeInput & { employe_id: string },
+): PlanningSnapshot {
+  const next = clone(snapshot);
+  const row: Demande = {
+    id: newId(),
+    employe_id: input.employe_id,
+    categorie: input.categorie,
+    message: input.message.trim(),
+    date_creation: new Date().toISOString(),
+  };
+  next.demandes = [row, ...(next.demandes ?? [])];
   saveLocalSnapshot(next);
   return next;
 }

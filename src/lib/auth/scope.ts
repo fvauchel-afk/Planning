@@ -39,5 +39,8 @@ export function filterSnapshotForSession(
       const phase = snapshot.phases.find((item) => item.id === row.phase_id);
       return idsEqual(phase?.employe_id, employeeId);
     }),
+    demandes: (snapshot.demandes ?? []).filter((row) =>
+      idsEqual(row.employe_id, employeeId),
+    ),
   };
 }

@@ -613,6 +613,7 @@ function runDragShiftSelfCheck() {
       absences: [],
       signalements: [],
       receptions: [],
+      demandes: [],
       horaires: [],
     },
     fromRowId: "emp-a",

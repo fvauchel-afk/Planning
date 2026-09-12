@@ -23,6 +23,7 @@ import {
   localCreateChantier,
   localCreateReception,
   localCreateSignalement,
+  localCreateDemande,
   localDeleteAbsence,
   localReplaceHoraires,
   localSetChantierOnedriveLink,
@@ -47,6 +48,7 @@ import type {
   NewEmployeeInput,
   HoraireSaison,
   NewReceptionInput,
+  NewDemandeInput,
   NewSignalementInput,
   PhaseEdits,
   PhasePatch,
@@ -88,6 +90,7 @@ type PlanningContextValue = {
     patches: PhasePatch[],
   ) => Promise<void>;
   createReception: (input: NewReceptionInput) => Promise<void>;
+  createDemande: (input: NewDemandeInput) => Promise<void>;
   saveHoraires: (rows: HoraireSaison[]) => Promise<void>;
 };
 
@@ -470,6 +473,36 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
     [useShared, refresh, snapshot, assertWritable],
   );
 
+  const createDemande = useCallback(
+    async (input: NewDemandeInput) => {
+      assertWritable();
+      const message = input.message.trim();
+      if (!message) {
+        throw new Error("Écrivez un message avant d’envoyer.");
+      }
+      if (useShared) {
+        await planningMutate({
+          action: "createDemande",
+          input: { ...input, message },
+        });
+        await refresh();
+        return;
+      }
+      const employeId = input.employe_id;
+      if (!employeId) {
+        throw new Error("Employé inconnu.");
+      }
+      setSnapshot((current) =>
+        localCreateDemande(current, {
+          ...input,
+          message,
+          employe_id: employeId,
+        }),
+      );
+    },
+    [useShared, refresh, assertWritable],
+  );
+
   const saveHoraires = useCallback(
     async (rows: HoraireSaison[]) => {
       assertWritable();
@@ -507,6 +540,7 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
       setSignalementStatut,
       validateSignalement,
       createReception,
+      createDemande,
       saveHoraires,
     }),
     [
@@ -532,6 +566,7 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
       setSignalementStatut,
       validateSignalement,
       createReception,
+      createDemande,
       saveHoraires,
     ],
   );

@@ -17,6 +17,7 @@ const TABLES = [
   "receptions_chantier",
   "horaires_saisonniers",
   "types_contrat",
+  "demandes",
 ] as const;
 
 export type BackupTableName = (typeof TABLES)[number];

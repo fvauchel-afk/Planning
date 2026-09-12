@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-12-demandes-equipe",
+    title: "Demandes",
+    items: [
+      "Une bulle en bas à droite permet d’envoyer une commande (matériel, outillage…) ou une suggestion pour améliorer le site.",
+      "L’onglet Demandes rassemble tous les messages de l’équipe, avec un filtre par catégorie.",
+    ],
+  },
+  {
     id: "2026-09-12-glisser-chantier-autre-salarie",
     title: "Planning équipe",
     items: [
