@@ -40,6 +40,8 @@ import {
 } from "@/lib/engine/drag-shift";
 import { halfFromLabel } from "@/lib/engine/slots";
 import { usePlanning } from "@/lib/planning-context";
+import { useEmployeeRowReorder } from "@/lib/use-employee-row-reorder";
+import { useSession } from "@/lib/auth/session-context";
 import { PRIORITE_LABELS, type Chantier, type Employee } from "@/lib/types";
 import { WelcomeBanner } from "@/components/WelcomeBanner";
 import {
@@ -52,8 +54,9 @@ import {
 type ViewMode = "overview" | "week" | "day";
 
 export function CalendarBoard() {
-  const { snapshot, loading, error, usingSupabase, applyPhasePatches } =
+  const { snapshot, loading, error, usingSupabase, applyPhasePatches, reorderEmployees } =
     usePlanning();
+  const { session } = useSession();
   const [view, setView] = useState<ViewMode>("overview");
   const [todayIso, setTodayIso] = useState(() => toISODate(new Date()));
   const [cursorIso, setCursorIso] = useState(todayIso);
@@ -105,10 +108,24 @@ export function CalendarBoard() {
       : view === "week"
         ? `${formatDayHeader(rangeStart).date} – ${formatDayHeader(rangeEnd).date}`
         : formatDisplayedDay(cursorIso);
-  const rows = useMemo(
-    () => planningRows(snapshot.employees),
-    [snapshot.employees],
-  );
+  const { displayRows: rows, draggingId, rowHandleProps, reordering } =
+    useEmployeeRowReorder({
+      employees: snapshot.employees,
+      enabled: Boolean(session?.isAdmin),
+      onCommit: async (ordered) => {
+        setDragError(null);
+        try {
+          await reorderEmployees(ordered);
+        } catch (err) {
+          setDragError(
+            err instanceof Error
+              ? err.message
+              : "Impossible d’enregistrer l’ordre des lignes.",
+          );
+          throw err;
+        }
+      },
+    });
 
   const chantiersInView = useMemo(() => {
     if (loading) return [];
@@ -252,6 +269,8 @@ export function CalendarBoard() {
             Une ligne par personne, chaque jour en matin / après-midi. Le
             thermolaquage sous-traité a sa propre ligne. Glissez un chantier
             sur la même ligne pour le décaler (les blocs collés suivent).
+            Glissez une ligne de salarié (clic gauche maintenu sur le nom)
+            pour changer l’ordre d’affichage, enregistré pour tout le monde.
             {usingSupabase
               ? " Données connectées à Supabase."
               : " Mode local (configurez Supabase pour la base partagée)."}
@@ -393,13 +412,17 @@ export function CalendarBoard() {
           iso={cursorIso}
           todayIso={todayIso}
           snapshot={snapshot}
+          rows={rows}
+          canReorder={Boolean(session?.isAdmin)}
+          draggingId={draggingId}
+          rowHandleProps={rowHandleProps}
           focusCell={focusCell}
           onSelectDay={setCursorIso}
           onOpenPhase={setSelectedPhaseId}
           onAbsence={setAbsenceEmployee}
         />
       ) : (
-        <div className={`overflow-auto rounded-lg border border-stone-300 bg-white shadow-sm ${dragPreview ? "select-none" : ""}`}>
+        <div className={`overflow-auto rounded-lg border border-stone-300 bg-white shadow-sm ${dragPreview || reordering ? "select-none" : ""}`}>
           <table className="min-w-full border-collapse text-sm">
             <thead>
               <tr className="bg-stone-100">
@@ -462,8 +485,26 @@ export function CalendarBoard() {
             </thead>
             <tbody>
               {rows.map((row) => (
-                <tr key={row.id} className="align-top">
-                  <th className="sticky left-0 z-10 border-b border-r border-stone-300 bg-stone-50 px-3 py-2 text-left">
+                <tr
+                  key={row.id}
+                  data-plan-row={row.id}
+                  className={`align-top ${draggingId === row.id ? "opacity-60" : ""}`}
+                >
+                  <th
+                    className={`sticky left-0 z-10 border-b border-r border-stone-300 bg-stone-50 px-3 py-2 text-left ${
+                      session?.isAdmin && row.employee
+                        ? draggingId === row.id
+                          ? "cursor-grabbing touch-none"
+                          : "cursor-grab touch-none"
+                        : ""
+                    }`}
+                    title={
+                      session?.isAdmin && row.employee
+                        ? "Glisser pour réordonner la ligne"
+                        : undefined
+                    }
+                    {...rowHandleProps(row.id)}
+                  >
                     <div className="font-medium text-stone-900">{row.label}</div>
                     <div className="text-[11px] font-normal capitalize text-stone-500">
                       {row.subtitle}
@@ -607,6 +648,10 @@ function DayDetail({
   iso,
   todayIso,
   snapshot,
+  rows,
+  canReorder,
+  draggingId,
+  rowHandleProps,
   focusCell,
   onSelectDay,
   onOpenPhase,
@@ -615,12 +660,15 @@ function DayDetail({
   iso: string;
   todayIso: string;
   snapshot: ReturnType<typeof usePlanning>["snapshot"];
+  rows: ReturnType<typeof planningRows>;
+  canReorder: boolean;
+  draggingId: string | null;
+  rowHandleProps: ReturnType<typeof useEmployeeRowReorder>["rowHandleProps"];
   focusCell: { rowId: string; date: string; half: 0 | 1 } | null;
   onSelectDay: (iso: string) => void;
   onOpenPhase: (phaseId: string) => void;
   onAbsence: (employee: Employee) => void;
 }) {
-  const rows = planningRows(snapshot.employees);
   const isToday = iso === todayIso;
 
   return (
@@ -671,14 +719,30 @@ function DayDetail({
               key={row.id}
               data-plan-row={row.id}
               className={`grid grid-cols-[200px_1fr] border-b border-stone-200 last:border-b-0 ${
-                focusCell?.rowId === row.id && focusCell.date === iso
-                  ? "bg-amber-50"
-                  : isToday
-                    ? "bg-yellow-50"
-                    : ""
+                draggingId === row.id
+                  ? "opacity-60"
+                  : focusCell?.rowId === row.id && focusCell.date === iso
+                    ? "bg-amber-50"
+                    : isToday
+                      ? "bg-yellow-50"
+                      : ""
               }`}
             >
-              <div className="bg-stone-50 px-3 py-3">
+              <div
+                className={`bg-stone-50 px-3 py-3 ${
+                  canReorder && row.employee
+                    ? draggingId === row.id
+                      ? "cursor-grabbing touch-none"
+                      : "cursor-grab touch-none"
+                    : ""
+                }`}
+                title={
+                  canReorder && row.employee
+                    ? "Glisser pour réordonner la ligne"
+                    : undefined
+                }
+                {...rowHandleProps(row.id)}
+              >
                 <div className="font-medium">{row.label}</div>
                 <div className="text-xs capitalize text-stone-500">
                   {row.subtitle}

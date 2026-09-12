@@ -531,6 +531,26 @@ export async function supabaseUpsertEmployee(
   }
 }
 
+export async function supabaseReorderEmployees(
+  rows: { id: string; ordre_affichage: number }[],
+): Promise<void> {
+  const supabase = createSupabaseServerClient();
+  for (const row of rows) {
+    const { error } = await supabase
+      .from("employees")
+      .update({ ordre_affichage: row.ordre_affichage })
+      .eq("id", row.id);
+    if (error) {
+      if (isMissingColumnError(error, "ordre_affichage")) {
+        throw new Error(
+          "La colonne ordre_affichage est absente. Appliquez les migrations Supabase.",
+        );
+      }
+      throw wrapSupabaseError(error);
+    }
+  }
+}
+
 export async function supabaseCreateAbsence(
   input: NewAbsenceInput,
 ): Promise<void> {

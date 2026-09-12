@@ -17,6 +17,7 @@ import {
   supabaseReplaceHoraires,
   supabaseSetSignalementStatut,
   supabaseUpsertEmployee,
+  supabaseReorderEmployees,
   fetchSupabaseSnapshot,
 } from "@/lib/store/supabase";
 import { wrapSupabaseError } from "@/lib/supabase/errors";
@@ -46,6 +47,10 @@ type MutateBody =
   | { action: "scheduleChantierDay"; input: ScheduleChantierDayInput }
   | { action: "createChantierWithPatches"; input: NewChantierInput; patches: PhasePatch[] }
   | { action: "upsertEmployee"; input: NewEmployeeInput & { id?: string } }
+  | {
+      action: "reorderEmployees";
+      rows: { id: string; ordre_affichage: number }[];
+    }
   | { action: "createAbsence"; input: NewAbsenceInput }
   | { action: "updateAbsence"; input: AbsenceUpdateInput }
   | { action: "deleteAbsence"; id: string }
@@ -85,6 +90,7 @@ export async function POST(request: NextRequest) {
     "scheduleChantierDay",
     "createChantierWithPatches",
     "upsertEmployee",
+    "reorderEmployees",
     "createAbsence",
     "updateAbsence",
     "deleteAbsence",
@@ -133,6 +139,23 @@ export async function POST(request: NextRequest) {
         );
       }
       await supabaseUpsertEmployee(body.input);
+    } else if (body.action === "reorderEmployees") {
+      const rows = body.rows ?? [];
+      if (!Array.isArray(rows) || rows.length === 0) {
+        return NextResponse.json({ error: "Ordre invalide." }, { status: 400 });
+      }
+      for (const row of rows) {
+        if (
+          !row?.id ||
+          typeof row.ordre_affichage !== "number" ||
+          !Number.isFinite(row.ordre_affichage) ||
+          row.ordre_affichage < 1 ||
+          row.ordre_affichage > 100_000
+        ) {
+          return NextResponse.json({ error: "Ordre invalide." }, { status: 400 });
+        }
+      }
+      await supabaseReorderEmployees(rows);
     } else if (body.action === "createAbsence") {
       await supabaseCreateAbsence(body.input);
     } else if (body.action === "updateAbsence") {

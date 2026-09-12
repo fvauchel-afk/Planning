@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-12-ordre-lignes-planning",
+    title: "Planning équipe",
+    items: [
+      "Dans le planning, vous pouvez réordonner les lignes des salariés en les faisant glisser par le nom (clic gauche maintenu).",
+      "Le nouvel ordre est enregistré tout de suite et visible par tout le monde.",
+    ],
+  },
+  {
     id: "2026-09-12-maj-rapide-sauvegarde-deploy",
     title: "Mises à jour",
     items: [
