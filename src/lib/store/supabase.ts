@@ -278,10 +278,14 @@ export async function supabaseCreateChantier(
     .select("id")
     .single();
   if (inserted.error && isMissingColumnError(inserted.error, "dates_estimatives")) {
-    const { dates_estimatives: _ignored, ...withoutFlag } = payload;
     inserted = await supabase
       .from("chantiers")
-      .insert(withoutFlag)
+      .insert({
+        nom_client: payload.nom_client,
+        adresse: payload.adresse,
+        lien_dossier_onedrive: payload.lien_dossier_onedrive,
+        priorite: payload.priorite,
+      })
       .select("id")
       .single();
   }

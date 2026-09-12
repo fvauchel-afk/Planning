@@ -17,6 +17,7 @@ import {
   ensureChantierDatesOnCreate,
   inputHasExplicitDates,
 } from "@/lib/engine/earliest-date";
+import { usePlanning } from "@/lib/planning-context";
 import {
   PHASE_LABELS,
   PRIORITES,
