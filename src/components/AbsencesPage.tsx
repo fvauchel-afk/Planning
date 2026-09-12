@@ -44,6 +44,12 @@ export function AbsencesPage() {
     setDateFin(absence.date_fin.slice(0, 10));
     setMotifPrecision(absence.motif_precision ?? "");
     setError(null);
+    window.requestAnimationFrame(() => {
+      document.getElementById("absence-form")?.scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+      });
+    });
   }
 
   async function onSubmit(event: React.FormEvent) {
@@ -145,6 +151,7 @@ export function AbsencesPage() {
       </div>
 
       <form
+        id="absence-form"
         onSubmit={onSubmit}
         className="h-fit space-y-3 rounded-lg border border-stone-300 bg-white p-4"
       >

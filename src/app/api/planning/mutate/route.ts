@@ -4,6 +4,7 @@ import { idsEqual } from "@/lib/auth/ids";
 import {
   invalidateSupabaseSnapshotCache,
   supabaseApplyPhasePatches,
+  supabaseApplyPhaseEdits,
   supabaseCreateAbsence,
   supabaseUpdateAbsence,
   supabaseCreateChantier,
@@ -30,6 +31,7 @@ import type {
   NewEmployeeInput,
   NewReceptionInput,
   NewSignalementInput,
+  PhaseEdits,
   PhasePatch,
   StatutSignalement,
 } from "@/lib/types";
@@ -48,6 +50,7 @@ type MutateBody =
   | { action: "updateAbsence"; input: AbsenceUpdateInput }
   | { action: "deleteAbsence"; id: string }
   | { action: "applyPhasePatches"; patches: PhasePatch[] }
+  | { action: "applyPhaseEdits"; edits: PhaseEdits }
   | { action: "createSignalement"; input: NewSignalementInput }
   | { action: "setSignalementStatut"; id: string; statut: StatutSignalement }
   | { action: "validateSignalement"; id: string; patches: PhasePatch[] }
@@ -86,6 +89,7 @@ export async function POST(request: NextRequest) {
     "updateAbsence",
     "deleteAbsence",
     "applyPhasePatches",
+    "applyPhaseEdits",
     "setSignalementStatut",
     "validateSignalement",
     "saveHoraires",
@@ -137,6 +141,8 @@ export async function POST(request: NextRequest) {
       await supabaseDeleteAbsence(body.id);
     } else if (body.action === "applyPhasePatches") {
       await supabaseApplyPhasePatches(body.patches ?? []);
+    } else if (body.action === "applyPhaseEdits") {
+      await supabaseApplyPhaseEdits(body.edits ?? {});
     } else if (body.action === "createSignalement") {
       const input = {
         ...body.input,

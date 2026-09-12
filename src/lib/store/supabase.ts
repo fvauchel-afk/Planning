@@ -1,6 +1,7 @@
 import "server-only";
 import { asAdminFlag } from "@/lib/auth/ids";
 import { phaseTypeForRoles } from "@/lib/chantier-status";
+import { normalizePhasesForPlanning } from "@/lib/engine/normalize-phases";
 import {
   isUnplacedDatedPhase,
   scheduleChantierSlotDays,
@@ -30,6 +31,8 @@ import type {
   NewEmployeeInput,
   NewReceptionInput,
   NewSignalementInput,
+  PhaseEdits,
+  PhaseInsert,
   PhasePatch,
   PhasePlanning,
   PlanningSnapshot,
@@ -178,19 +181,22 @@ async function fetchSupabaseSnapshotOnce(): Promise<PlanningSnapshot> {
       date_creation: asIsoDate(chantier.date_creation) ?? chantier.date_creation,
     })),
     elements: (elements.data ?? []) as ElementChantier[],
-    phases: ((phases.data ?? []) as PhasePlanning[]).map((phase) => ({
-      ...phase,
+    phases: normalizePhasesForPlanning(
+      ((phases.data ?? []) as PhasePlanning[]).map((phase) => ({
+        ...phase,
         duree_estimee_heures: Number(phase.duree_estimee_heures),
         heures_supplementaires_par_jour: Number(
           phase.heures_supplementaires_par_jour ?? 0,
         ),
-      date_debut: asIsoDate(phase.date_debut),
-      date_fin: asIsoDate(phase.date_fin),
-      heure_debut:
-        typeof phase.heure_debut === "string" && phase.heure_debut.trim()
-          ? phase.heure_debut.trim().slice(0, 5)
-          : null,
-    })),
+        date_debut: asIsoDate(phase.date_debut),
+        date_fin: asIsoDate(phase.date_fin),
+        heure_debut:
+          typeof phase.heure_debut === "string" && phase.heure_debut.trim()
+            ? phase.heure_debut.trim().slice(0, 5)
+            : null,
+      })),
+      (elements.data ?? []) as ElementChantier[],
+    ),
     absences: ((absences.data ?? []) as Absence[]).map((absence) => ({
       ...absence,
       date_debut: asIsoDate(absence.date_debut) ?? absence.date_debut,
@@ -562,6 +568,41 @@ export async function supabaseUpdateAbsence(
     })
     .eq("id", input.id);
   if (error) throw wrapSupabaseError(error);
+}
+
+export async function supabaseApplyPhaseEdits(edits: PhaseEdits): Promise<void> {
+  if (edits.patches?.length) {
+    await supabaseApplyPhasePatches(edits.patches);
+  }
+  const supabase = createSupabaseServerClient();
+  if (edits.deleteIds?.length) {
+    const { error } = await supabase
+      .from("phases_planning")
+      .delete()
+      .in("id", edits.deleteIds);
+    if (error) throw wrapSupabaseError(error);
+  }
+  if (edits.inserts?.length) {
+    await supabaseInsertPhases(edits.inserts);
+  }
+}
+
+async function supabaseInsertPhases(rows: PhaseInsert[]): Promise<void> {
+  const supabase = createSupabaseServerClient();
+  const { error } = await supabase.from("phases_planning").insert(rows);
+  if (!error) return;
+  if (isMissingColumnError(error, "heure_debut")) {
+    const { error: retry } = await supabase.from("phases_planning").insert(
+      rows.map((row) => {
+        const payload = { ...row };
+        delete (payload as { heure_debut?: string }).heure_debut;
+        return payload;
+      }),
+    );
+    if (retry) throw wrapSupabaseError(retry);
+    return;
+  }
+  throw wrapSupabaseError(error);
 }
 
 export async function supabaseApplyPhasePatches(

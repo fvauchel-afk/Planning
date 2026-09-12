@@ -6,9 +6,12 @@ import { chantierVisibleOnGrid } from "@/lib/calendar";
 import {
   STATUT_CHANTIER_LABELS,
   chantierPlanningInfo,
-  shiftChantierPhasePatches,
 } from "@/lib/chantier-status";
 import { addDays, calendarDaysBetween, toISODate } from "@/lib/dates";
+import {
+  isEmptyPhaseEdits,
+  planChantierDateEdits,
+} from "@/lib/engine/resize-chantier";
 import { compareEmployeesByOrdre } from "@/lib/display-order";
 import { usePlanning } from "@/lib/planning-context";
 import {
@@ -43,7 +46,7 @@ export function ChantierEditModal({
     updateChantier,
     deleteChantier,
     scheduleChantierDay,
-    applyPhasePatches,
+    applyPhaseEdits,
   } = usePlanning();
   const [nomClient, setNomClient] = useState(chantier.nom_client);
   const [adresse, setAdresse] = useState(chantier.adresse);
@@ -109,14 +112,13 @@ export function ChantierEditModal({
       throw new Error("Choisissez une date de début.");
     }
     if (visibleOnGrid) {
-      if (info.firstDate && planDate !== info.firstDate) {
-        const patches = shiftChantierPhasePatches(
-          snapshot,
-          chantier.id,
-          calendarDaysBetween(info.firstDate, planDate),
-        );
-        if (patches.length) await applyPhasePatches(patches);
-      }
+      const edits = planChantierDateEdits(
+        snapshot,
+        chantier.id,
+        planDate,
+        planEnd || planDate,
+      );
+      if (!isEmptyPhaseEdits(edits)) await applyPhaseEdits(edits);
       return;
     }
     if (!forceCreate && !isPlanned) return;
@@ -270,12 +272,15 @@ export function ChantierEditModal({
                 value={planEnd}
                 onChange={(event) => setPlanEnd(event.target.value)}
                 className="w-full rounded border border-stone-300 bg-white px-3 py-2"
+                min={planDate || undefined}
               />
             </label>
             {visibleOnGrid ? (
               <p className="mt-2 text-xs text-stone-500">
-                Modifier le début décale toutes les phases déjà posées (salariés et
-                créneaux conservés). Enregistrez pour appliquer.
+                Modifier le début décale toutes les phases. Modifier la fin ajoute
+                ou retire les jours ouvrés (mêmes salariés et horaires que le
+                dernier jour, samedi et dimanche exclus). Enregistrez pour
+                appliquer.
               </p>
             ) : (
               <>

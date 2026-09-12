@@ -16,6 +16,7 @@ import {
 } from "@/lib/onedrive/browser";
 import {
   localApplyPhasePatches,
+  localApplyPhaseEdits,
   localCreateAbsence,
   localUpdateAbsence,
   localCreateChantier,
@@ -45,6 +46,7 @@ import type {
   HoraireSaison,
   NewReceptionInput,
   NewSignalementInput,
+  PhaseEdits,
   PhasePatch,
   PlanningSnapshot,
   StatutSignalement,
@@ -65,6 +67,7 @@ type PlanningContextValue = {
   updateAbsence: (input: AbsenceUpdateInput) => Promise<void>;
   deleteAbsence: (id: string) => Promise<void>;
   applyPhasePatches: (patches: PhasePatch[]) => Promise<void>;
+  applyPhaseEdits: (edits: PhaseEdits) => Promise<void>;
   createChantierWithPatches: (
     input: NewChantierInput,
     patches: PhasePatch[],
@@ -277,17 +280,30 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
     [supabaseConfigured, refresh],
   );
 
-  const applyPhasePatches = useCallback(
-    async (patches: PhasePatch[]) => {
-      if (patches.length === 0) return;
+  const applyPhaseEdits = useCallback(
+    async (edits: PhaseEdits) => {
+      if (
+        !edits.patches?.length &&
+        !edits.inserts?.length &&
+        !edits.deleteIds?.length
+      ) {
+        return;
+      }
       if (supabaseConfigured) {
-        await planningMutate({ action: "applyPhasePatches", patches });
+        await planningMutate({ action: "applyPhaseEdits", edits });
         await refresh();
         return;
       }
-      setSnapshot((current) => localApplyPhasePatches(current, patches));
+      setSnapshot((current) => localApplyPhaseEdits(current, edits));
     },
     [supabaseConfigured, refresh],
+  );
+
+  const applyPhasePatches = useCallback(
+    async (patches: PhasePatch[]) => {
+      await applyPhaseEdits({ patches });
+    },
+    [applyPhaseEdits],
   );
 
   const createChantierWithPatches = useCallback(
@@ -422,6 +438,7 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
       updateAbsence,
       deleteAbsence,
       applyPhasePatches,
+      applyPhaseEdits,
       createChantierWithPatches,
       createSignalement,
       setSignalementStatut,
@@ -444,6 +461,7 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
       updateAbsence,
       deleteAbsence,
       applyPhasePatches,
+      applyPhaseEdits,
       createChantierWithPatches,
       createSignalement,
       setSignalementStatut,
