@@ -203,6 +203,7 @@ export type ChantierUpdateInput = {
 export type ScheduleChantierDayInput = {
   chantierId: string;
   date: string;
+  dateFin?: string;
   employeeId: string;
 };
 

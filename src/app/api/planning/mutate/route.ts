@@ -105,6 +105,12 @@ export async function POST(request: NextRequest) {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(body.input.date)) {
         return NextResponse.json({ error: "Date invalide." }, { status: 400 });
       }
+      if (
+        body.input.dateFin &&
+        !/^\d{4}-\d{2}-\d{2}$/.test(body.input.dateFin)
+      ) {
+        return NextResponse.json({ error: "Date de fin invalide." }, { status: 400 });
+      }
       await supabaseScheduleChantierDay(body.input);
       chantierId = body.input.chantierId;
     } else if (body.action === "createChantierWithPatches") {

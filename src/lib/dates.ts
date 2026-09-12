@@ -50,6 +50,18 @@ export function eachDay(fromIso: string, count: number): string[] {
   return Array.from({ length: count }, (_, i) => addDays(fromIso, i));
 }
 
+export function eachDayInclusive(fromIso: string, toIso: string): string[] {
+  const start = fromIso <= toIso ? fromIso : toIso;
+  const end = fromIso <= toIso ? toIso : fromIso;
+  const days: string[] = [];
+  let cursor = start;
+  while (cursor <= end) {
+    days.push(cursor);
+    cursor = addDays(cursor, 1);
+  }
+  return days;
+}
+
 export function formatDayHeader(iso: string): { weekday: string; date: string } {
   const date = parseISODate(iso);
   return {
