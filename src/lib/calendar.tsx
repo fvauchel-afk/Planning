@@ -170,6 +170,17 @@ export function assignmentsForDay(
   return assignmentIndex(snapshot).byDay.get(dayKey(rowId, iso)) ?? [];
 }
 
+export function chantierVisibleOnGrid(
+  snapshot: PlanningSnapshot,
+  chantierId: string,
+): boolean {
+  const index = assignmentIndex(snapshot);
+  for (const assignments of Array.from(index.byCell.values())) {
+    if (assignments.some((item) => item.chantier.id === chantierId)) return true;
+  }
+  return false;
+}
+
 export function slotsForPhase(
   snapshot: PlanningSnapshot,
   phaseId: string,

@@ -295,32 +295,69 @@ export function spansFromExistingPhase(
   if (!phase.date_debut) return [];
   const rowId = rowIdForPhase(phase.type_phase, phase.employe_id);
   if (!rowId) return [];
-  const hours = Math.max(0, phase.duree_estimee_heures);
-  if (hours <= 0) return [];
   const startDate = phase.date_debut.slice(0, 10);
   const untilDate = phase.date_fin ? phase.date_fin.slice(0, 10) : startDate;
+  const hours = Math.max(0, phase.duree_estimee_heures);
   const windows = workWindowsForRow(snapshot, rowId, startDate);
   let fromMin = windows[0]?.start ?? 0;
   const parsedStart = minutesFromHeureDebut(phase.heure_debut);
   if (parsedStart != null) fromMin = parsedStart;
-  const half = windows.find((window) => fromMin < window.end)?.half ?? 0;
-  const slots = allocateHoursFrom(
-    new Map(),
-    snapshot,
-    rowId,
-    hours,
-    startDate,
-    half,
-    { short: true, fromMin, untilDate, allowPartial: true },
-  );
-  if (!slots) return [];
-  return slots.map((slot) => ({
-    rowId,
-    date: slot.date,
-    start: slot.startMin ?? 0,
-    end: slot.endMin ?? 0,
-    ownerId: "",
-  }));
+  const half = windows.find((window) => fromMin < window.end)?.half ??
+    (fromMin >= 12 * 60 ? 1 : 0);
+  if (hours > 0) {
+    const slots = allocateHoursFrom(
+      new Map(),
+      snapshot,
+      rowId,
+      hours,
+      startDate,
+      half,
+      { short: true, fromMin, untilDate, allowPartial: true },
+    );
+    if (slots && slots.length > 0) {
+      return slots.map((slot) => ({
+        rowId,
+        date: slot.date,
+        start: slot.startMin ?? 0,
+        end: slot.endMin ?? 0,
+        ownerId: "",
+      }));
+    }
+  }
+  return fallbackSpansForDatedPhase(snapshot, rowId, startDate, untilDate, half);
+}
+
+function fallbackSpansForDatedPhase(
+  snapshot: PlanningSnapshot,
+  rowId: string,
+  startDate: string,
+  untilDate: string,
+  half: Half,
+): OccupiedSpan[] {
+  const spans: OccupiedSpan[] = [];
+  let date = startDate;
+  while (date <= untilDate) {
+    if (!isSunday(date)) {
+      const windows = workWindowsForRow(snapshot, rowId, date);
+      const window =
+        windows.find((item) => item.half === half) ?? windows[0] ?? null;
+      if (window) {
+        spans.push({
+          rowId,
+          date,
+          start: window.start,
+          end: window.end,
+          ownerId: "",
+        });
+      } else {
+        const start = half === 1 ? 13 * 60 : 8 * 60;
+        const end = half === 1 ? 17 * 60 : 12 * 60;
+        spans.push({ rowId, date, start, end, ownerId: "" });
+      }
+    }
+    date = addDays(date, 1);
+  }
+  return spans;
 }
 
 function minutesFromHeureDebut(value: unknown): number | null {

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { chantierVisibleOnGrid } from "@/lib/calendar";
 import {
   STATUT_CHANTIER_LABELS,
   chantierPlanningInfo,
@@ -52,6 +53,7 @@ export function ChantierEditModal({
   const [scheduling, setScheduling] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [planDate, setPlanDate] = useState(toISODate(new Date()));
+  const [planEnd, setPlanEnd] = useState(toISODate(new Date()));
   const [planEmployeeId, setPlanEmployeeId] = useState("");
   const [error, setError] = useState<string | null>(null);
 
@@ -60,6 +62,10 @@ export function ChantierEditModal({
     [snapshot, chantier.id],
   );
   const isPlanned = Boolean(info.firstDate && info.lastDate);
+  const visibleOnGrid = useMemo(
+    () => chantierVisibleOnGrid(snapshot, chantier.id),
+    [snapshot, chantier.id],
+  );
 
   const activeEmployees = useMemo(
     () =>
@@ -79,7 +85,8 @@ export function ChantierEditModal({
 
   useEffect(() => {
     setPlanDate(info.firstDate ?? toISODate(new Date()));
-  }, [chantier.id, info.firstDate]);
+    setPlanEnd(info.lastDate ?? info.firstDate ?? toISODate(new Date()));
+  }, [chantier.id, info.firstDate, info.lastDate]);
 
   useEffect(() => {
     if (!planEmployeeId && activeEmployees[0]) {
@@ -87,12 +94,42 @@ export function ChantierEditModal({
     }
   }, [activeEmployees, planEmployeeId]);
 
-  const previewEnd =
-    isPlanned && info.lastDate && info.firstDate && planDate
-      ? addDays(info.lastDate, calendarDaysBetween(info.firstDate, planDate))
-      : "";
   const onedriveUrl = onedriveHref(lien || chantier.lien_dossier_onedrive || "");
   const busy = saving || scheduling || deleting;
+
+  function onChangeStart(next: string) {
+    if (planDate && planEnd) {
+      setPlanEnd(addDays(planEnd, calendarDaysBetween(planDate, next)));
+    }
+    setPlanDate(next);
+  }
+
+  async function persistPlanning(forceCreate: boolean) {
+    if (!planDate) {
+      throw new Error("Choisissez une date de début.");
+    }
+    if (visibleOnGrid) {
+      if (info.firstDate && planDate !== info.firstDate) {
+        const patches = shiftChantierPhasePatches(
+          snapshot,
+          chantier.id,
+          calendarDaysBetween(info.firstDate, planDate),
+        );
+        if (patches.length) await applyPhasePatches(patches);
+      }
+      return;
+    }
+    if (!forceCreate && !isPlanned) return;
+    if (!planEmployeeId) {
+      throw new Error("Choisissez un salarié.");
+    }
+    await scheduleChantierDay({
+      chantierId: chantier.id,
+      date: planDate,
+      dateFin: planEnd || planDate,
+      employeeId: planEmployeeId,
+    });
+  }
 
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -103,14 +140,7 @@ export function ChantierEditModal({
     setSaving(true);
     setError(null);
     try {
-      if (isPlanned && info.firstDate && planDate && planDate !== info.firstDate) {
-        const patches = shiftChantierPhasePatches(
-          snapshot,
-          chantier.id,
-          calendarDaysBetween(info.firstDate, planDate),
-        );
-        if (patches.length) await applyPhasePatches(patches);
-      }
+      await persistPlanning(false);
       await updateChantier({
         id: chantier.id,
         nom_client: nomClient.trim(),
@@ -127,22 +157,10 @@ export function ChantierEditModal({
   }
 
   async function onPlanifier() {
-    if (!planDate) {
-      setError("Choisissez une date de début.");
-      return;
-    }
-    if (!planEmployeeId) {
-      setError("Choisissez un salarié.");
-      return;
-    }
     setScheduling(true);
     setError(null);
     try {
-      await scheduleChantierDay({
-        chantierId: chantier.id,
-        date: planDate,
-        employeeId: planEmployeeId,
-      });
+      await persistPlanning(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Planification impossible.");
     } finally {
@@ -229,29 +247,36 @@ export function ChantierEditModal({
             <legend className="px-1 text-sm font-medium text-stone-800">
               Dates planifiées
             </legend>
+            {isPlanned && !visibleOnGrid ? (
+              <p className="mt-1 text-xs text-red-800">
+                Des dates sont enregistrées mais aucun créneau n’apparaît sur le
+                planning équipe (phase sans salarié ou sans durée). Choisissez un
+                salarié puis Planifier / Enregistrer.
+              </p>
+            ) : null}
             <label className="mt-2 block text-sm">
               <span className="mb-1 block">Date de début</span>
               <input
                 type="date"
                 value={planDate}
-                onChange={(event) => setPlanDate(event.target.value)}
+                onChange={(event) => onChangeStart(event.target.value)}
                 className="w-full rounded border border-stone-300 bg-white px-3 py-2"
               />
             </label>
-            {isPlanned ? (
-              <label className="mt-2 block text-sm">
-                <span className="mb-1 block">Date de fin</span>
-                <input
-                  type="date"
-                  value={previewEnd}
-                  readOnly
-                  className="w-full rounded border border-stone-300 bg-stone-50 px-3 py-2 text-stone-700"
-                />
-                <span className="mt-1 block text-xs text-stone-500">
-                  Modifier le début décale toutes les phases déjà planifiées (salariés
-                  et créneaux conservés). Enregistrez pour appliquer.
-                </span>
-              </label>
+            <label className="mt-2 block text-sm">
+              <span className="mb-1 block">Date de fin</span>
+              <input
+                type="date"
+                value={planEnd}
+                onChange={(event) => setPlanEnd(event.target.value)}
+                className="w-full rounded border border-stone-300 bg-white px-3 py-2"
+              />
+            </label>
+            {visibleOnGrid ? (
+              <p className="mt-2 text-xs text-stone-500">
+                Modifier le début décale toutes les phases déjà posées (salariés et
+                créneaux conservés). Enregistrez pour appliquer.
+              </p>
             ) : (
               <>
                 <label className="mt-2 block text-sm">

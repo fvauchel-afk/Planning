@@ -1,6 +1,11 @@
 import "server-only";
 import { asAdminFlag } from "@/lib/auth/ids";
 import { phaseTypeForRoles } from "@/lib/chantier-status";
+import {
+  isUnplacedDatedPhase,
+  scheduleChantierSlotDays,
+  schedulePhaseInserts,
+} from "@/lib/engine/schedule-chantier";
 import { compareEmployeesByOrdre, ordreAffichageFromNom } from "@/lib/display-order";
 import { defaultHoraires, normalizeHoraire, normalizeHorairesEmploye } from "@/lib/engine/hours";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -341,6 +346,12 @@ export async function supabaseScheduleChantierDay(
     throw wrapSupabaseError(new Error("Salarié introuvable ou inactif."));
   }
   const typePhase = phaseTypeForRoles((employee.roles ?? []) as Role[]);
+  const days = scheduleChantierSlotDays(input.date, input.dateFin || input.date);
+  if (days.length === 0) {
+    throw wrapSupabaseError(
+      new Error("Aucune journée ouvrée dans la plage choisie."),
+    );
+  }
 
   let elementId: string | null = null;
   const existing = await supabase
@@ -367,32 +378,35 @@ export async function supabaseScheduleChantierDay(
     elementId = String(created.data.id);
   }
 
-  const rows = [
-    {
-      element_id: elementId,
-      type_phase: typePhase,
-      duree_estimee_heures: 4,
-      date_debut: input.date,
-      date_fin: input.date,
-      heure_debut: "07:30",
-      employe_id: typePhase === "logistique" ? null : input.employeeId,
-      statut: "a_faire",
-      urgent: false,
-      heures_supplementaires_par_jour: 0,
-    },
-    {
-      element_id: elementId,
-      type_phase: typePhase,
-      duree_estimee_heures: 3,
-      date_debut: input.date,
-      date_fin: input.date,
-      heure_debut: "13:00",
-      employe_id: typePhase === "logistique" ? null : input.employeeId,
-      statut: "a_faire",
-      urgent: false,
-      heures_supplementaires_par_jour: 0,
-    },
-  ];
+  const elementRows = await supabase
+    .from("elements_chantier")
+    .select("id")
+    .eq("chantier_id", input.chantierId);
+  if (elementRows.error) throw wrapSupabaseError(elementRows.error);
+  const elementIds = (elementRows.data ?? []).map((row) => String(row.id));
+  if (elementIds.length > 0) {
+    const existingPhases = await supabase
+      .from("phases_planning")
+      .select("id, duree_estimee_heures, date_debut, employe_id, type_phase, element_id")
+      .in("element_id", elementIds);
+    if (existingPhases.error) throw wrapSupabaseError(existingPhases.error);
+    const ghostIds = (existingPhases.data ?? [])
+      .filter((phase) =>
+        isUnplacedDatedPhase({
+          date_debut: phase.date_debut as string | null,
+          duree_estimee_heures: Number(phase.duree_estimee_heures ?? 0),
+          employe_id: (phase.employe_id as string | null) ?? null,
+          type_phase: String(phase.type_phase),
+        }),
+      )
+      .map((phase) => String(phase.id));
+    if (ghostIds.length > 0) {
+      const removed = await supabase.from("phases_planning").delete().in("id", ghostIds);
+      if (removed.error) throw wrapSupabaseError(removed.error);
+    }
+  }
+
+  const rows = schedulePhaseInserts(elementId, typePhase, input.employeeId, days);
   const { error: phaseError } = await supabase.from("phases_planning").insert(rows);
   if (phaseError) {
     if (isMissingColumnError(phaseError, "heure_debut")) {
