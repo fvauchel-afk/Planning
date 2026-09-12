@@ -5,7 +5,9 @@ import { usePlanning } from "@/lib/planning-context";
 import {
   CATEGORIES_DEMANDE,
   CATEGORIE_DEMANDE_LABELS,
+  STATUT_DEMANDE_LABELS,
   type CategorieDemande,
+  type Demande,
 } from "@/lib/types";
 
 function formatDemandeWhen(iso: string) {
@@ -18,25 +20,57 @@ function formatDemandeWhen(iso: string) {
 }
 
 export function DemandesPage() {
-  const { snapshot, loading } = usePlanning();
+  const { snapshot, loading, updateDemande } = usePlanning();
   const [filtre, setFiltre] = useState<"tout" | CategorieDemande>("tout");
+  const [archives, setArchives] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
   const rows = useMemo(() => {
-    const list = [...(snapshot.demandes ?? [])].sort(
-      (left, right) =>
-        Date.parse(right.date_creation) - Date.parse(left.date_creation),
-    );
+    const list = [...(snapshot.demandes ?? [])]
+      .filter((row) => (archives ? row.archivee : !row.archivee))
+      .sort(
+        (left, right) =>
+          Date.parse(right.date_creation) - Date.parse(left.date_creation),
+      );
     if (filtre === "tout") return list;
     return list.filter((row) => row.categorie === filtre);
-  }, [snapshot.demandes, filtre]);
+  }, [snapshot.demandes, filtre, archives]);
+
+  async function patch(demande: Demande, input: Parameters<typeof updateDemande>[0]) {
+    setBusyId(demande.id);
+    setError(null);
+    try {
+      await updateDemande(input);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Mise à jour impossible.",
+      );
+    } finally {
+      setBusyId(null);
+    }
+  }
 
   return (
     <section className="space-y-5">
-      <div>
-        <h2 className="font-serif text-3xl text-stone-900">Demandes</h2>
-        <p className="mt-1 text-sm text-stone-600">
-          Messages envoyés par l’équipe depuis la bulle : commandes (matériel,
-          outillage…) et suggestions pour le site.
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 className="font-serif text-3xl text-stone-900">
+            {archives ? "Demandes archivées" : "Demandes"}
+          </h2>
+          <p className="mt-1 text-sm text-stone-600">
+            {archives
+              ? "Anciennes demandes mises de côté, sans les supprimer."
+              : "Messages envoyés par l’équipe depuis la bulle : commandes (matériel, outillage…) et suggestions pour le site. Les demandes traitées restent ici jusqu’à archivage."}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setArchives((current) => !current)}
+          className="rounded border border-stone-300 bg-white px-3 py-2 text-sm text-stone-800 hover:bg-stone-50"
+        >
+          {archives ? "Retour aux demandes" : "Voir les archives"}
+        </button>
       </div>
       <div className="inline-flex flex-wrap rounded-md border border-stone-300 bg-white p-0.5">
         <button
@@ -65,11 +99,18 @@ export function DemandesPage() {
           </button>
         ))}
       </div>
+      {error ? (
+        <p className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+          {error}
+        </p>
+      ) : null}
       {loading ? (
         <p className="text-sm text-stone-500">Chargement…</p>
       ) : rows.length === 0 ? (
         <p className="rounded-lg border border-stone-200 bg-white px-4 py-6 text-sm text-stone-500">
-          Aucune demande pour ce filtre.
+          {archives
+            ? "Aucune demande archivée pour ce filtre."
+            : "Aucune demande pour ce filtre."}
         </p>
       ) : (
         <ul className="space-y-3">
@@ -78,6 +119,8 @@ export function DemandesPage() {
               snapshot.employees.find(
                 (employee) => employee.id === demande.employe_id,
               )?.nom ?? "Salarié";
+            const waiting = demande.statut !== "traite";
+            const busy = busyId === demande.id;
             return (
               <li
                 key={demande.id}
@@ -89,12 +132,69 @@ export function DemandesPage() {
                     {formatDemandeWhen(demande.date_creation)}
                   </p>
                 </div>
-                <p className="mt-1 text-xs font-medium uppercase tracking-wide text-amber-800">
-                  {CATEGORIE_DEMANDE_LABELS[demande.categorie]}
-                </p>
+                <div className="mt-1 flex flex-wrap items-center gap-2">
+                  <p className="text-xs font-medium uppercase tracking-wide text-amber-800">
+                    {CATEGORIE_DEMANDE_LABELS[demande.categorie]}
+                  </p>
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                      waiting
+                        ? "bg-amber-100 text-amber-900"
+                        : "bg-green-100 text-green-800"
+                    }`}
+                  >
+                    {STATUT_DEMANDE_LABELS[demande.statut]}
+                  </span>
+                </div>
                 <p className="mt-2 whitespace-pre-wrap text-sm text-stone-700">
                   {demande.message}
                 </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {waiting ? (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() =>
+                        void patch(demande, {
+                          id: demande.id,
+                          statut: "traite",
+                        })
+                      }
+                      className="rounded bg-amber-700 px-3 py-1.5 text-sm text-amber-50 disabled:opacity-60"
+                    >
+                      {busy ? "Enregistrement…" : "Marquer comme traité"}
+                    </button>
+                  ) : null}
+                  {demande.archivee ? (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() =>
+                        void patch(demande, {
+                          id: demande.id,
+                          archivee: false,
+                        })
+                      }
+                      className="rounded border border-stone-300 bg-white px-3 py-1.5 text-sm text-stone-800 disabled:opacity-60"
+                    >
+                      Désarchiver
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() =>
+                        void patch(demande, {
+                          id: demande.id,
+                          archivee: true,
+                        })
+                      }
+                      className="rounded border border-stone-300 bg-white px-3 py-1.5 text-sm text-stone-800 disabled:opacity-60"
+                    >
+                      Archiver
+                    </button>
+                  )}
+                </div>
               </li>
             );
           })}

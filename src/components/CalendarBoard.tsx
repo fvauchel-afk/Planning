@@ -63,7 +63,10 @@ export function CalendarBoard() {
   const [absenceEmployee, setAbsenceEmployee] = useState<Employee | null>(null);
   const [editingChantier, setEditingChantier] = useState<Chantier | null>(null);
   const [dragError, setDragError] = useState<string | null>(null);
-  const [dragPreview, setDragPreview] = useState<Set<string> | null>(null);
+  const [dragPreview, setDragPreview] = useState<{
+    cells: Set<string>;
+    blocked: boolean;
+  } | null>(null);
   const dragRef = useRef<{
     pointerId: number;
     rowId: string;
@@ -160,7 +163,7 @@ export function CalendarBoard() {
     if (!drag) return;
     const drop = planCellFromPoint(clientX, clientY);
     if (!drop) {
-      setDragPreview(new Set());
+      setDragPreview({ cells: new Set(), blocked: false });
       return;
     }
     const result = shiftOrMoveChantierBlock({
@@ -178,7 +181,7 @@ export function CalendarBoard() {
     if (keys.size === 0) {
       keys.add(`${drag.rowId}|${drag.grab.date}|${drag.grab.half}`);
     }
-    setDragPreview(keys);
+    setDragPreview({ cells: keys, blocked: result.blocked });
   }
 
   function jumpToChantier(chantierId: string) {
@@ -220,7 +223,7 @@ export function CalendarBoard() {
     }
     const drop = planCellFromPoint(clientX, clientY);
     if (!drop || savingDrag.current) return;
-    const { patches } = shiftOrMoveChantierBlock({
+    const { patches, blocked } = shiftOrMoveChantierBlock({
       snapshot,
       fromRowId: drag.rowId,
       toRowId: drop.rowId,
@@ -228,6 +231,12 @@ export function CalendarBoard() {
       grab: drag.grab,
       drop,
     });
+    if (blocked) {
+      setDragError(
+        "Créneau occupé : le chantier est revenu à sa place. Impossible de déposer sur une absence, une indisponibilité ou un autre chantier.",
+      );
+      return;
+    }
     if (patches.length === 0) return;
     savingDrag.current = true;
     setDragError(null);
@@ -267,8 +276,10 @@ export function CalendarBoard() {
           <p className="mt-1 text-sm text-stone-600">
             Une ligne par personne, chaque jour en matin / après-midi. Le
             thermolaquage sous-traité a sa propre ligne. Glissez un chantier
-            vers une autre date ou vers un autre salarié. Les blocs collés sur
+            vers une autre date ou vers un autre salarié.             Les blocs collés sur
             la ligne d’arrivée reculent ou avancent pour laisser la place.
+            Un dépôt sur une case déjà prise (absence, indisponibilité ou
+            chantier qui ne peut pas reculer) est annulé.
             Glissez une ligne de salarié (clic gauche maintenu sur le nom)
             pour changer l’ordre d’affichage, enregistré pour tout le monde.
             {usingSupabase
@@ -544,7 +555,7 @@ export function CalendarBoard() {
                         slot,
                       );
                       const cellKey = `${row.id}|${iso}|${half}`;
-                      const dropTarget = dragPreview?.has(cellKey);
+                      const dropTarget = dragPreview?.cells.has(cellKey);
                       const focused =
                         focusCell?.rowId === row.id &&
                         focusCell.date === iso &&
@@ -556,6 +567,8 @@ export function CalendarBoard() {
                         className={`h-16 border-b border-l border-stone-200 p-1 ${
                           focused
                             ? "bg-amber-200 ring-2 ring-inset ring-amber-600"
+                            : dropTarget && dragPreview?.blocked
+                              ? "bg-red-200 ring-2 ring-inset ring-red-500"
                             : dropTarget
                               ? "bg-amber-100"
                               : iso === todayIso
@@ -579,6 +592,7 @@ export function CalendarBoard() {
                               assignment={assignment}
                               compact={compact}
                               dragging={Boolean(dragPreview)}
+
                               onPointerDragStart={(event) => {
                                 event.currentTarget.setPointerCapture(
                                   event.pointerId,

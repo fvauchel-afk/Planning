@@ -14,6 +14,7 @@ import {
   supabaseCreateReception,
   supabaseCreateSignalement,
   supabaseCreateDemande,
+  supabaseUpdateDemande,
   supabaseDeleteAbsence,
   supabaseReplaceHoraires,
   supabaseSetSignalementStatut,
@@ -36,12 +37,13 @@ import type {
   NewEmployeeInput,
   NewReceptionInput,
   NewDemandeInput,
+  DemandeUpdateInput,
   NewSignalementInput,
   PhaseEdits,
   PhasePatch,
   StatutSignalement,
 } from "@/lib/types";
-import { CATEGORIES_DEMANDE } from "@/lib/types";
+import { CATEGORIES_DEMANDE, STATUTS_DEMANDE } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -67,6 +69,7 @@ type MutateBody =
   | { action: "validateSignalement"; id: string; patches: PhasePatch[] }
   | { action: "createReception"; input: NewReceptionInput }
   | { action: "createDemande"; input: NewDemandeInput }
+  | { action: "updateDemande"; input: DemandeUpdateInput }
   | { action: "saveHoraires"; rows: HoraireSaison[] };
 
 export async function POST(request: NextRequest) {
@@ -106,6 +109,7 @@ export async function POST(request: NextRequest) {
     "applyPhaseEdits",
     "setSignalementStatut",
     "validateSignalement",
+    "updateDemande",
     "saveHoraires",
   ]);
 
@@ -237,6 +241,21 @@ export async function POST(request: NextRequest) {
         categorie: body.input.categorie,
         message,
         employe_id: session.employeeId,
+      });
+    } else if (body.action === "updateDemande") {
+      if (!body.input?.id) {
+        return NextResponse.json({ error: "Demande inconnue." }, { status: 400 });
+      }
+      if (
+        body.input.statut &&
+        !STATUTS_DEMANDE.includes(body.input.statut)
+      ) {
+        return NextResponse.json({ error: "Statut invalide." }, { status: 400 });
+      }
+      await supabaseUpdateDemande({
+        id: body.input.id,
+        statut: body.input.statut,
+        archivee: body.input.archivee,
       });
     } else if (body.action === "saveHoraires") {
       await supabaseReplaceHoraires(body.rows);

@@ -14,8 +14,24 @@ export const CHANGELOG: ChangelogEntry[] = [
     id: "2026-09-12-dates-estimatives",
     title: "Nouveau chantier",
     items: [
-      "Vous pouvez indiquer une date de début (et une fin) estimative dès la création : elle s’affiche avec un badge « Estimatif » sur la fiche et sur les pastilles du planning, distinct des dates confirmées.",
-      "Si vous ne mettez aucune date, le logiciel cale tout seul le début au prochain jour ouvré disponible. Le salarié, lui, reste à assigner à la main si vous ne le choisissez pas.",
+      "À la création, vous pouvez indiquer une date de début (et une fin) estimative : un badge « Estimatif » la distingue des dates confirmées.",
+      "Si vous ne mettez aucune date, le chantier se cale tout seul au prochain jour ouvré disponible. Le salarié n’est assigné que si vous le choisissez.",
+    ],
+  },
+  {
+    id: "2026-09-12-demandes-traitement",
+    title: "Demandes",
+    items: [
+      "Vous pouvez marquer une demande comme traitée, ou l’archiver pour la sortir de la liste sans la supprimer.",
+      "Un bouton « Voir les archives » affiche les demandes mises de côté.",
+    ],
+  },
+  {
+    id: "2026-09-12-depot-cases-occupees",
+    title: "Planning équipe",
+    items: [
+      "Vous ne pouvez plus déposer un chantier sur une case déjà prise (autre chantier ou absence). Les cases impossibles apparaissent en rouge.",
+      "Le chantier revient alors à sa place. Les chantiers collés se décalent toujours ensemble.",
     ],
   },
   {

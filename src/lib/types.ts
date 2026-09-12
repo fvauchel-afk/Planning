@@ -169,18 +169,34 @@ export const CATEGORIE_DEMANDE_LABELS: Record<CategorieDemande, string> = {
   suggestion_site: "Suggestion amélioration site",
 };
 
+export const STATUTS_DEMANDE = ["en_attente", "traite"] as const;
+export type StatutDemande = (typeof STATUTS_DEMANDE)[number];
+
+export const STATUT_DEMANDE_LABELS: Record<StatutDemande, string> = {
+  en_attente: "En attente",
+  traite: "Traité",
+};
+
 export type Demande = {
   id: string;
   employe_id: string;
   categorie: CategorieDemande;
   message: string;
   date_creation: string;
+  statut: StatutDemande;
+  archivee: boolean;
 };
 
 export type NewDemandeInput = {
   categorie: CategorieDemande;
   message: string;
   employe_id?: string;
+};
+
+export type DemandeUpdateInput = {
+  id: string;
+  statut?: StatutDemande;
+  archivee?: boolean;
 };
 
 export type PlanningSnapshot = {
