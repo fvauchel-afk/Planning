@@ -1,5 +1,5 @@
 -- Traitement et archivage des demandes d’équipe.
--- À exécuter dans l’éditeur SQL Supabase (une fois).
+-- Déjà appliqué en production ; fichier d’historique pour coller au schéma réel.
 
 do $$ begin
   create type statut_demande as enum ('en_attente', 'traite');
