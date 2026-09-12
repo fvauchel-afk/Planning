@@ -279,12 +279,15 @@ function patchesForBlock(
   snapshot: PlanningSnapshot,
   block: ChantierBlock,
   delta: number,
+  employeId?: string | null,
 ): PhasePatch[] {
-  if (delta === 0) return [];
   const patches: PhasePatch[] = [];
   for (const phaseId of block.phaseIds) {
     const phase = snapshot.phases.find((item) => item.id === phaseId);
     if (!phase) continue;
+    const nextEmploye = employeId !== undefined ? employeId : phase.employe_id;
+    const employeeChanged = nextEmploye !== phase.employe_id;
+    if (delta === 0 && !employeeChanged) continue;
     const slots = slotsFromExistingPhase(snapshot, phase).filter(
       (slot) => slot.rowId === block.rowId,
     );
@@ -302,7 +305,7 @@ function patchesForBlock(
         id: phase.id,
         date_debut: first.date,
         date_fin: last.date,
-        employe_id: phase.employe_id,
+        employe_id: nextEmploye,
         heure_debut: heureForHalf(first.half, phase.heure_debut),
       });
       continue;
@@ -323,11 +326,42 @@ function patchesForBlock(
       id: phase.id,
       date_debut: first.date,
       date_fin: last.date,
-      employe_id: phase.employe_id,
+      employe_id: nextEmploye,
       heure_debut: heureForHalf(first.half, phase.heure_debut),
     });
   }
   return patches;
+}
+
+function halvesOverlap(left: OccupiedHalf[], right: OccupiedHalf[]): boolean {
+  const keys = new Set(left.map((item) => `${item.date}|${item.half}`));
+  return right.some((item) => keys.has(`${item.date}|${item.half}`));
+}
+
+function destCascadeChain(
+  snapshot: PlanningSnapshot,
+  destRowId: string,
+  landing: ChantierBlock,
+  direction: 1 | -1,
+): { destBlocks: ChantierBlock[]; chain: ChantierBlock[] } {
+  const destBlocks = chantierBlocksForRow(snapshot, destRowId);
+  const { occupancy } = occupancyForRow(snapshot, destRowId);
+  const overlapping = destBlocks.filter((block) =>
+    halvesOverlap(block.halves, landing.halves),
+  );
+  const neighbors = gluedNeighbors(
+    snapshot,
+    occupancy,
+    [landing, ...destBlocks],
+    landing,
+    direction,
+  );
+  const byKey = new Map<string, ChantierBlock>();
+  for (const block of [...overlapping, ...neighbors]) {
+    if (block.key === landing.key) continue;
+    byKey.set(block.key, block);
+  }
+  return { destBlocks, chain: Array.from(byKey.values()) };
 }
 
 export function shiftChantierBlock(input: {
@@ -365,6 +399,136 @@ export function shiftChantierBlock(input: {
   return { delta: applied, patches: Array.from(byId.values()), chain };
 }
 
+export type DragShiftPreviewCell = {
+  rowId: string;
+  date: string;
+  half: Half;
+};
+
+export function shiftOrMoveChantierBlock(input: {
+  snapshot: PlanningSnapshot;
+  fromRowId: string;
+  toRowId: string;
+  chantierId: string;
+  grab: OccupiedHalf;
+  drop: OccupiedHalf;
+}): {
+  delta: number;
+  patches: PhasePatch[];
+  chain: ChantierBlock[];
+  preview: DragShiftPreviewCell[];
+} {
+  if (input.toRowId === input.fromRowId) {
+    const result = shiftChantierBlock({
+      snapshot: input.snapshot,
+      rowId: input.fromRowId,
+      chantierId: input.chantierId,
+      grab: input.grab,
+      drop: input.drop,
+    });
+    const preview: DragShiftPreviewCell[] = [];
+    for (const block of result.chain) {
+      for (const half of previewHalves(block, result.delta)) {
+        preview.push({ rowId: block.rowId, date: half.date, half: half.half });
+      }
+    }
+    return { ...result, preview };
+  }
+  if (
+    input.toRowId === LOGISTIQUE_ROW_ID ||
+    input.fromRowId === LOGISTIQUE_ROW_ID
+  ) {
+    return { delta: 0, patches: [], chain: [], preview: [] };
+  }
+  const destEmployee = input.snapshot.employees.find(
+    (employee) => employee.id === input.toRowId && employee.actif,
+  );
+  if (!destEmployee) {
+    return { delta: 0, patches: [], chain: [], preview: [] };
+  }
+  const sourceBlocks = chantierBlocksForRow(input.snapshot, input.fromRowId);
+  const origin = blockContaining(
+    sourceBlocks,
+    input.chantierId,
+    input.grab.date,
+    input.grab.half,
+  );
+  if (!origin) return { delta: 0, patches: [], chain: [], preview: [] };
+  const delta =
+    halfIndex(input.drop.date, input.drop.half) -
+    halfIndex(input.grab.date, input.grab.half);
+  const landing: ChantierBlock = {
+    ...origin,
+    key: `landing|${origin.key}`,
+    rowId: input.toRowId,
+    halves: previewHalves(origin, delta),
+  };
+  const byId = new Map<string, PhasePatch>();
+  for (const patch of patchesForBlock(
+    input.snapshot,
+    origin,
+    delta,
+    input.toRowId,
+  )) {
+    byId.set(patch.id, patch);
+  }
+  let destChain: ChantierBlock[] = [];
+  let destDelta = 0;
+  if (delta !== 0) {
+    const direction: 1 | -1 = delta > 0 ? 1 : -1;
+    const cascaded = destCascadeChain(
+      input.snapshot,
+      input.toRowId,
+      landing,
+      direction,
+    );
+    destChain = cascaded.chain;
+    destDelta =
+      destChain.length > 0
+        ? clampDelta(cascaded.destBlocks, destChain, delta)
+        : 0;
+    if (
+      destChain.length > 0 &&
+      destDelta !== delta &&
+      destChain.some((block) =>
+        halvesOverlap(previewHalves(block, destDelta), landing.halves),
+      )
+    ) {
+      destDelta = delta;
+    }
+    if (destDelta !== 0) {
+      for (const block of destChain) {
+        for (const patch of patchesForBlock(input.snapshot, block, destDelta)) {
+          if (!byId.has(patch.id)) byId.set(patch.id, patch);
+        }
+      }
+    }
+  }
+  const preview: DragShiftPreviewCell[] = [];
+  for (const half of landing.halves) {
+    preview.push({
+      rowId: input.toRowId,
+      date: half.date,
+      half: half.half,
+    });
+  }
+  for (const block of destChain) {
+    for (const half of previewHalves(block, destDelta)) {
+      preview.push({
+        rowId: block.rowId,
+        date: half.date,
+        half: half.half,
+      });
+    }
+  }
+  return {
+    delta,
+    patches: Array.from(byId.values()),
+    chain: [{ ...origin, rowId: input.toRowId }, ...destChain],
+    preview,
+  };
+}
+
 export function previewHalves(block: ChantierBlock, delta: number): OccupiedHalf[] {
   return block.halves.map((item) => addHalfSteps(item.date, item.half, delta));
 }
@@ -381,6 +545,94 @@ function runDragShiftSelfCheck() {
   const back = addHalfSteps("2026-09-11", 0, -2);
   if (back.date !== "2026-09-10" || back.half !== 0) {
     throw new Error("drag-shift: -2 demi-journées doit revenir au matin d’avant");
+  }
+  const movedAcross = shiftOrMoveChantierBlock({
+    snapshot: {
+      employees: [
+        {
+          id: "emp-a",
+          nom: "A",
+          roles: ["fabrication"],
+          actif: true,
+        },
+        {
+          id: "emp-b",
+          nom: "B",
+          roles: ["fabrication"],
+          actif: true,
+        },
+      ],
+      chantiers: [
+        {
+          id: "ch-a",
+          nom_client: "Alpha",
+          adresse: "",
+          lien_dossier_onedrive: null,
+          priorite: "normal",
+          date_creation: "2026-09-01",
+        },
+        {
+          id: "ch-b",
+          nom_client: "Beta",
+          adresse: "",
+          lien_dossier_onedrive: null,
+          priorite: "normal",
+          date_creation: "2026-09-01",
+        },
+      ],
+      elements: [
+        { id: "el-a", chantier_id: "ch-a", nom_element: "A" },
+        { id: "el-b", chantier_id: "ch-b", nom_element: "B" },
+      ],
+      phases: [
+        {
+          id: "ph-a",
+          element_id: "el-a",
+          type_phase: "fabrication",
+          duree_estimee_heures: 4,
+          date_debut: "2026-09-07",
+          date_fin: "2026-09-07",
+          heure_debut: "07:30",
+          employe_id: "emp-a",
+          statut: "a_faire",
+          urgent: false,
+        },
+        {
+          id: "ph-b",
+          element_id: "el-b",
+          type_phase: "fabrication",
+          duree_estimee_heures: 4,
+          date_debut: "2026-09-08",
+          date_fin: "2026-09-08",
+          heure_debut: "07:30",
+          employe_id: "emp-b",
+          statut: "a_faire",
+          urgent: false,
+        },
+      ],
+      absences: [],
+      signalements: [],
+      receptions: [],
+      horaires: [],
+    },
+    fromRowId: "emp-a",
+    toRowId: "emp-b",
+    chantierId: "ch-a",
+    grab: { date: "2026-09-07", half: 0 },
+    drop: { date: "2026-09-08", half: 0 },
+  });
+  const originPatch = movedAcross.patches.find((item) => item.id === "ph-a");
+  const destPatch = movedAcross.patches.find((item) => item.id === "ph-b");
+  if (!originPatch || originPatch.employe_id !== "emp-b") {
+    throw new Error("drag-shift: le bloc glissé doit changer de salarié");
+  }
+  if (originPatch.date_debut !== "2026-09-08") {
+    throw new Error("drag-shift: le bloc glissé doit suivre la date de dépôt");
+  }
+  if (!destPatch || destPatch.date_debut !== "2026-09-09") {
+    throw new Error(
+      "drag-shift: le bloc collé sur la ligne d’arrivée doit être décalé",
+    );
   }
 }
 

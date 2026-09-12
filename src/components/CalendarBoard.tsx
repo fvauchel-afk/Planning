@@ -34,8 +34,7 @@ import {
 } from "@/lib/dates";
 import { formatClock, hoursForSlot, workWindowsForRow } from "@/lib/engine/hours";
 import {
-  previewHalves,
-  shiftChantierBlock,
+  shiftOrMoveChantierBlock,
   type OccupiedHalf,
 } from "@/lib/engine/drag-shift";
 import { halfFromLabel } from "@/lib/engine/slots";
@@ -71,6 +70,7 @@ export function CalendarBoard() {
     chantierId: string;
     grab: OccupiedHalf;
     startX: number;
+    startY: number;
     moved: boolean;
   } | null>(null);
   const savingDrag = useRef(false);
@@ -159,23 +159,21 @@ export function CalendarBoard() {
     const drag = dragRef.current;
     if (!drag) return;
     const drop = planCellFromPoint(clientX, clientY);
-    if (!drop || drop.rowId !== drag.rowId) {
+    if (!drop) {
       setDragPreview(new Set());
       return;
     }
-    const result = shiftChantierBlock({
+    const result = shiftOrMoveChantierBlock({
       snapshot,
-      rowId: drag.rowId,
+      fromRowId: drag.rowId,
+      toRowId: drop.rowId,
       chantierId: drag.chantierId,
       grab: drag.grab,
       drop,
     });
     const keys = new Set<string>();
-    const delta = result.delta;
-    for (const block of result.chain) {
-      for (const half of previewHalves(block, delta)) {
-        keys.add(`${block.rowId}|${half.date}|${half.half}`);
-      }
+    for (const cell of result.preview) {
+      keys.add(`${cell.rowId}|${cell.date}|${cell.half}`);
     }
     if (keys.size === 0) {
       keys.add(`${drag.rowId}|${drag.grab.date}|${drag.grab.half}`);
@@ -221,10 +219,11 @@ export function CalendarBoard() {
       return;
     }
     const drop = planCellFromPoint(clientX, clientY);
-    if (!drop || drop.rowId !== drag.rowId || savingDrag.current) return;
-    const { patches } = shiftChantierBlock({
+    if (!drop || savingDrag.current) return;
+    const { patches } = shiftOrMoveChantierBlock({
       snapshot,
-      rowId: drag.rowId,
+      fromRowId: drag.rowId,
+      toRowId: drop.rowId,
       chantierId: drag.chantierId,
       grab: drag.grab,
       drop,
@@ -268,7 +267,8 @@ export function CalendarBoard() {
           <p className="mt-1 text-sm text-stone-600">
             Une ligne par personne, chaque jour en matin / après-midi. Le
             thermolaquage sous-traité a sa propre ligne. Glissez un chantier
-            sur la même ligne pour le décaler (les blocs collés suivent).
+            vers une autre date ou vers un autre salarié. Les blocs collés sur
+            la ligne d’arrivée reculent ou avancent pour laisser la place.
             Glissez une ligne de salarié (clic gauche maintenu sur le nom)
             pour changer l’ordre d’affichage, enregistré pour tout le monde.
             {usingSupabase
@@ -582,6 +582,7 @@ export function CalendarBoard() {
                                   chantierId: assignment.chantier.id,
                                   grab: { date: iso, half },
                                   startX: event.clientX,
+                                  startY: event.clientY,
                                   moved: false,
                                 };
                                 setDragError(null);
@@ -593,7 +594,8 @@ export function CalendarBoard() {
                                 }
                                 if (
                                   !drag.moved &&
-                                  Math.abs(event.clientX - drag.startX) < 8
+                                  Math.abs(event.clientX - drag.startX) < 8 &&
+                                  Math.abs(event.clientY - drag.startY) < 8
                                 ) {
                                   return;
                                 }

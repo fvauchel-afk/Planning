@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-12-glisser-chantier-autre-salarie",
+    title: "Planning équipe",
+    items: [
+      "Vous pouvez glisser un chantier d’une ligne salarié vers une autre pour le réaffecter.",
+      "Si la date change aussi, les blocs collés sur la nouvelle ligne sont décalés comme aujourd’hui sur une même ligne.",
+    ],
+  },
+  {
     id: "2026-09-12-base-indisponible",
     title: "Connexion à la base",
     items: [
