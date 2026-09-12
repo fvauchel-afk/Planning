@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-12-demandes-traitement",
+    title: "Demandes",
+    items: [
+      "Vous pouvez marquer une demande comme traitée, ou l’archiver pour la sortir de la liste sans la supprimer.",
+      "Un bouton « Voir les archives » affiche les demandes mises de côté.",
+    ],
+  },
+  {
     id: "2026-09-12-depot-cases-occupees",
     title: "Planning équipe",
     items: [

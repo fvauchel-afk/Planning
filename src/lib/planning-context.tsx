@@ -24,6 +24,7 @@ import {
   localCreateReception,
   localCreateSignalement,
   localCreateDemande,
+  localUpdateDemande,
   localDeleteAbsence,
   localReplaceHoraires,
   localSetChantierOnedriveLink,
@@ -49,6 +50,7 @@ import type {
   HoraireSaison,
   NewReceptionInput,
   NewDemandeInput,
+  DemandeUpdateInput,
   NewSignalementInput,
   PhaseEdits,
   PhasePatch,
@@ -91,6 +93,7 @@ type PlanningContextValue = {
   ) => Promise<void>;
   createReception: (input: NewReceptionInput) => Promise<void>;
   createDemande: (input: NewDemandeInput) => Promise<void>;
+  updateDemande: (input: DemandeUpdateInput) => Promise<void>;
   saveHoraires: (rows: HoraireSaison[]) => Promise<void>;
 };
 
@@ -503,6 +506,19 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
     [useShared, refresh, assertWritable],
   );
 
+  const updateDemande = useCallback(
+    async (input: DemandeUpdateInput) => {
+      assertWritable();
+      if (useShared) {
+        await planningMutate({ action: "updateDemande", input });
+        await refresh();
+        return;
+      }
+      setSnapshot((current) => localUpdateDemande(current, input));
+    },
+    [useShared, refresh, assertWritable],
+  );
+
   const saveHoraires = useCallback(
     async (rows: HoraireSaison[]) => {
       assertWritable();
@@ -541,6 +557,7 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
       validateSignalement,
       createReception,
       createDemande,
+      updateDemande,
       saveHoraires,
     }),
     [
@@ -567,6 +584,7 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
       validateSignalement,
       createReception,
       createDemande,
+      updateDemande,
       saveHoraires,
     ],
   );

@@ -19,6 +19,7 @@ import type {
   NewEmployeeInput,
   NewReceptionInput,
   NewDemandeInput,
+  DemandeUpdateInput,
   NewSignalementInput,
   PhaseEdits,
   PhasePatch,
@@ -80,7 +81,11 @@ export function loadLocalSnapshot(): PlanningSnapshot {
         motif_precision: absence.motif_precision ?? null,
       })),
       receptions: parsed.receptions ?? [],
-      demandes: parsed.demandes ?? [],
+      demandes: (parsed.demandes ?? []).map((row) => ({
+        ...row,
+        statut: row.statut === "traite" ? "traite" : "en_attente",
+        archivee: Boolean(row.archivee),
+      })),
     };
   } catch {
     const seed = createSeedSnapshot();
@@ -348,8 +353,28 @@ export function localCreateDemande(
     categorie: input.categorie,
     message: input.message.trim(),
     date_creation: new Date().toISOString(),
+    statut: "en_attente",
+    archivee: false,
   };
   next.demandes = [row, ...(next.demandes ?? [])];
+  saveLocalSnapshot(next);
+  return next;
+}
+
+export function localUpdateDemande(
+  snapshot: PlanningSnapshot,
+  input: DemandeUpdateInput,
+): PlanningSnapshot {
+  const next = clone(snapshot);
+  next.demandes = (next.demandes ?? []).map((row) =>
+    row.id === input.id
+      ? {
+          ...row,
+          statut: input.statut ?? row.statut,
+          archivee: input.archivee ?? row.archivee,
+        }
+      : row,
+  );
   saveLocalSnapshot(next);
   return next;
 }
