@@ -17,6 +17,7 @@ import {
   ensureChantierDatesOnCreate,
   inputHasExplicitDates,
 } from "@/lib/engine/earliest-date";
+import { applyPhaseChainOnCreate } from "@/lib/engine/phase-chain";
 import { usePlanning } from "@/lib/planning-context";
 import {
   PHASE_LABELS,
@@ -68,6 +69,11 @@ export function ChantierForm() {
   const [dateDebut, setDateDebut] = useState("");
   const [dateFin, setDateFin] = useState("");
   const [datesEstimatives, setDatesEstimatives] = useState(true);
+  const [avecPose, setAvecPose] = useState<boolean | null>(null);
+  const [avecThermolaquage, setAvecThermolaquage] = useState<boolean | null>(null);
+  const [delaiLaquage, setDelaiLaquage] = useState("5");
+  const [dateLaquageDebut, setDateLaquageDebut] = useState("");
+  const [dateLaquageFin, setDateLaquageFin] = useState("");
   const [elements, setElements] = useState<ElementForm[]>([
     { key: "el-1", nom_element: "", phases: emptyPhases() },
   ]);
@@ -121,8 +127,16 @@ export function ChantierForm() {
       setError("Ajoutez au moins un élément (pergola, portail, table…).");
       return null;
     }
+    if (avecPose === null) {
+      setError("Indiquez si le chantier comprend une installation / pose.");
+      return null;
+    }
+    if (avecThermolaquage === null) {
+      setError("Indiquez si le chantier passe au thermolaquage.");
+      return null;
+    }
     setError(null);
-    return {
+    const input: NewChantierInput = {
       nom_client: nomClient.trim(),
       adresse: adresse.trim(),
       lien_dossier_onedrive: lien.trim() || null,
@@ -130,6 +144,13 @@ export function ChantierForm() {
       date_debut: dateDebut || null,
       date_fin: dateFin || dateDebut || null,
       dates_estimatives: datesEstimatives,
+      avec_pose: avecPose,
+      avec_thermolaquage: avecThermolaquage,
+      delai_laquage_jours: avecThermolaquage
+        ? Number(delaiLaquage || 5)
+        : null,
+      date_laquage_debut: avecThermolaquage ? dateLaquageDebut || null : null,
+      date_laquage_fin: avecThermolaquage ? dateLaquageFin || null : null,
       elements: namedElements.map((element) => ({
         nom_element: element.nom_element.trim(),
         phases: element.phases.map((phase) => ({
@@ -145,6 +166,10 @@ export function ChantierForm() {
         })),
       })),
     };
+    return applyPhaseChainOnCreate(
+      snapshot,
+      ensureChantierDatesOnCreate(snapshot, input),
+    );
   }
 
   async function saveInput(input: NewChantierInput) {
@@ -339,10 +364,10 @@ export function ChantierForm() {
       <div>
         <h2 className="font-serif text-3xl text-stone-900">Nouveau chantier</h2>
         <p className="mt-1 text-sm text-stone-600">
-          Vous pouvez indiquer une date de début (et une fin) estimative ou
-          confirmée. Si vous n’en mettez aucune, le logiciel cale tout seul le
-          début au prochain jour ouvré disponible. L’assignation d’un salarié
-          reste manuelle, sauf si vous utilisez « Placer automatiquement ».
+          Indiquez si le chantier a une pose et du thermolaquage. Vous pouvez
+          aussi saisir une date de début estimative ou confirmée ; sans date,
+          le début se cale tout seul au prochain jour ouvré. L’enchaînement
+          est fabrication, puis thermolaquage, puis pose.
         </p>
       </div>
 
@@ -490,6 +515,100 @@ export function ChantierForm() {
             </label>
           </div>
         </fieldset>
+        <fieldset className="rounded-lg border border-stone-300 bg-stone-50/60 p-3 text-sm md:col-span-2">
+          <legend className="px-1 font-medium text-stone-800">
+            Installation / Pose <span className="text-red-700">*</span>
+          </legend>
+          <div className="flex flex-wrap gap-4">
+            <label className="inline-flex items-center gap-2">
+              <input
+                type="radio"
+                name="avec-pose"
+                required
+                checked={avecPose === true}
+                onChange={() => setAvecPose(true)}
+              />
+              Oui
+            </label>
+            <label className="inline-flex items-center gap-2">
+              <input
+                type="radio"
+                name="avec-pose"
+                required
+                checked={avecPose === false}
+                onChange={() => setAvecPose(false)}
+              />
+              Non
+            </label>
+          </div>
+        </fieldset>
+        <fieldset className="rounded-lg border border-stone-300 bg-stone-50/60 p-3 text-sm md:col-span-2">
+          <legend className="px-1 font-medium text-stone-800">
+            Thermolaquage <span className="text-red-700">*</span>
+          </legend>
+          <div className="flex flex-wrap gap-4">
+            <label className="inline-flex items-center gap-2">
+              <input
+                type="radio"
+                name="avec-thermolaquage"
+                required
+                checked={avecThermolaquage === true}
+                onChange={() => setAvecThermolaquage(true)}
+              />
+              Oui
+            </label>
+            <label className="inline-flex items-center gap-2">
+              <input
+                type="radio"
+                name="avec-thermolaquage"
+                required
+                checked={avecThermolaquage === false}
+                onChange={() => setAvecThermolaquage(false)}
+              />
+              Non
+            </label>
+          </div>
+          {avecThermolaquage ? (
+            <div className="mt-3 grid gap-3 sm:grid-cols-3">
+              <label className="block">
+                <span className="mb-1 block font-medium">
+                  Délai de laquage (jours ouvrés)
+                </span>
+                <input
+                  type="number"
+                  min={1}
+                  max={60}
+                  value={delaiLaquage}
+                  onChange={(event) => setDelaiLaquage(event.target.value)}
+                  className="w-full rounded border border-stone-300 bg-white px-3 py-2"
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1 block font-medium">Début précis (optionnel)</span>
+                <input
+                  type="date"
+                  value={dateLaquageDebut}
+                  onChange={(event) => setDateLaquageDebut(event.target.value)}
+                  className="w-full rounded border border-stone-300 bg-white px-3 py-2"
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1 block font-medium">Fin précise (optionnelle)</span>
+                <input
+                  type="date"
+                  value={dateLaquageFin}
+                  min={dateLaquageDebut || undefined}
+                  onChange={(event) => setDateLaquageFin(event.target.value)}
+                  className="w-full rounded border border-stone-300 bg-white px-3 py-2"
+                />
+              </label>
+              <p className="text-xs text-stone-500 sm:col-span-3">
+                Sans dates précises : phase thermolaquage posée juste après la
+                fabrication, pour 5 jours ouvrés (ou le délai saisi).
+              </p>
+            </div>
+          ) : null}
+        </fieldset>
         <label className="block text-sm md:col-span-2">
           <span className="mb-1 block font-medium">Adresse</span>
           <input
@@ -556,7 +675,20 @@ export function ChantierForm() {
                   </tr>
                 </thead>
                 <tbody>
-                  {element.phases.map((phase) => (
+                  {element.phases
+                    .filter((phase) => {
+                      if (phase.type_phase === "pose" && avecPose === false) {
+                        return false;
+                      }
+                      if (
+                        phase.type_phase === "logistique" &&
+                        avecThermolaquage === false
+                      ) {
+                        return false;
+                      }
+                      return true;
+                    })
+                    .map((phase) => (
                     <tr key={phase.type_phase} className="border-t border-stone-200">
                       <td className="py-2 pr-2">{PHASE_LABELS[phase.type_phase]}</td>
                       <td className="py-2 pr-2">

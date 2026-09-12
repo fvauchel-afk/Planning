@@ -9,8 +9,6 @@ import {
   type TypePhase,
 } from "@/lib/types";
 import {
-  MAX_LOGISTICS_WORKING_DAYS,
-  MIN_LOGISTICS_WORKING_DAYS,
   SEARCH_DAYS,
   TARGET_LOAD,
   advanceSlot,
@@ -539,6 +537,7 @@ function placeChantierOnOccupancy(
   input.elements.forEach((element, elementIndex) => {
     let cursor = { ...notBeforeBase };
     let fabEnd: OccupiedSlot | null = null;
+    let logEnd: OccupiedSlot | null = null;
 
     for (const type of ["administratif", "fabrication", "logistique", "pose"] as TypePhase[]) {
       const source = element.phases.find((phase) => phase.type_phase === type);
@@ -629,6 +628,7 @@ function placeChantierOnOccupancy(
         };
         cursor = nextAfter(snapshot, last);
         if (type === "fabrication") fabEnd = last;
+        if (type === "logistique") logEnd = last;
         continue;
       }
 
@@ -647,10 +647,13 @@ function placeChantierOnOccupancy(
         continue;
       }
 
-      if (type === "pose" && fabEnd) {
-        const earliest = addWorkingDays(fabEnd.date, options.logisticsGap);
-        if (earliest > cursor.date) {
-          cursor = { rowId: cursor.rowId, date: earliest, half: 0 };
+      if (type === "pose") {
+        const after = logEnd ?? fabEnd;
+        if (after) {
+          const next = nextAfter(snapshot, after);
+          if (next.date > cursor.date || (next.date === cursor.date && next.half > cursor.half)) {
+            cursor = { rowId: cursor.rowId, date: next.date, half: next.half };
+          }
         }
       }
 
@@ -711,6 +714,7 @@ function placeChantierOnOccupancy(
       if (last) {
         cursor = nextAfter(snapshot, last);
         if (type === "fabrication") fabEnd = last;
+        if (type === "logistique") logEnd = last;
         if (type === "pose" && fabEnd) {
           gaps.push(
             Math.max(
@@ -728,26 +732,6 @@ function placeChantierOnOccupancy(
   });
 
   return { phases, occupancy, gaps };
-}
-
-function scorePlacement(
-  occupancy: Map<string, string>,
-  snapshot: PlanningSnapshot,
-  phases: PlannedPhase[],
-): number {
-  const employeeIds = snapshot.employees
-    .filter((employee) => employee.actif)
-    .map((employee) => employee.id);
-  const load = weeklyLoadScore(occupancy, snapshot, employeeIds);
-  const unplaced = phases.filter((phase) => phase.unplaced && phase.duree_estimee_heures > 0)
-    .length;
-  const lastPose = phases
-    .filter((phase) => phase.type_phase === "pose" && phase.date_fin)
-    .map((phase) => phase.date_fin as string)
-    .sort()
-    .at(-1);
-  const lateness = lastPose ? Date.parse(lastPose) / 8.64e7 : 0;
-  return unplaced * 1000 + load * 10 + lateness / 1e6;
 }
 
 function chantierById(snapshot: PlanningSnapshot, id: string) {
@@ -875,25 +859,12 @@ export function planChantier(
     .filter((employee) => employee.actif)
     .map((employee) => employee.id);
 
-  const candidates: { gap: number; result: ReturnType<typeof placeChantierOnOccupancy> }[] =
-    [];
-  for (let gap = MIN_LOGISTICS_WORKING_DAYS; gap <= MAX_LOGISTICS_WORKING_DAYS; gap += 1) {
-    candidates.push({
-      gap,
-      result: placeChantierOnOccupancy(snapshot, input, options.urgent, {
-        mode: options.urgent ? "holes" : "append",
-        occupancy: fullOcc,
-        logisticsGap: gap,
-      }),
-    });
-  }
-
-  candidates.sort(
-    (a, b) =>
-      scorePlacement(a.result.occupancy, snapshot, a.result.phases) -
-      scorePlacement(b.result.occupancy, snapshot, b.result.phases),
-  );
-  const best = candidates[0]?.result;
+  const result = placeChantierOnOccupancy(snapshot, input, options.urgent, {
+    mode: options.urgent ? "holes" : "append",
+    occupancy: fullOcc,
+    logisticsGap: 0,
+  });
+  const best = result;
   if (!best) {
     return {
       status: "partial",
@@ -918,7 +889,7 @@ export function planChantier(
     const squeezed = placeChantierOnOccupancy(snapshot, input, true, {
       mode: "holes",
       occupancy: kept,
-      logisticsGap: MIN_LOGISTICS_WORKING_DAYS,
+      logisticsGap: 0,
     });
     const displacements = buildDisplacements(
       snapshot,
@@ -962,7 +933,7 @@ export function planChantier(
     status: "placed",
     phases: best.phases,
     displacements: [],
-    message: `Placement trouvé avec un délai logistique de ${MIN_LOGISTICS_WORKING_DAYS}–${MAX_LOGISTICS_WORKING_DAYS} jours ouvrés, sans écraser l’existant.`,
+    message: "Placement trouvé à la suite (fabrication → thermolaquage → pose), sans écraser l’existant.",
     logisticsGaps: best.gaps,
   };
 }
@@ -1136,6 +1107,7 @@ export function inspectManualSlotConflict(
     const element = input.elements[elementIndex];
     for (const phase of element.phases) {
       if (!phase.date_debut) continue;
+      if (phase.type_phase === "logistique") continue;
       const debut = phase.date_debut;
       const fin = phase.date_fin || phase.date_debut;
       const resolved = resolveManualRow(
