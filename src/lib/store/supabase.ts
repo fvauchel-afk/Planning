@@ -30,6 +30,7 @@ import type {
   ScheduleChantierDayInput,
   NewEmployeeInput,
   NewReceptionInput,
+  NewDemandeInput,
   NewSignalementInput,
   PhaseEdits,
   PhaseInsert,
@@ -37,6 +38,8 @@ import type {
   PhasePlanning,
   PlanningSnapshot,
   ReceptionChantier,
+  Demande,
+  CategorieDemande,
   Role,
   Signalement,
   StatutSignalement,
@@ -150,8 +153,11 @@ async function fetchSupabaseSnapshotOnce(): Promise<PlanningSnapshot> {
     supabase.from("receptions_chantier").select("*").order("date_signature", {
       ascending: false,
     }),
+    supabase.from("demandes").select("*").order("date_creation", {
+      ascending: false,
+    }),
   ]);
-  const [signalements, receptions] = extra;
+  const [signalements, receptions, demandes] = extra;
 
   const signalementRows = isMissingSchemaError(signalements.error)
     ? []
@@ -217,6 +223,22 @@ async function fetchSupabaseSnapshotOnce(): Promise<PlanningSnapshot> {
       ...row,
       onedrive_erreur: row.onedrive_erreur ?? null,
     })),
+    demandes: optionalTable<Demande>(demandes)
+      .map((row) => {
+        const categorie: CategorieDemande =
+          row.categorie === "suggestion_site" ? "suggestion_site" : "commande";
+        return {
+          id: row.id,
+          employe_id: row.employe_id,
+          categorie,
+          message: row.message ?? "",
+          date_creation: row.date_creation,
+        };
+      })
+      .sort(
+        (left, right) =>
+          Date.parse(right.date_creation) - Date.parse(left.date_creation),
+      ),
     horaires: (() => {
       const rows = optionalTable<HoraireSaison>(horaires).map((row) =>
         normalizeHoraire({
@@ -686,6 +708,19 @@ export async function supabaseCreateSignalement(
     sens: payload.sens,
   });
   if (retry.error) throw wrapSupabaseError(first.error);
+}
+
+export async function supabaseCreateDemande(
+  input: NewDemandeInput & { employe_id: string },
+): Promise<void> {
+  const supabase = createSupabaseServerClient();
+  const message = input.message.trim();
+  const { error } = await supabase.from("demandes").insert({
+    employe_id: input.employe_id,
+    categorie: input.categorie,
+    message,
+  });
+  if (error) throw wrapSupabaseError(error);
 }
 
 export async function supabaseSetSignalementStatut(

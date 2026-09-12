@@ -13,6 +13,7 @@ import {
   supabaseScheduleChantierDay,
   supabaseCreateReception,
   supabaseCreateSignalement,
+  supabaseCreateDemande,
   supabaseDeleteAbsence,
   supabaseReplaceHoraires,
   supabaseSetSignalementStatut,
@@ -34,11 +35,13 @@ import type {
   ScheduleChantierDayInput,
   NewEmployeeInput,
   NewReceptionInput,
+  NewDemandeInput,
   NewSignalementInput,
   PhaseEdits,
   PhasePatch,
   StatutSignalement,
 } from "@/lib/types";
+import { CATEGORIES_DEMANDE } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -63,6 +66,7 @@ type MutateBody =
   | { action: "setSignalementStatut"; id: string; statut: StatutSignalement }
   | { action: "validateSignalement"; id: string; patches: PhasePatch[] }
   | { action: "createReception"; input: NewReceptionInput }
+  | { action: "createDemande"; input: NewDemandeInput }
   | { action: "saveHoraires"; rows: HoraireSaison[] };
 
 export async function POST(request: NextRequest) {
@@ -205,6 +209,35 @@ export async function POST(request: NextRequest) {
         }
       }
       await supabaseCreateReception(body.input);
+    } else if (body.action === "createDemande") {
+      const message = body.input.message?.trim() ?? "";
+      if (!message) {
+        return NextResponse.json(
+          { error: "Écrivez un message avant d’envoyer." },
+          { status: 400 },
+        );
+      }
+      if (message.length > 4000) {
+        return NextResponse.json(
+          { error: "Le message est trop long." },
+          { status: 400 },
+        );
+      }
+      if (
+        !CATEGORIES_DEMANDE.includes(
+          body.input.categorie as (typeof CATEGORIES_DEMANDE)[number],
+        )
+      ) {
+        return NextResponse.json(
+          { error: "Catégorie invalide." },
+          { status: 400 },
+        );
+      }
+      await supabaseCreateDemande({
+        categorie: body.input.categorie,
+        message,
+        employe_id: session.employeeId,
+      });
     } else if (body.action === "saveHoraires") {
       await supabaseReplaceHoraires(body.rows);
     } else {

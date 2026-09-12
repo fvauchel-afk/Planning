@@ -7,6 +7,7 @@ import { PwaRegister } from "@/components/PwaRegister";
 import { SessionProvider, useSession } from "@/lib/auth/session-context";
 import { PlanningProvider } from "@/lib/planning-context";
 import { DatabaseUnavailableGate } from "@/components/DatabaseUnavailableGate";
+import { DemandesWidget } from "@/components/DemandesWidget";
 
 function Shell({
   pathname,
@@ -59,6 +60,7 @@ function FramedApp({ children }: { children: React.ReactNode }) {
         <PlanningProvider>
           <DatabaseUnavailableGate>
             <Shell pathname={pathname}>{children}</Shell>
+            <DemandesWidget />
           </DatabaseUnavailableGate>
         </PlanningProvider>
       </div>

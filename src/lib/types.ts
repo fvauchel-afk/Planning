@@ -159,6 +159,28 @@ export type NewReceptionInput = {
   image_signature: string;
 };
 
+export const CATEGORIES_DEMANDE = ["commande", "suggestion_site"] as const;
+export type CategorieDemande = (typeof CATEGORIES_DEMANDE)[number];
+
+export const CATEGORIE_DEMANDE_LABELS: Record<CategorieDemande, string> = {
+  commande: "Commande",
+  suggestion_site: "Suggestion amélioration site",
+};
+
+export type Demande = {
+  id: string;
+  employe_id: string;
+  categorie: CategorieDemande;
+  message: string;
+  date_creation: string;
+};
+
+export type NewDemandeInput = {
+  categorie: CategorieDemande;
+  message: string;
+  employe_id?: string;
+};
+
 export type PlanningSnapshot = {
   employees: Employee[];
   chantiers: Chantier[];
@@ -167,6 +189,7 @@ export type PlanningSnapshot = {
   absences: Absence[];
   signalements: Signalement[];
   receptions: ReceptionChantier[];
+  demandes: Demande[];
   horaires: HoraireSaison[];
 };
 

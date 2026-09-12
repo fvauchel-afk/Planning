@@ -207,6 +207,7 @@ function runResizeSelfCheck() {
     absences: [],
     signalements: [],
     receptions: [],
+    demandes: [],
     horaires: [],
   };
 

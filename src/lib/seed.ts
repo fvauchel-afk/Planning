@@ -312,6 +312,7 @@ export function createSeedSnapshot(): PlanningSnapshot {
     ],
     signalements: [],
     receptions: [],
+    demandes: [],
     horaires: defaultHoraires(),
   };
 }
@@ -325,6 +326,7 @@ export function createEmptySnapshot(): PlanningSnapshot {
     absences: [],
     signalements: [],
     receptions: [],
+    demandes: [],
     horaires: defaultHoraires(),
   };
 }
