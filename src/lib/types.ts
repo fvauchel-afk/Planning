@@ -82,6 +82,8 @@ export type Chantier = {
   lien_dossier_onedrive: string | null;
   priorite: Priorite;
   date_creation: string;
+  /** Dates approximatives, pas encore confirmées. */
+  dates_estimatives?: boolean;
 };
 
 export type ElementChantier = {
@@ -212,6 +214,10 @@ export type NewChantierInput = {
   adresse: string;
   lien_dossier_onedrive: string | null;
   priorite: Priorite;
+  /** Fenêtre saisie à la création (recopiée sur les phases sans date). */
+  date_debut?: string | null;
+  date_fin?: string | null;
+  dates_estimatives?: boolean;
   elements: NewElementInput[];
 };
 
@@ -221,6 +227,7 @@ export type ChantierUpdateInput = {
   adresse: string;
   priorite: Priorite;
   lien_dossier_onedrive: string | null;
+  dates_estimatives?: boolean;
 };
 
 export type ScheduleChantierDayInput = {

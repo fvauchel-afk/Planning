@@ -71,6 +71,10 @@ export function loadLocalSnapshot(): PlanningSnapshot {
         ordre_affichage:
           employee.ordre_affichage ?? ordreAffichageFromNom(employee.nom),
       })),
+      chantiers: (parsed.chantiers ?? []).map((chantier) => ({
+        ...chantier,
+        dates_estimatives: Boolean(chantier.dates_estimatives),
+      })),
       horaires:
         parsed.horaires && parsed.horaires.length > 0
           ? parsed.horaires.map((row) => normalizeHoraire(row))
@@ -110,6 +114,7 @@ export function localCreateChantier(
     lien_dossier_onedrive: input.lien_dossier_onedrive,
     priorite: input.priorite,
     date_creation: new Date().toISOString().slice(0, 10),
+    dates_estimatives: Boolean(input.dates_estimatives),
   });
   for (const element of input.elements) {
     const elementId = newId();
@@ -405,6 +410,8 @@ export function localUpdateChantier(
           adresse: input.adresse,
           priorite: input.priorite,
           lien_dossier_onedrive: input.lien_dossier_onedrive,
+          dates_estimatives:
+            input.dates_estimatives ?? chantier.dates_estimatives,
         }
       : chantier,
   );

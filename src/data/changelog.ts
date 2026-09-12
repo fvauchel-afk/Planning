@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-12-dates-estimatives",
+    title: "Nouveau chantier",
+    items: [
+      "Vous pouvez indiquer une date de début (et une fin) estimative dès la création : elle s’affiche avec un badge « Estimatif » sur la fiche et sur les pastilles du planning, distinct des dates confirmées.",
+      "Si vous ne mettez aucune date, le logiciel cale tout seul le début au prochain jour ouvré disponible. Le salarié, lui, reste à assigner à la main si vous ne le choisissez pas.",
+    ],
+  },
+  {
     id: "2026-09-12-demandes-equipe",
     title: "Demandes",
     items: [

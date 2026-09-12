@@ -58,6 +58,9 @@ export function ChantierEditModal({
   const [planDate, setPlanDate] = useState(toISODate(new Date()));
   const [planEnd, setPlanEnd] = useState(toISODate(new Date()));
   const [planEmployeeId, setPlanEmployeeId] = useState("");
+  const [datesEstimatives, setDatesEstimatives] = useState(
+    Boolean(chantier.dates_estimatives),
+  );
   const [error, setError] = useState<string | null>(null);
 
   const info = useMemo(
@@ -83,6 +86,7 @@ export function ChantierEditModal({
     setAdresse(chantier.adresse);
     setLien(chantier.lien_dossier_onedrive ?? "");
     setPriorite(chantier.priorite);
+    setDatesEstimatives(Boolean(chantier.dates_estimatives));
     setError(null);
   }, [chantier]);
 
@@ -149,6 +153,7 @@ export function ChantierEditModal({
         adresse: adresse.trim(),
         priorite,
         lien_dossier_onedrive: lien.trim() || null,
+        dates_estimatives: datesEstimatives,
       });
       onClose();
     } catch (err) {
@@ -194,6 +199,7 @@ export function ChantierEditModal({
         <p className="mt-1 text-sm text-stone-500">
           {STATUT_CHANTIER_LABELS[info.statut]}
           {info.rangeLabel ? ` · ${info.rangeLabel}` : ""}
+          {datesEstimatives ? " · Estimatif" : ""}
         </p>
         <div className="mt-4 space-y-3">
           <label className="block text-sm">
@@ -248,6 +254,11 @@ export function ChantierEditModal({
           <fieldset className="rounded-lg border border-amber-200 bg-amber-50/50 p-3">
             <legend className="px-1 text-sm font-medium text-stone-800">
               Dates planifiées
+              {datesEstimatives ? (
+                <span className="ml-2 rounded border border-dashed border-violet-400 bg-violet-50 px-1.5 py-px text-[10px] font-semibold uppercase tracking-wide text-violet-800">
+                  Estimatif
+                </span>
+              ) : null}
             </legend>
             {isPlanned && !visibleOnGrid ? (
               <p className="mt-1 text-xs text-red-800">
@@ -274,6 +285,14 @@ export function ChantierEditModal({
                 className="w-full rounded border border-stone-300 bg-white px-3 py-2"
                 min={planDate || undefined}
               />
+            </label>
+            <label className="mt-3 flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={datesEstimatives}
+                onChange={(event) => setDatesEstimatives(event.target.checked)}
+              />
+              <span>Dates estimatives (pas encore confirmées)</span>
             </label>
             {visibleOnGrid ? (
               <p className="mt-2 text-xs text-stone-500">

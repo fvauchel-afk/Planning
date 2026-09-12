@@ -364,9 +364,11 @@ export function CalendarBoard() {
             <span
               key={chantier.id}
               className={`inline-flex items-center rounded-full border text-xs text-stone-700 ${
-                inView
-                  ? "border-stone-200 bg-white"
-                  : "border-dashed border-stone-300 bg-stone-50"
+                info.estimatif
+                  ? "border-dashed border-violet-300 bg-violet-50"
+                  : inView
+                    ? "border-stone-200 bg-white"
+                    : "border-dashed border-stone-300 bg-stone-50"
               }`}
             >
               <button
@@ -386,6 +388,11 @@ export function CalendarBoard() {
                   title={info.title}
                 />
                 {chantier.nom_client}
+                {info.estimatif ? (
+                  <span className="rounded bg-violet-200/80 px-1.5 py-px text-[10px] font-semibold uppercase tracking-wide text-violet-900">
+                    Estimatif
+                  </span>
+                ) : null}
                 <span className="text-stone-400">
                   {PRIORITE_LABELS[chantier.priorite]}
                   {inView ? "" : " · hors période"}
