@@ -6,6 +6,7 @@ export type ClientSession = {
   employeeId: string;
   nom: string;
   isAdmin: boolean;
+  canRestore?: boolean;
 };
 
 type SessionContextValue = {

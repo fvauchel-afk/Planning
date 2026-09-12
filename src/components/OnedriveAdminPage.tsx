@@ -10,58 +10,9 @@ type Status = {
   rootCached?: boolean;
 };
 
-type BackupCounts = Record<string, number>;
-
-function formatBackupMessage(json: {
-  fileName?: string;
-  createdAt?: string;
-  totalRows?: number;
-  counts?: BackupCounts;
-}): string {
-  const when = json.createdAt
-    ? new Date(json.createdAt).toLocaleString("fr-FR")
-    : new Date().toLocaleString("fr-FR");
-  const parts = json.counts
-    ? Object.entries(json.counts)
-        .map(([table, count]) => `${table} : ${count}`)
-        .join(" · ")
-    : "";
-  return `Sauvegarde terminée le ${when}. Fichier : ${json.fileName ?? "sauvegarde JSON"}. ${json.totalRows ?? 0} élément(s) enregistré(s)${parts ? ` (${parts})` : ""}.`;
-}
-
 export function OnedriveAdminPage() {
   const [status, setStatus] = useState<Status | null>(null);
   const [queryError, setQueryError] = useState<string | null>(null);
-  const [backingUp, setBackingUp] = useState(false);
-  const [backupMessage, setBackupMessage] = useState<string | null>(null);
-  const [backupError, setBackupError] = useState<string | null>(null);
-
-  async function runBackup() {
-    setBackingUp(true);
-    setBackupMessage(null);
-    setBackupError(null);
-    try {
-      const res = await fetch("/api/backup/run", { method: "POST" });
-      const json = (await res.json().catch(() => ({}))) as {
-        error?: string;
-        fileName?: string;
-        createdAt?: string;
-        totalRows?: number;
-        counts?: BackupCounts;
-      };
-      if (!res.ok) {
-        setBackupError(json.error || "Sauvegarde impossible.");
-        return;
-      }
-      setBackupMessage(formatBackupMessage(json));
-    } catch (err) {
-      setBackupError(
-        err instanceof Error ? err.message : "Sauvegarde impossible.",
-      );
-    } finally {
-      setBackingUp(false);
-    }
-  }
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -133,28 +84,12 @@ export function OnedriveAdminPage() {
       <div className="border-t border-stone-200 pt-4">
         <h3 className="font-medium text-stone-900">Sauvegarde</h3>
         <p className="mt-1 text-sm text-stone-600">
-          Copie JSON de toutes les données dans le dossier OneDrive « Sauvegardes ».
-          Un envoi automatique est prévu chaque lundi à 3h (heure UTC) une fois
-          déployé sur Vercel.
+          Les copies quotidiennes et la restauration se gèrent dans l’onglet{" "}
+          <a href="/sauvegarde" className="underline">
+            Sauvegarde
+          </a>
+          .
         </p>
-        <button
-          type="button"
-          disabled={backingUp || !connected}
-          onClick={() => void runBackup()}
-          className="mt-3 inline-flex min-h-11 items-center rounded-lg border border-stone-300 bg-white px-4 text-sm font-medium text-stone-900 disabled:opacity-50"
-        >
-          {backingUp ? "Sauvegarde en cours…" : "Lancer une sauvegarde maintenant"}
-        </button>
-        {backupMessage && (
-          <p className="mt-3 rounded border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
-            {backupMessage}
-          </p>
-        )}
-        {backupError && (
-          <p className="mt-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
-            {backupError}
-          </p>
-        )}
       </div>
     </section>
   );

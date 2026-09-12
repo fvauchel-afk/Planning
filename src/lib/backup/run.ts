@@ -51,13 +51,22 @@ async function fetchAllRows(
   return { rows, missing: false };
 }
 
-function parisDateStamp(date: Date): string {
-  return new Intl.DateTimeFormat("en-CA", {
+function parisStamp(date: Date): { day: string; time: string } {
+  const parts = new Intl.DateTimeFormat("fr-FR", {
     timeZone: "Europe/Paris",
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
-  }).format(date);
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
+  const get = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value ?? "";
+  return {
+    day: `${get("year")}-${get("month")}-${get("day")}`,
+    time: `${get("hour").padStart(2, "0")}${get("minute").padStart(2, "0")}`,
+  };
 }
 
 export async function runPlanningBackup(): Promise<BackupResult> {
@@ -88,7 +97,8 @@ export async function runPlanningBackup(): Promise<BackupResult> {
     missing_tables: missing,
   };
 
-  const fileName = `sauvegarde-planning-${parisDateStamp(new Date())}.json`;
+  const stamp = parisStamp(new Date());
+  const fileName = `sauvegarde-planning-${stamp.day}-${stamp.time}.json`;
   const uploaded = await uploadJsonToBackupFolder({
     fileName,
     jsonText: `${JSON.stringify(payload, null, 2)}\n`,

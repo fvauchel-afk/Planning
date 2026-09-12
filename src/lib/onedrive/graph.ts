@@ -208,12 +208,106 @@ export async function ensureChildFolder(name: string): Promise<{
   }
 }
 
+export async function getBackupFolder(): Promise<{
+  itemId: string;
+  driveId: string;
+}> {
+  const token = await getValidAccessToken();
+  const root = await getRootFolder();
+  for (const name of ["Sauvegarde", "Sauvegardes"]) {
+    try {
+      const existing = await graphFetch<DriveItem>(
+        token,
+        `/drives/${root.driveId}/items/${root.itemId}:/${encodeURIComponent(name)}`,
+      );
+      return {
+        itemId: existing.id,
+        driveId: existing.parentReference?.driveId || root.driveId,
+      };
+    } catch {
+      // dossier pas encore créé
+    }
+  }
+  return ensureChildFolder("Sauvegarde");
+}
+
+export type BackupFileMeta = {
+  id: string;
+  name: string;
+  createdAt: string;
+  lastModifiedAt: string;
+  size: number;
+  webUrl?: string;
+};
+
+export async function listBackupFiles(): Promise<BackupFileMeta[]> {
+  const token = await getValidAccessToken();
+  const folder = await getBackupFolder();
+  const page = await graphFetch<{
+    value?: Array<{
+      id: string;
+      name?: string;
+      size?: number;
+      file?: unknown;
+      folder?: unknown;
+      createdDateTime?: string;
+      lastModifiedDateTime?: string;
+      webUrl?: string;
+    }>;
+  }>(
+    token,
+    `/drives/${folder.driveId}/items/${folder.itemId}/children?$select=id,name,size,file,folder,createdDateTime,lastModifiedDateTime,webUrl&$top=200`,
+  );
+  return (page.value ?? [])
+    .filter(
+      (item) =>
+        item.file &&
+        !item.folder &&
+        (item.name ?? "").toLowerCase().endsWith(".json"),
+    )
+    .map((item) => ({
+      id: item.id,
+      name: item.name ?? "sauvegarde.json",
+      createdAt: item.createdDateTime ?? item.lastModifiedDateTime ?? "",
+      lastModifiedAt: item.lastModifiedDateTime ?? item.createdDateTime ?? "",
+      size: item.size ?? 0,
+      webUrl: item.webUrl,
+    }))
+    .sort((a, b) => (a.lastModifiedAt < b.lastModifiedAt ? 1 : -1));
+}
+
+export async function downloadBackupJson(itemId: string): Promise<string> {
+  const token = await getValidAccessToken();
+  const folder = await getBackupFolder();
+  const meta = await graphFetch<
+    DriveItem & { parentReference?: { id?: string; driveId?: string } }
+  >(
+    token,
+    `/drives/${folder.driveId}/items/${encodeURIComponent(itemId)}?$select=id,name,parentReference`,
+  );
+  const parentId = meta.parentReference?.id;
+  if (!parentId || parentId !== folder.itemId) {
+    throw new Error("Ce fichier n’est pas une sauvegarde du dossier Sauvegarde.");
+  }
+  const res = await fetch(
+    `https://graph.microsoft.com/v1.0/drives/${folder.driveId}/items/${encodeURIComponent(itemId)}/content`,
+    {
+      headers: { Authorization: `Bearer ${token}` },
+      redirect: "follow",
+    },
+  );
+  if (!res.ok) {
+    throw new Error(`Impossible de lire la sauvegarde (${res.status}).`);
+  }
+  return res.text();
+}
+
 export async function uploadJsonToBackupFolder(input: {
   fileName: string;
   jsonText: string;
 }): Promise<{ name: string; webUrl?: string }> {
   const token = await getValidAccessToken();
-  const folder = await ensureChildFolder("Sauvegardes");
+  const folder = await getBackupFolder();
   const safeName = sanitizeOnedriveName(input.fileName, "sauvegarde-planning.json");
   const encodedName = encodeURIComponent(safeName);
   const res = await fetch(
