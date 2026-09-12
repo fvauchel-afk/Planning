@@ -179,6 +179,16 @@ export function addMonths(iso: string, months: number): string {
   return toISODate(next);
 }
 
+const JOURS_LONGS = [
+  "dimanche",
+  "lundi",
+  "mardi",
+  "mercredi",
+  "jeudi",
+  "vendredi",
+  "samedi",
+];
+
 const MOIS_LONGS = [
   "janvier",
   "février",
@@ -197,6 +207,12 @@ const MOIS_LONGS = [
 export function formatMonthYear(iso: string): string {
   const date = parseISODate(iso);
   return `${MOIS_LONGS[date.getMonth()]} ${date.getFullYear()}`;
+}
+
+/** Ex. « jeudi 10 septembre » (sans l’année). */
+export function formatDisplayedDay(iso: string): string {
+  const date = parseISODate(iso);
+  return `${JOURS_LONGS[date.getDay()]} ${date.getDate()} ${MOIS_LONGS[date.getMonth()]}`;
 }
 
 export function compareIso(a: string, b: string): number {
