@@ -5,8 +5,9 @@ import { useRouter } from "next/navigation";
 import {
   STATUT_CHANTIER_LABELS,
   chantierPlanningInfo,
+  shiftChantierPhasePatches,
 } from "@/lib/chantier-status";
-import { toISODate } from "@/lib/dates";
+import { addDays, calendarDaysBetween, toISODate } from "@/lib/dates";
 import { compareEmployeesByOrdre } from "@/lib/display-order";
 import { usePlanning } from "@/lib/planning-context";
 import {
@@ -20,6 +21,14 @@ import {
 const DELETE_CONFIRM =
   "Êtes-vous sûr ? Cette action est irréversible et supprimera aussi toutes les phases planifiées liées.";
 
+function onedriveHref(raw: string): string | null {
+  const value = raw.trim();
+  if (!value) return null;
+  if (/^https?:\/\//i.test(value)) return value;
+  if (/^[a-z][a-z0-9+.-]*:/i.test(value)) return null;
+  return `https://${value}`;
+}
+
 export function ChantierEditModal({
   chantier,
   onClose,
@@ -28,8 +37,13 @@ export function ChantierEditModal({
   onClose: () => void;
 }) {
   const router = useRouter();
-  const { snapshot, updateChantier, deleteChantier, scheduleChantierDay } =
-    usePlanning();
+  const {
+    snapshot,
+    updateChantier,
+    deleteChantier,
+    scheduleChantierDay,
+    applyPhasePatches,
+  } = usePlanning();
   const [nomClient, setNomClient] = useState(chantier.nom_client);
   const [adresse, setAdresse] = useState(chantier.adresse);
   const [lien, setLien] = useState(chantier.lien_dossier_onedrive ?? "");
@@ -45,6 +59,7 @@ export function ChantierEditModal({
     () => chantierPlanningInfo(snapshot, chantier.id),
     [snapshot, chantier.id],
   );
+  const isPlanned = Boolean(info.firstDate && info.lastDate);
 
   const activeEmployees = useMemo(
     () =>
@@ -63,12 +78,20 @@ export function ChantierEditModal({
   }, [chantier]);
 
   useEffect(() => {
+    setPlanDate(info.firstDate ?? toISODate(new Date()));
+  }, [chantier.id, info.firstDate]);
+
+  useEffect(() => {
     if (!planEmployeeId && activeEmployees[0]) {
       setPlanEmployeeId(activeEmployees[0].id);
     }
   }, [activeEmployees, planEmployeeId]);
 
-  const onedriveUrl = lien.trim() || chantier.lien_dossier_onedrive?.trim() || "";
+  const previewEnd =
+    isPlanned && info.lastDate && info.firstDate && planDate
+      ? addDays(info.lastDate, calendarDaysBetween(info.firstDate, planDate))
+      : "";
+  const onedriveUrl = onedriveHref(lien || chantier.lien_dossier_onedrive || "");
   const busy = saving || scheduling || deleting;
 
   async function onSubmit(event: React.FormEvent) {
@@ -80,6 +103,14 @@ export function ChantierEditModal({
     setSaving(true);
     setError(null);
     try {
+      if (isPlanned && info.firstDate && planDate && planDate !== info.firstDate) {
+        const patches = shiftChantierPhasePatches(
+          snapshot,
+          chantier.id,
+          calendarDaysBetween(info.firstDate, planDate),
+        );
+        if (patches.length) await applyPhasePatches(patches);
+      }
       await updateChantier({
         id: chantier.id,
         nom_client: nomClient.trim(),
@@ -188,54 +219,70 @@ export function ChantierEditModal({
               href={onedriveUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex rounded border border-sky-700 px-3 py-2 text-sm text-sky-800 hover:bg-sky-50"
+              className="inline-flex w-full items-center justify-center rounded border border-sky-700 bg-sky-50 px-3 py-2 text-sm font-medium text-sky-800 hover:bg-sky-100"
             >
               Ouvrir le dossier OneDrive
             </a>
           ) : null}
 
-          {info.statut === "non_planifie" ? (
-            <fieldset className="rounded-lg border border-amber-200 bg-amber-50/50 p-3">
-              <legend className="px-1 text-sm font-medium text-stone-800">
-                Planifier ce chantier
-              </legend>
+          <fieldset className="rounded-lg border border-amber-200 bg-amber-50/50 p-3">
+            <legend className="px-1 text-sm font-medium text-stone-800">
+              Dates planifiées
+            </legend>
+            <label className="mt-2 block text-sm">
+              <span className="mb-1 block">Date de début</span>
+              <input
+                type="date"
+                value={planDate}
+                onChange={(event) => setPlanDate(event.target.value)}
+                className="w-full rounded border border-stone-300 bg-white px-3 py-2"
+              />
+            </label>
+            {isPlanned ? (
               <label className="mt-2 block text-sm">
-                <span className="mb-1 block">Date de début</span>
+                <span className="mb-1 block">Date de fin</span>
                 <input
                   type="date"
-                  value={planDate}
-                  onChange={(event) => setPlanDate(event.target.value)}
-                  className="w-full rounded border border-stone-300 bg-white px-3 py-2"
+                  value={previewEnd}
+                  readOnly
+                  className="w-full rounded border border-stone-300 bg-stone-50 px-3 py-2 text-stone-700"
                 />
+                <span className="mt-1 block text-xs text-stone-500">
+                  Modifier le début décale toutes les phases déjà planifiées (salariés
+                  et créneaux conservés). Enregistrez pour appliquer.
+                </span>
               </label>
-              <label className="mt-2 block text-sm">
-                <span className="mb-1 block">Salarié</span>
-                <select
-                  value={planEmployeeId}
-                  onChange={(event) => setPlanEmployeeId(event.target.value)}
-                  className="w-full rounded border border-stone-300 bg-white px-3 py-2"
+            ) : (
+              <>
+                <label className="mt-2 block text-sm">
+                  <span className="mb-1 block">Salarié</span>
+                  <select
+                    value={planEmployeeId}
+                    onChange={(event) => setPlanEmployeeId(event.target.value)}
+                    className="w-full rounded border border-stone-300 bg-white px-3 py-2"
+                  >
+                    {activeEmployees.length === 0 ? (
+                      <option value="">Aucun salarié actif</option>
+                    ) : (
+                      activeEmployees.map((employee) => (
+                        <option key={employee.id} value={employee.id}>
+                          {employee.nom}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  disabled={busy || !planEmployeeId}
+                  onClick={() => void onPlanifier()}
+                  className="mt-3 rounded bg-amber-700 px-3 py-2 text-sm text-amber-50 disabled:opacity-60"
                 >
-                  {activeEmployees.length === 0 ? (
-                    <option value="">Aucun salarié actif</option>
-                  ) : (
-                    activeEmployees.map((employee) => (
-                      <option key={employee.id} value={employee.id}>
-                        {employee.nom}
-                      </option>
-                    ))
-                  )}
-                </select>
-              </label>
-              <button
-                type="button"
-                disabled={busy || !planEmployeeId}
-                onClick={() => void onPlanifier()}
-                className="mt-3 rounded bg-amber-700 px-3 py-2 text-sm text-amber-50 disabled:opacity-60"
-              >
-                {scheduling ? "Planification…" : "Planifier"}
-              </button>
-            </fieldset>
-          ) : null}
+                  {scheduling ? "Planification…" : "Planifier"}
+                </button>
+              </>
+            )}
+          </fieldset>
         </div>
         {error && <p className="mt-3 text-sm text-red-700">{error}</p>}
         <div className="mt-5 flex justify-end gap-2">

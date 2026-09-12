@@ -1,5 +1,5 @@
-import { formatIsoFr, toISODate } from "@/lib/dates";
-import type { PlanningSnapshot, Role, TypePhase } from "@/lib/types";
+import { addDays, calendarDaysBetween, formatIsoFr, toISODate } from "@/lib/dates";
+import type { PhasePatch, PlanningSnapshot, Role, TypePhase } from "@/lib/types";
 
 export const STATUTS_CHANTIER = [
   "non_planifie",
@@ -83,6 +83,33 @@ export function chantierPlanningInfo(
   return { statut, firstDate, lastDate, rangeLabel, title };
 }
 
+export function shiftChantierPhasePatches(
+  snapshot: PlanningSnapshot,
+  chantierId: string,
+  days: number,
+): PhasePatch[] {
+  if (!days) return [];
+  const elementIds = new Set(
+    snapshot.elements
+      .filter((element) => element.chantier_id === chantierId)
+      .map((element) => element.id),
+  );
+  const patches: PhasePatch[] = [];
+  for (const phase of snapshot.phases) {
+    if (!elementIds.has(phase.element_id) || !phase.date_debut) continue;
+    const start = phase.date_debut.slice(0, 10);
+    const end = (phase.date_fin || phase.date_debut).slice(0, 10);
+    patches.push({
+      id: phase.id,
+      date_debut: addDays(start, days),
+      date_fin: addDays(end, days),
+      employe_id: phase.employe_id,
+      heure_debut: phase.heure_debut ?? null,
+    });
+  }
+  return patches;
+}
+
 function runChantierStatusSelfCheck() {
   if (statutChantierFromRange(null, null, "2026-09-11") !== "non_planifie") {
     throw new Error("chantier-status: sans dates → non planifié");
@@ -95,6 +122,9 @@ function runChantierStatusSelfCheck() {
   }
   if (statutChantierFromRange("2026-09-01", "2026-09-10", "2026-09-11") !== "termine") {
     throw new Error("chantier-status: fin passée → terminé");
+  }
+  if (calendarDaysBetween("2026-09-10", "2026-09-12") !== 2) {
+    throw new Error("chantier-status: décalage calendaire");
   }
 }
 

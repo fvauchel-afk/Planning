@@ -32,6 +32,12 @@ export function addDays(iso: string, days: number): string {
   return toISODate(date);
 }
 
+export function calendarDaysBetween(fromIso: string, toIso: string): number {
+  const from = parseISODate(fromIso);
+  const to = parseISODate(toIso);
+  return Math.round((to.getTime() - from.getTime()) / 86400000);
+}
+
 export function startOfWeekMonday(date: Date): Date {
   const copy = new Date(date.getFullYear(), date.getMonth(), date.getDate());
   const day = copy.getDay();
