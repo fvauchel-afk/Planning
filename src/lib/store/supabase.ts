@@ -1,5 +1,6 @@
 import "server-only";
 import { asAdminFlag } from "@/lib/auth/ids";
+import { phaseTypeForRoles } from "@/lib/chantier-status";
 import { compareEmployeesByOrdre, ordreAffichageFromNom } from "@/lib/display-order";
 import { defaultHoraires, normalizeHoraire, normalizeHorairesEmploye } from "@/lib/engine/hours";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -19,6 +20,7 @@ import type {
   NewAbsenceInput,
   NewChantierInput,
   ChantierUpdateInput,
+  ScheduleChantierDayInput,
   NewEmployeeInput,
   NewReceptionInput,
   NewSignalementInput,
@@ -317,6 +319,95 @@ export async function supabaseUpdateChantier(
     })
     .eq("id", input.id);
   if (error) throw wrapSupabaseError(error);
+}
+
+export async function supabaseDeleteChantier(chantierId: string): Promise<void> {
+  const supabase = createSupabaseServerClient();
+  const { error } = await supabase.from("chantiers").delete().eq("id", chantierId);
+  if (error) throw wrapSupabaseError(error);
+}
+
+export async function supabaseScheduleChantierDay(
+  input: ScheduleChantierDayInput,
+): Promise<void> {
+  const supabase = createSupabaseServerClient();
+  const { data: employee, error: employeeError } = await supabase
+    .from("employees")
+    .select("id, roles, actif")
+    .eq("id", input.employeeId)
+    .maybeSingle();
+  if (employeeError) throw wrapSupabaseError(employeeError);
+  if (!employee || employee.actif === false) {
+    throw wrapSupabaseError(new Error("Salarié introuvable ou inactif."));
+  }
+  const typePhase = phaseTypeForRoles((employee.roles ?? []) as Role[]);
+
+  let elementId: string | null = null;
+  const existing = await supabase
+    .from("elements_chantier")
+    .select("id")
+    .eq("chantier_id", input.chantierId)
+    .order("nom_element")
+    .limit(1);
+  if (existing.error) throw wrapSupabaseError(existing.error);
+  const existingId = existing.data?.[0]?.id;
+  if (existingId) {
+    elementId = String(existingId);
+  } else {
+    const created = await supabase
+      .from("elements_chantier")
+      .insert({ chantier_id: input.chantierId, nom_element: "Travaux" })
+      .select("id")
+      .single();
+    if (created.error || !created.data?.id) {
+      throw wrapSupabaseError(
+        created.error ?? new Error("Création de l’élément impossible."),
+      );
+    }
+    elementId = String(created.data.id);
+  }
+
+  const rows = [
+    {
+      element_id: elementId,
+      type_phase: typePhase,
+      duree_estimee_heures: 4,
+      date_debut: input.date,
+      date_fin: input.date,
+      heure_debut: "07:30",
+      employe_id: typePhase === "logistique" ? null : input.employeeId,
+      statut: "a_faire",
+      urgent: false,
+      heures_supplementaires_par_jour: 0,
+    },
+    {
+      element_id: elementId,
+      type_phase: typePhase,
+      duree_estimee_heures: 3,
+      date_debut: input.date,
+      date_fin: input.date,
+      heure_debut: "13:00",
+      employe_id: typePhase === "logistique" ? null : input.employeeId,
+      statut: "a_faire",
+      urgent: false,
+      heures_supplementaires_par_jour: 0,
+    },
+  ];
+  const { error: phaseError } = await supabase.from("phases_planning").insert(rows);
+  if (phaseError) {
+    if (isMissingColumnError(phaseError, "heure_debut")) {
+      const { error: retry } = await supabase.from("phases_planning").insert(
+        rows.map((row) => {
+          const payload = { ...row };
+          delete (payload as { heure_debut?: string }).heure_debut;
+          return payload;
+        }),
+      );
+      if (retry) throw wrapSupabaseError(retry);
+      return;
+    }
+    throw wrapSupabaseError(phaseError);
+  }
 }
 
 export async function supabaseUpsertEmployee(

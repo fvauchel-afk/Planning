@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Fraunces, Source_Sans_3 } from "next/font/google";
 import { ClientFrame } from "@/components/ClientFrame";
-import { PwaRegister } from "@/components/PwaRegister";
 import "./globals.css";
 
 const serif = Fraunces({
@@ -49,7 +48,6 @@ export default function RootLayout({
     <html lang="fr">
       <body className={`${serif.variable} ${sans.variable} font-sans antialiased`}>
         <ClientFrame>{children}</ClientFrame>
-        <PwaRegister />
       </body>
     </html>
   );

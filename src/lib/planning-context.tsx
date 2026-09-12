@@ -26,6 +26,8 @@ import {
   localSetReceptionOnedriveErreur,
   localSetSignalementStatut,
   localUpdateChantier,
+  localDeleteChantier,
+  localScheduleChantierDay,
   localUpsertEmployee,
   loadLocalSnapshot,
 } from "@/lib/store/local";
@@ -36,6 +38,7 @@ import type {
   NewAbsenceInput,
   NewChantierInput,
   ChantierUpdateInput,
+  ScheduleChantierDayInput,
   NewEmployeeInput,
   HoraireSaison,
   NewReceptionInput,
@@ -53,6 +56,8 @@ type PlanningContextValue = {
   refresh: () => Promise<void>;
   createChantier: (input: NewChantierInput) => Promise<void>;
   updateChantier: (input: ChantierUpdateInput) => Promise<void>;
+  deleteChantier: (chantierId: string) => Promise<void>;
+  scheduleChantierDay: (input: ScheduleChantierDayInput) => Promise<void>;
   upsertEmployee: (input: NewEmployeeInput & { id?: string }) => Promise<void>;
   createAbsence: (input: NewAbsenceInput) => Promise<void>;
   deleteAbsence: (id: string) => Promise<void>;
@@ -193,6 +198,30 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
         return;
       }
       setSnapshot((current) => localUpdateChantier(current, input));
+    },
+    [supabaseConfigured, refresh],
+  );
+
+  const deleteChantier = useCallback(
+    async (chantierId: string) => {
+      if (supabaseConfigured) {
+        await planningMutate({ action: "deleteChantier", chantierId });
+        await refresh();
+        return;
+      }
+      setSnapshot((current) => localDeleteChantier(current, chantierId));
+    },
+    [supabaseConfigured, refresh],
+  );
+
+  const scheduleChantierDay = useCallback(
+    async (input: ScheduleChantierDayInput) => {
+      if (supabaseConfigured) {
+        await planningMutate({ action: "scheduleChantierDay", input });
+        await refresh();
+        return;
+      }
+      setSnapshot((current) => localScheduleChantierDay(current, input));
     },
     [supabaseConfigured, refresh],
   );
@@ -371,6 +400,8 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
       refresh,
       createChantier,
       updateChantier,
+      deleteChantier,
+      scheduleChantierDay,
       upsertEmployee,
       createAbsence,
       deleteAbsence,
@@ -390,6 +421,8 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
       refresh,
       createChantier,
       updateChantier,
+      deleteChantier,
+      scheduleChantierDay,
       upsertEmployee,
       createAbsence,
       deleteAbsence,
