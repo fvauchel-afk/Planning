@@ -25,6 +25,7 @@ import {
   endOfMonthIso,
   formatDayHeader,
   formatLongDate,
+  formatDisplayedDay,
   formatMonthYear,
   isSunday,
   startOfMonthIso,
@@ -103,7 +104,7 @@ export function CalendarBoard() {
       ? formatMonthYear(cursorIso)
       : view === "week"
         ? `${formatDayHeader(rangeStart).date} – ${formatDayHeader(rangeEnd).date}`
-        : formatLongDate(cursorIso);
+        : formatDisplayedDay(cursorIso);
   const rows = useMemo(
     () => planningRows(snapshot.employees),
     [snapshot.employees],
@@ -293,9 +294,10 @@ export function CalendarBoard() {
             <button
               type="button"
               onClick={goToday}
-              className="rounded border border-stone-300 bg-white px-3 py-1.5 text-sm"
+              title="Revenir à aujourd’hui"
+              className="min-w-[9.5rem] rounded border border-stone-300 bg-white px-3 py-1.5 text-sm font-medium capitalize text-stone-800"
             >
-              Aujourd&apos;hui
+              {periodLabel}
             </button>
             <button
               type="button"
@@ -304,9 +306,6 @@ export function CalendarBoard() {
             >
               →
             </button>
-            <span className="ml-1 text-sm font-medium capitalize text-stone-700">
-              {periodLabel}
-            </span>
           </div>
         </div>
       </div>

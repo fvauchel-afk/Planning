@@ -11,6 +11,13 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-12-periode-bouton-planning",
+    title: "Planning",
+    items: [
+      "Entre les flèches du planning, le bouton affiche le mois, la semaine ou le jour que vous voyez. Un clic ramène à aujourd’hui.",
+    ],
+  },
+  {
     id: "2026-09-12-sauvegarde-onedrive",
     title: "Sauvegarde",
     items: [
