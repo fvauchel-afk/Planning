@@ -305,6 +305,7 @@ export async function downloadBackupJson(itemId: string): Promise<string> {
 export async function uploadJsonToBackupFolder(input: {
   fileName: string;
   jsonText: string;
+  failIfExists?: boolean;
 }): Promise<{ name: string; webUrl?: string }> {
   const token = await getValidAccessToken();
   const folder = await getBackupFolder();
@@ -317,16 +318,26 @@ export async function uploadJsonToBackupFolder(input: {
       headers: {
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json; charset=utf-8",
-        Prefer: "conflictBehavior=rename",
+        Prefer: input.failIfExists
+          ? "conflictBehavior=fail"
+          : "conflictBehavior=rename",
       },
       body: new TextEncoder().encode(input.jsonText),
     },
   );
   const json = (await res.json().catch(() => ({}))) as DriveItem & GraphErrorBody;
   if (!res.ok) {
-    throw new Error(
-      json.error?.message || `Envoi de la sauvegarde OneDrive impossible (${res.status}).`,
-    );
+    const message =
+      json.error?.message || `Envoi de la sauvegarde OneDrive impossible (${res.status}).`;
+    if (
+      input.failIfExists &&
+      (res.status === 409 ||
+        json.error?.code === "nameAlreadyExists" ||
+        /already exists|nameAlreadyExists/i.test(message))
+    ) {
+      throw new Error("BACKUP_ALREADY_EXISTS");
+    }
+    throw new Error(message);
   }
   return { name: json.name || safeName, webUrl: json.webUrl };
 }

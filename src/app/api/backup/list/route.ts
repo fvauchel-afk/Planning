@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionFromRequest, resolveSession } from "@/lib/auth/guard";
 import { canRestorePlanning } from "@/lib/auth/restore-access";
+import { parseBackupFileName } from "@/lib/backup/meta";
 import { listBackupFiles } from "@/lib/onedrive/graph";
 import { wrapSupabaseError } from "@/lib/supabase/errors";
 
@@ -12,7 +13,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Accès refusé." }, { status: 403 });
   }
   try {
-    const files = await listBackupFiles();
+    const files = (await listBackupFiles()).map((file) => ({
+      ...file,
+      ...parseBackupFileName(file.name),
+    }));
     return NextResponse.json({
       files,
       canRestore: canRestorePlanning(session.nom),

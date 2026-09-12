@@ -12,6 +12,9 @@ type BackupFile = {
   lastModifiedAt: string;
   size: number;
   webUrl?: string;
+  kindLabel?: string;
+  trigger?: string | null;
+  changelogTitle?: string | null;
 };
 
 function formatWhen(iso: string): string {
@@ -195,6 +198,9 @@ export function SauvegardePage() {
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium text-stone-900">
                     {formatWhen(file.createdAt || file.lastModifiedAt)}
+                  </p>
+                  <p className="text-sm text-stone-700">
+                    {file.kindLabel ?? "Sauvegarde"}
                   </p>
                   <p className="truncate text-xs text-stone-500">{file.name}</p>
                 </div>

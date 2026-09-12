@@ -1,4 +1,7 @@
 import "server-only";
+import { CHANGELOG } from "@/data/changelog";
+import { appBuildId } from "@/lib/app-build-id";
+import { latestChangelog, type BackupTrigger } from "@/lib/backup/meta";
 import { uploadJsonToBackupFolder } from "@/lib/onedrive/graph";
 import { loadOnedriveTokens } from "@/lib/onedrive/tokens";
 import { isMissingSchemaError } from "@/lib/supabase/errors";
@@ -24,6 +27,12 @@ export type BackupResult = {
   createdAt: string;
   counts: Record<BackupTableName, number>;
   totalRows: number;
+  trigger: BackupTrigger;
+};
+
+export type BackupRunOptions = {
+  trigger?: BackupTrigger;
+  buildId?: string;
 };
 
 const PAGE_SIZE = 1000;
@@ -69,7 +78,24 @@ function parisStamp(date: Date): { day: string; time: string } {
   };
 }
 
-export async function runPlanningBackup(): Promise<BackupResult> {
+function backupFileName(options: {
+  trigger: BackupTrigger;
+  buildId: string;
+  changelogId: string;
+}): string {
+  const stamp = parisStamp(new Date());
+  if (options.trigger === "deploy") {
+    return `sauvegarde__deploy__${options.buildId.slice(0, 12)}__${options.changelogId}.json`;
+  }
+  if (options.trigger === "daily") {
+    return `sauvegarde-${stamp.day}-${stamp.time}__quotidienne.json`;
+  }
+  return `sauvegarde-${stamp.day}-${stamp.time}__manuelle.json`;
+}
+
+export async function runPlanningBackup(
+  options: BackupRunOptions = {},
+): Promise<BackupResult> {
   const tokens = await loadOnedriveTokens();
   if (!tokens?.refresh_token) {
     throw new Error(
@@ -77,6 +103,9 @@ export async function runPlanningBackup(): Promise<BackupResult> {
     );
   }
 
+  const trigger = options.trigger ?? "manual";
+  const buildId = options.buildId || appBuildId();
+  const changelog = latestChangelog();
   const createdAt = new Date().toISOString();
   const tables: Record<string, unknown[]> = {};
   const counts = {} as Record<BackupTableName, number>;
@@ -93,15 +122,24 @@ export async function runPlanningBackup(): Promise<BackupResult> {
     app: "planning-vauchel",
     created_at: createdAt,
     timezone: "Europe/Paris",
+    trigger,
+    build_id: buildId,
+    changelog_id: changelog?.id ?? null,
+    changelog_title: changelog?.title ?? null,
+    changelog: CHANGELOG.slice(0, 1),
     tables,
     missing_tables: missing,
   };
 
-  const stamp = parisStamp(new Date());
-  const fileName = `sauvegarde-planning-${stamp.day}-${stamp.time}.json`;
+  const fileName = backupFileName({
+    trigger,
+    buildId,
+    changelogId: changelog?.id ?? "version",
+  });
   const uploaded = await uploadJsonToBackupFolder({
     fileName,
     jsonText: `${JSON.stringify(payload, null, 2)}\n`,
+    failIfExists: trigger === "deploy",
   });
 
   const totalRows = TABLES.reduce((sum, table) => sum + counts[table], 0);
@@ -111,5 +149,6 @@ export async function runPlanningBackup(): Promise<BackupResult> {
     createdAt,
     counts,
     totalRows,
+    trigger,
   };
 }
