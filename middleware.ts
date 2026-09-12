@@ -13,6 +13,8 @@ function isPublicPath(pathname: string): boolean {
   if (pathname === "/api/onedrive/callback") return true;
   if (pathname === "/api/backup/run") return true;
   if (pathname === "/sw.js") return true;
+  if (pathname === "/api/sw") return true;
+  if (pathname === "/api/version") return true;
   if (pathname === "/manifest.webmanifest" || pathname === "/manifest.json") {
     return true;
   }

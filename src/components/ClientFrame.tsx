@@ -2,6 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
+import { PwaRegister } from "@/components/PwaRegister";
 import { SessionProvider, useSession } from "@/lib/auth/session-context";
 import { PlanningProvider } from "@/lib/planning-context";
 
@@ -24,12 +25,18 @@ export function ClientFrame({ children }: { children: React.ReactNode }) {
   const login = pathname === "/connexion";
 
   if (login) {
-    return <SessionProvider>{children}</SessionProvider>;
+    return (
+      <SessionProvider>
+        <PwaRegister />
+        {children}
+      </SessionProvider>
+    );
   }
 
   return (
     <SessionProvider>
       <PlanningProvider>
+        <PwaRegister />
         <Shell pathname={pathname}>{children}</Shell>
       </PlanningProvider>
     </SessionProvider>
