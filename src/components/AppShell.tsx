@@ -14,6 +14,7 @@ const ADMIN_LINKS: { href: string; label: string }[] = [
   { href: "/absences", label: "Absences" },
   { href: "/signalements", label: "Signalements" },
   { href: "/admin/onedrive", label: "OneDrive" },
+  { href: "/sauvegarde", label: "Sauvegarde" },
   { href: "/moi", label: "Mon planning" },
 ];
 

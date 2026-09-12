@@ -11,6 +11,15 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-12-sauvegarde-onedrive",
+    title: "Sauvegarde",
+    items: [
+      "Une copie de sécurité est enregistrée chaque jour dans le dossier OneDrive « Sauvegarde ».",
+      "L’onglet Sauvegarde montre la liste de ces copies et ce qui a changé dans l’application.",
+      "Jonathan et Mika peuvent restaurer une copie, après une double confirmation, pour revenir à cet état.",
+    ],
+  },
+  {
     id: "2026-09-12-fin-chantier-ecran-maj",
     title: "Mise à jour",
     items: [

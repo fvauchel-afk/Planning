@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession, resolveSession } from "@/lib/auth/guard";
+import { canRestorePlanning } from "@/lib/auth/restore-access";
 import { hasSupabaseServiceRole } from "@/lib/supabase/server";
 
 export async function GET() {
@@ -12,6 +13,7 @@ export async function GET() {
       employeeId: session.employeeId,
       nom: session.nom,
       isAdmin: session.isAdmin,
+      canRestore: canRestorePlanning(session.nom),
     },
     hasServiceRole: hasSupabaseServiceRole(),
   });

@@ -1,6 +1,6 @@
--- Réinitialisation planning : vide chantiers et données liées.
--- Ne touche PAS à public.employees (PIN, rôles, horaires, admins).
--- À exécuter dans Supabase → SQL Editor.
+-- MANUEL UNIQUEMENT — ne jamais exécuter depuis une migration ou un déploiement.
+-- Vide les chantiers. Ne touche pas aux salariés.
+-- À lancer seulement si un administrateur le demande explicitement dans l’éditeur SQL.
 
 begin;
 

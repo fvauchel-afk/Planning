@@ -1,3 +1,4 @@
+-- MANUEL UNIQUEMENT — ne jamais lancer depuis une migration ou un déploiement.
 -- Nettoyage des chantiers de test + import des 15 chantiers + planning Excel.
 -- À coller et exécuter EN ENTIER dans Supabase → SQL Editor.
 --
