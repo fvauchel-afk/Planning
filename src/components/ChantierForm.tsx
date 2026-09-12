@@ -13,6 +13,10 @@ import {
   type SlotConflict,
 } from "@/lib/engine/planner";
 import { PlacementConflictPanel } from "@/components/PlacementConflictPanel";
+import {
+  ensureChantierDatesOnCreate,
+  inputHasExplicitDates,
+} from "@/lib/engine/earliest-date";
 import { usePlanning } from "@/lib/planning-context";
 import {
   PHASE_LABELS,
@@ -61,6 +65,9 @@ export function ChantierForm() {
   const [lien, setLien] = useState("");
   const [priorite, setPriorite] = useState<Priorite>("normal");
   const [urgent, setUrgent] = useState(false);
+  const [dateDebut, setDateDebut] = useState("");
+  const [dateFin, setDateFin] = useState("");
+  const [datesEstimatives, setDatesEstimatives] = useState(true);
   const [elements, setElements] = useState<ElementForm[]>([
     { key: "el-1", nom_element: "", phases: emptyPhases() },
   ]);
@@ -120,6 +127,9 @@ export function ChantierForm() {
       adresse: adresse.trim(),
       lien_dossier_onedrive: lien.trim() || null,
       priorite,
+      date_debut: dateDebut || null,
+      date_fin: dateFin || dateDebut || null,
+      dates_estimatives: datesEstimatives,
       elements: namedElements.map((element) => ({
         nom_element: element.nom_element.trim(),
         phases: element.phases.map((phase) => ({
@@ -171,7 +181,7 @@ export function ChantierForm() {
     event.preventDefault();
     const input = buildInput();
     if (!input) return;
-    await saveInput(input);
+    await saveInput(ensureChantierDatesOnCreate(snapshot, input));
   }
 
   async function onAutoPlace() {
@@ -206,7 +216,14 @@ export function ChantierForm() {
     } else {
       setInfo(result.message);
     }
-    await saveInput(merged);
+    await saveInput(
+      ensureChantierDatesOnCreate(snapshot, {
+        ...merged,
+        dates_estimatives: inputHasExplicitDates(input)
+          ? Boolean(input.dates_estimatives)
+          : true,
+      }),
+    );
   }
 
   async function validateConflict() {
@@ -272,7 +289,12 @@ export function ChantierForm() {
       return;
     }
     setInfo(result.message);
-    await saveInput(mergePlanIntoInput(forced, result.phases, true));
+    await saveInput(
+      ensureChantierDatesOnCreate(
+        snapshot,
+        mergePlanIntoInput(forced, result.phases, true),
+      ),
+    );
   }
 
   async function adjustConflict() {
@@ -293,7 +315,12 @@ export function ChantierForm() {
     setInfo(
       "Placement à la suite, sans décalage des chantiers existants. " + result.message,
     );
-    await saveInput(mergePlanIntoInput(withoutForcedDates, result.phases, urgent));
+    await saveInput(
+      ensureChantierDatesOnCreate(
+        snapshot,
+        mergePlanIntoInput(withoutForcedDates, result.phases, urgent),
+      ),
+    );
   }
 
   return (
@@ -312,9 +339,10 @@ export function ChantierForm() {
       <div>
         <h2 className="font-serif text-3xl text-stone-900">Nouveau chantier</h2>
         <p className="mt-1 text-sm text-stone-600">
-          Saisissez les durées par phase, puis placez automatiquement (sans
-          écraser l’existant). Le délai logistique est calé entre 10 et 12 jours
-          ouvrés.
+          Vous pouvez indiquer une date de début (et une fin) estimative ou
+          confirmée. Si vous n’en mettez aucune, le logiciel cale tout seul le
+          début au prochain jour ouvré disponible. L’assignation d’un salarié
+          reste manuelle, sauf si vous utilisez « Placer automatiquement ».
         </p>
       </div>
 
@@ -407,6 +435,61 @@ export function ChantierForm() {
             (insertion possible entre deux affaires, après validation)
           </span>
         </label>
+        <fieldset className="md:col-span-2 rounded-lg border border-violet-200 bg-violet-50/40 p-3">
+          <legend className="px-1 text-sm font-medium text-stone-800">
+            Dates du chantier
+          </legend>
+          <p className="text-xs text-stone-600">
+            Laissez vide pour un calage automatique au plus tôt. Les dates
+            estimatives restent visuellement distinctes tant qu’elles ne sont
+            pas confirmées.
+          </p>
+          <div className="mt-2 grid gap-3 sm:grid-cols-2">
+            <label className="block text-sm">
+              <span className="mb-1 block font-medium">Début</span>
+              <input
+                type="date"
+                value={dateDebut}
+                onChange={(event) => {
+                  const next = event.target.value;
+                  setDateDebut(next);
+                  if (dateFin && next && dateFin < next) setDateFin(next);
+                }}
+                className="w-full rounded border border-stone-300 bg-white px-3 py-2"
+              />
+            </label>
+            <label className="block text-sm">
+              <span className="mb-1 block font-medium">Fin (optionnel)</span>
+              <input
+                type="date"
+                value={dateFin}
+                min={dateDebut || undefined}
+                onChange={(event) => setDateFin(event.target.value)}
+                className="w-full rounded border border-stone-300 bg-white px-3 py-2"
+              />
+            </label>
+          </div>
+          <div className="mt-3 flex flex-wrap gap-4 text-sm">
+            <label className="inline-flex items-center gap-2">
+              <input
+                type="radio"
+                name="dates-kind"
+                checked={datesEstimatives}
+                onChange={() => setDatesEstimatives(true)}
+              />
+              Estimatif
+            </label>
+            <label className="inline-flex items-center gap-2">
+              <input
+                type="radio"
+                name="dates-kind"
+                checked={!datesEstimatives}
+                onChange={() => setDatesEstimatives(false)}
+              />
+              Confirmé
+            </label>
+          </div>
+        </fieldset>
         <label className="block text-sm md:col-span-2">
           <span className="mb-1 block font-medium">Adresse</span>
           <input
@@ -587,7 +670,7 @@ export function ChantierForm() {
           disabled={saving}
           className="rounded border border-stone-400 bg-white px-4 py-2 text-sm font-medium text-stone-800 disabled:opacity-60"
         >
-          Enregistrer sans placer
+          Enregistrer
         </button>
       </div>
     </form>

@@ -32,6 +32,7 @@ export type ChantierPlanningInfo = {
   lastDate: string | null;
   rangeLabel: string | null;
   title: string;
+  estimatif: boolean;
 };
 
 export function chantierDateRange(
@@ -77,10 +78,13 @@ export function chantierPlanningInfo(
     firstDate && lastDate
       ? `${formatIsoFr(firstDate)} → ${formatIsoFr(lastDate)}`
       : null;
+  const estimatif = Boolean(
+    snapshot.chantiers.find((item) => item.id === chantierId)?.dates_estimatives,
+  );
   const title = rangeLabel
-    ? `${STATUT_CHANTIER_LABELS[statut]} · ${rangeLabel}`
+    ? `${STATUT_CHANTIER_LABELS[statut]} · ${rangeLabel}${estimatif ? " · Estimatif" : ""}`
     : STATUT_CHANTIER_LABELS[statut];
-  return { statut, firstDate, lastDate, rangeLabel, title };
+  return { statut, firstDate, lastDate, rangeLabel, title, estimatif };
 }
 
 export function shiftChantierPhasePatches(

@@ -187,6 +187,7 @@ async function fetchSupabaseSnapshotOnce(): Promise<PlanningSnapshot> {
     chantiers: ((chantiers.data ?? []) as Chantier[]).map((chantier) => ({
       ...chantier,
       date_creation: asIsoDate(chantier.date_creation) ?? chantier.date_creation,
+      dates_estimatives: Boolean(chantier.dates_estimatives),
     })),
     elements: (elements.data ?? []) as ElementChantier[],
     phases: normalizePhasesForPlanning(
@@ -270,19 +271,36 @@ export async function supabaseCreateChantier(
   input: NewChantierInput,
 ): Promise<string> {
   const supabase = createSupabaseServerClient();
-  const { data: chantier, error: chantierError } = await supabase
+  const payload = {
+    nom_client: input.nom_client,
+    adresse: input.adresse,
+    lien_dossier_onedrive: input.lien_dossier_onedrive,
+    priorite: input.priorite,
+    dates_estimatives: Boolean(input.dates_estimatives),
+  };
+  let inserted = await supabase
     .from("chantiers")
-    .insert({
-      nom_client: input.nom_client,
-      adresse: input.adresse,
-      lien_dossier_onedrive: input.lien_dossier_onedrive,
-      priorite: input.priorite,
-    })
+    .insert(payload)
     .select("id")
     .single();
-  if (chantierError || !chantier) {
-    throw wrapSupabaseError(chantierError ?? new Error("Création du chantier impossible."));
+  if (inserted.error && isMissingColumnError(inserted.error, "dates_estimatives")) {
+    inserted = await supabase
+      .from("chantiers")
+      .insert({
+        nom_client: payload.nom_client,
+        adresse: payload.adresse,
+        lien_dossier_onedrive: payload.lien_dossier_onedrive,
+        priorite: payload.priorite,
+      })
+      .select("id")
+      .single();
   }
+  if (inserted.error || !inserted.data) {
+    throw wrapSupabaseError(
+      inserted.error ?? new Error("Création du chantier impossible."),
+    );
+  }
+  const chantier = inserted.data;
 
   for (const element of input.elements) {
     const { data: elementRow, error: elementError } = await supabase
@@ -356,8 +374,22 @@ export async function supabaseUpdateChantier(
       adresse: input.adresse,
       priorite: input.priorite,
       lien_dossier_onedrive: input.lien_dossier_onedrive,
+      dates_estimatives: Boolean(input.dates_estimatives),
     })
     .eq("id", input.id);
+  if (error && isMissingColumnError(error, "dates_estimatives")) {
+    const retry = await supabase
+      .from("chantiers")
+      .update({
+        nom_client: input.nom_client,
+        adresse: input.adresse,
+        priorite: input.priorite,
+        lien_dossier_onedrive: input.lien_dossier_onedrive,
+      })
+      .eq("id", input.id);
+    if (retry.error) throw wrapSupabaseError(retry.error);
+    return;
+  }
   if (error) throw wrapSupabaseError(error);
 }
 

@@ -90,7 +90,20 @@ export function ChantiersPage() {
                       </span>
                     </td>
                     <td className="px-3 py-2 text-stone-600">
-                      {info.rangeLabel ?? "—"}
+                      {info.rangeLabel ? (
+                        <span className="inline-flex flex-wrap items-center gap-1.5">
+                          <span className={info.estimatif ? "italic text-violet-800" : ""}>
+                            {info.rangeLabel}
+                          </span>
+                          {info.estimatif ? (
+                            <span className="rounded border border-dashed border-violet-400 bg-violet-50 px-1.5 py-px text-[10px] font-semibold uppercase tracking-wide text-violet-800">
+                              Estimatif
+                            </span>
+                          ) : null}
+                        </span>
+                      ) : (
+                        "—"
+                      )}
                     </td>
                   </tr>
                 );
