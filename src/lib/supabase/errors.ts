@@ -49,8 +49,18 @@ export function isMissingSchemaError(err: unknown): boolean {
   );
 }
 
+export const DATABASE_UNAVAILABLE_MESSAGE =
+  "Impossible de se connecter à la base de données, réessayez plus tard.";
+
 export const SCHEMA_HELP =
-  "Tables Supabase introuvables. Exécutez supabase/migrations/001_init.sql à 014_heure_debut.sql dans le SQL Editor du projet. En attendant, l’application enregistre en local.";
+  "Tables Supabase introuvables. Exécutez les scripts SQL du dossier supabase/migrations dans le SQL Editor du projet.";
+
+function looksLikeConnectivityError(err: unknown): boolean {
+  const message = `${errorMessage(err)} ${formatSupabaseErrorDetail(err)}`;
+  return /gateway timeout|504|503|502|chargement trop long|failed to fetch|fetch failed|econnreset|etimedout|timeout|abort/i.test(
+    message,
+  );
+}
 
 export function isMissingColumnError(err: unknown, column: string): boolean {
   if (err == null) return false;
@@ -69,6 +79,9 @@ export function isMissingColumnError(err: unknown, column: string): boolean {
 }
 export function wrapSupabaseError(err: unknown): Error {
   logSupabaseError("wrap", err);
+  if (looksLikeConnectivityError(err)) {
+    return new Error(DATABASE_UNAVAILABLE_MESSAGE);
+  }
   const detail = formatSupabaseErrorDetail(err);
   if (isMissingSchemaError(err)) {
     return new Error(`${SCHEMA_HELP} Détail technique : ${detail}`);

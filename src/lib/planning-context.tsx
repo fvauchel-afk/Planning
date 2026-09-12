@@ -6,9 +6,10 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
-import { createSeedSnapshot } from "@/lib/seed";
+import { createEmptySnapshot, createSeedSnapshot } from "@/lib/seed";
 import {
   composeReceptionPng,
   requestEnsureOnedriveFolder,
@@ -35,8 +36,8 @@ import {
   loadLocalSnapshot,
 } from "@/lib/store/local";
 import { fetchPlanningSnapshot, planningMutate } from "@/lib/planning/api";
-import { isSupabaseConfigured } from "@/lib/supabase/client";
-import { wrapSupabaseError } from "@/lib/supabase/errors";
+import { shouldUseSharedDatabase } from "@/lib/supabase/client";
+import { DATABASE_UNAVAILABLE_MESSAGE } from "@/lib/supabase/errors";
 import type {
   NewAbsenceInput,
   AbsenceUpdateInput,
@@ -58,6 +59,7 @@ type PlanningContextValue = {
   loading: boolean;
   error: string | null;
   usingSupabase: boolean;
+  databaseUnavailable: boolean;
   refresh: () => Promise<void>;
   createChantier: (input: NewChantierInput) => Promise<void>;
   updateChantier: (input: ChantierUpdateInput) => Promise<void>;
@@ -133,15 +135,25 @@ async function uploadReceptionPng(input: NewReceptionInput, snap: PlanningSnapsh
 const PlanningContext = createContext<PlanningContextValue | null>(null);
 
 export function PlanningProvider({ children }: { children: React.ReactNode }) {
-  const supabaseConfigured = isSupabaseConfigured();
-  const [snapshot, setSnapshot] = useState<PlanningSnapshot>(createSeedSnapshot);
+  const useShared = shouldUseSharedDatabase();
+  const [snapshot, setSnapshot] = useState<PlanningSnapshot>(() =>
+    useShared ? createEmptySnapshot() : createSeedSnapshot(),
+  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [liveSupabase, setLiveSupabase] = useState(false);
+  const liveSupabaseRef = useRef(false);
+  liveSupabaseRef.current = liveSupabase;
+
+  const assertWritable = useCallback(() => {
+    if (useShared && !liveSupabaseRef.current) {
+      throw new Error(DATABASE_UNAVAILABLE_MESSAGE);
+    }
+  }, [useShared]);
 
   const refresh = useCallback(async () => {
     try {
-      if (!supabaseConfigured) {
+      if (!useShared) {
         setLiveSupabase(false);
         setSnapshot(loadLocalSnapshot());
         setError(null);
@@ -150,11 +162,11 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
       const remote = await Promise.race([
         fetchPlanningSnapshot(),
         new Promise<never>((_, reject) => {
-          setTimeout(() => reject(new Error("Chargement trop long.")), 20000);
+          setTimeout(() => reject(new Error(DATABASE_UNAVAILABLE_MESSAGE)), 20000);
         }),
       ]);
       if (!remote.usingSupabase || !remote.snapshot) {
-        throw new Error("Impossible de charger le planning depuis le serveur.");
+        throw new Error(DATABASE_UNAVAILABLE_MESSAGE);
       }
       setSnapshot(remote.snapshot as PlanningSnapshot);
       setLiveSupabase(true);
@@ -162,11 +174,12 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
     } catch (err) {
       console.error("[planning] refresh", err);
       setLiveSupabase(false);
-      setError(wrapSupabaseError(err).message);
+      setSnapshot(createEmptySnapshot());
+      setError(DATABASE_UNAVAILABLE_MESSAGE);
     } finally {
       setLoading(false);
     }
-  }, [supabaseConfigured]);
+  }, [useShared]);
 
   useEffect(() => {
     void refresh();
@@ -174,7 +187,8 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
 
   const createChantier = useCallback(
     async (input: NewChantierInput) => {
-      if (supabaseConfigured) {
+      assertWritable();
+      if (useShared) {
         const created = await planningMutate<{ chantierId?: string }>({
           action: "createChantier",
           input,
@@ -197,61 +211,66 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
         );
       }
     },
-    [supabaseConfigured, refresh],
+    [useShared, refresh, assertWritable],
   );
 
   const updateChantier = useCallback(
     async (input: ChantierUpdateInput) => {
-      if (supabaseConfigured) {
+      assertWritable();
+      if (useShared) {
         await planningMutate({ action: "updateChantier", input });
         await refresh();
         return;
       }
       setSnapshot((current) => localUpdateChantier(current, input));
     },
-    [supabaseConfigured, refresh],
+    [useShared, refresh, assertWritable],
   );
 
   const deleteChantier = useCallback(
     async (chantierId: string) => {
-      if (supabaseConfigured) {
+      assertWritable();
+      if (useShared) {
         await planningMutate({ action: "deleteChantier", chantierId });
         await refresh();
         return;
       }
       setSnapshot((current) => localDeleteChantier(current, chantierId));
     },
-    [supabaseConfigured, refresh],
+    [useShared, refresh, assertWritable],
   );
 
   const scheduleChantierDay = useCallback(
     async (input: ScheduleChantierDayInput) => {
-      if (supabaseConfigured) {
+      assertWritable();
+      if (useShared) {
         await planningMutate({ action: "scheduleChantierDay", input });
         await refresh();
         return;
       }
       setSnapshot((current) => localScheduleChantierDay(current, input));
     },
-    [supabaseConfigured, refresh],
+    [useShared, refresh, assertWritable],
   );
 
   const upsertEmployee = useCallback(
     async (input: NewEmployeeInput & { id?: string }) => {
-      if (supabaseConfigured) {
+      assertWritable();
+      if (useShared) {
         await planningMutate({ action: "upsertEmployee", input });
         await refresh();
         return;
       }
       setSnapshot((current) => localUpsertEmployee(current, input));
     },
-    [supabaseConfigured, refresh],
+    [useShared, refresh, assertWritable],
   );
 
   const reorderEmployees = useCallback(
     async (rows: { id: string; ordre_affichage: number }[]) => {
       if (rows.length === 0) return;
-      if (supabaseConfigured) {
+      assertWritable();
+      if (useShared) {
         setSnapshot((current) => ({
           ...current,
           employees: current.employees.map((employee) => {
@@ -273,47 +292,51 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
       }
       setSnapshot((current) => localReorderEmployees(current, rows));
     },
-    [supabaseConfigured, refresh],
+    [useShared, refresh, assertWritable],
   );
 
   const createAbsence = useCallback(
     async (input: NewAbsenceInput) => {
-      if (supabaseConfigured) {
+      assertWritable();
+      if (useShared) {
         await planningMutate({ action: "createAbsence", input });
         await refresh();
         return;
       }
       setSnapshot((current) => localCreateAbsence(current, input));
     },
-    [supabaseConfigured, refresh],
+    [useShared, refresh, assertWritable],
   );
 
   const updateAbsence = useCallback(
     async (input: AbsenceUpdateInput) => {
-      if (supabaseConfigured) {
+      assertWritable();
+      if (useShared) {
         await planningMutate({ action: "updateAbsence", input });
         await refresh();
         return;
       }
       setSnapshot((current) => localUpdateAbsence(current, input));
     },
-    [supabaseConfigured, refresh],
+    [useShared, refresh, assertWritable],
   );
 
   const deleteAbsence = useCallback(
     async (id: string) => {
-      if (supabaseConfigured) {
+      assertWritable();
+      if (useShared) {
         await planningMutate({ action: "deleteAbsence", id });
         await refresh();
         return;
       }
       setSnapshot((current) => localDeleteAbsence(current, id));
     },
-    [supabaseConfigured, refresh],
+    [useShared, refresh, assertWritable],
   );
 
   const applyPhaseEdits = useCallback(
     async (edits: PhaseEdits) => {
+      assertWritable();
       if (
         !edits.patches?.length &&
         !edits.inserts?.length &&
@@ -321,14 +344,14 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
       ) {
         return;
       }
-      if (supabaseConfigured) {
+      if (useShared) {
         await planningMutate({ action: "applyPhaseEdits", edits });
         await refresh();
         return;
       }
       setSnapshot((current) => localApplyPhaseEdits(current, edits));
     },
-    [supabaseConfigured, refresh],
+    [useShared, refresh, assertWritable],
   );
 
   const applyPhasePatches = useCallback(
@@ -340,7 +363,8 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
 
   const createChantierWithPatches = useCallback(
     async (input: NewChantierInput, patches: PhasePatch[]) => {
-      if (supabaseConfigured) {
+      assertWritable();
+      if (useShared) {
         const created = await planningMutate<{ chantierId?: string }>(
           patches.length > 0
             ? { action: "createChantierWithPatches", input, patches }
@@ -366,36 +390,39 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
         );
       }
     },
-    [supabaseConfigured, refresh],
+    [useShared, refresh, assertWritable],
   );
 
   const createSignalement = useCallback(
     async (input: NewSignalementInput) => {
-      if (supabaseConfigured) {
+      assertWritable();
+      if (useShared) {
         await planningMutate({ action: "createSignalement", input });
         await refresh();
         return;
       }
       setSnapshot((current) => localCreateSignalement(current, input));
     },
-    [supabaseConfigured, refresh],
+    [useShared, refresh, assertWritable],
   );
 
   const setSignalementStatut = useCallback(
     async (id: string, statut: StatutSignalement) => {
-      if (supabaseConfigured) {
+      assertWritable();
+      if (useShared) {
         await planningMutate({ action: "setSignalementStatut", id, statut });
         await refresh();
         return;
       }
       setSnapshot((current) => localSetSignalementStatut(current, id, statut));
     },
-    [supabaseConfigured, refresh],
+    [useShared, refresh, assertWritable],
   );
 
   const validateSignalement = useCallback(
     async (id: string, patches: PhasePatch[]) => {
-      if (supabaseConfigured) {
+      assertWritable();
+      if (useShared) {
         await planningMutate({ action: "validateSignalement", id, patches });
         await refresh();
         return;
@@ -406,13 +433,14 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
         return localSetSignalementStatut(shifted, id, "valide");
       });
     },
-    [supabaseConfigured, refresh],
+    [useShared, refresh, assertWritable],
   );
 
   const createReception = useCallback(
     async (input: NewReceptionInput) => {
+      assertWritable();
       const snapForUpload = snapshot;
-      if (supabaseConfigured) {
+      if (useShared) {
         await planningMutate({ action: "createReception", input });
         await refresh();
       } else {
@@ -421,7 +449,7 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
       const upload = await uploadReceptionPng(input, snapForUpload);
       if (!upload.ok) {
         const message = upload.error ?? "Envoi OneDrive impossible.";
-        if (supabaseConfigured) {
+        if (useShared) {
           setSnapshot((current) => ({
             ...current,
             receptions: (current.receptions ?? []).map((row) =>
@@ -435,23 +463,24 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
             localSetReceptionOnedriveErreur(current, input.phase_id, message),
           );
         }
-      } else if (supabaseConfigured) {
+      } else if (useShared) {
         await refresh();
       }
     },
-    [supabaseConfigured, refresh, snapshot],
+    [useShared, refresh, snapshot, assertWritable],
   );
 
   const saveHoraires = useCallback(
     async (rows: HoraireSaison[]) => {
-      if (supabaseConfigured) {
+      assertWritable();
+      if (useShared) {
         await planningMutate({ action: "saveHoraires", rows });
         await refresh();
         return;
       }
       setSnapshot((current) => localReplaceHoraires(current, rows));
     },
-    [supabaseConfigured, refresh],
+    [useShared, refresh, assertWritable],
   );
 
   const value = useMemo(
@@ -460,6 +489,7 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
       loading,
       error,
       usingSupabase: liveSupabase,
+      databaseUnavailable: useShared && !loading && !liveSupabase,
       refresh,
       createChantier,
       updateChantier,
@@ -484,6 +514,7 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
       loading,
       error,
       liveSupabase,
+      useShared,
       refresh,
       createChantier,
       updateChantier,
