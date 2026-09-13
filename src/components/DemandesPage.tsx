@@ -89,8 +89,8 @@ export function DemandesPage() {
             {archives
               ? "Anciennes demandes mises de côté, sans les supprimer."
               : canMail
-                ? "Les commandes (matériel, outillage…) arrivent ici pour Alexis et Mika. Un e-mail est aussi envoyé sur la boîte f.vauchel. Les suggestions restent visibles par tous les admins."
-                : "Suggestions de l’équipe. Les commandes matériel sont réservées à Alexis et Mika."}
+                ? "Les commandes (matériel, outillage…) sont à traiter par Alexis et Mika. Un e-mail part aussi sur la boîte f.vauchel. Les autres admins voient la liste complète pour supervision."
+                : "Toutes les demandes, y compris les commandes. Le traitement et les e-mails de commandes sont gérés par Alexis et Mika."}
           </p>
         </div>
         <button
@@ -113,9 +113,7 @@ export function DemandesPage() {
         >
           Tout
         </button>
-        {CATEGORIES_DEMANDE.filter(
-          (id) => canMail || id !== "commande",
-        ).map((id) => (
+        {CATEGORIES_DEMANDE.map((id) => (
           <button
             key={id}
             type="button"

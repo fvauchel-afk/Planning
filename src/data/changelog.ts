@@ -14,7 +14,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     id: "2026-09-13-commandes-alexis-mika",
     title: "Commandes",
     items: [
-      "Les commandes (matériel, outillage…) arrivent uniquement à Alexis et Mika : pastille sur Demandes, bandeau dans l’application, et notification du navigateur si elle est autorisée.",
+      "Les commandes (matériel, outillage…) sont signalées en priorité à Alexis et Mika : pastille sur Demandes, bandeau dans l’application, et notification du navigateur si elle est autorisée. Les autres admins voient toujours la liste complète.",
       "Un e-mail est envoyé depuis la boîte f.vauchel. Alexis et Mika peuvent aussi envoyer des messages types (reçu, en cours, effectuée).",
     ],
   },
