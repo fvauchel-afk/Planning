@@ -21,6 +21,7 @@ import {
   supabaseUpsertEmployee,
   supabaseReorderEmployees,
   fetchSupabaseSnapshot,
+  supabaseConfirmPhaseDates,
 } from "@/lib/store/supabase";
 import {
   DATABASE_UNAVAILABLE_MESSAGE,
@@ -81,7 +82,8 @@ type MutateBody =
       id: string;
       templateId: string;
     }
-  | { action: "saveHoraires"; rows: HoraireSaison[] };
+  | { action: "saveHoraires"; rows: HoraireSaison[] }
+  | { action: "confirmPhaseDates"; ids: string[] };
 
 export async function POST(request: NextRequest) {
   const session = await resolveSession(await getSession());
@@ -326,6 +328,25 @@ export async function POST(request: NextRequest) {
       }
     } else if (body.action === "saveHoraires") {
       await supabaseReplaceHoraires(body.rows);
+    } else if (body.action === "confirmPhaseDates") {
+      const ids = (body.ids ?? []).filter(Boolean);
+      if (ids.length === 0) {
+        return NextResponse.json({ error: "Aucune phase à confirmer." }, { status: 400 });
+      }
+      const current = await fetchSupabaseSnapshot();
+      for (const id of ids) {
+        const phase = current.phases.find((item) => item.id === id);
+        if (!phase) {
+          return NextResponse.json({ error: "Phase introuvable." }, { status: 400 });
+        }
+        if (
+          !session.isAdmin &&
+          !idsEqual(phase.employe_id, session.employeeId)
+        ) {
+          return forbidden("Vous ne pouvez confirmer que vos propres phases.");
+        }
+      }
+      await supabaseConfirmPhaseDates(current, ids);
     } else {
       return NextResponse.json({ error: "Action inconnue." }, { status: 400 });
     }

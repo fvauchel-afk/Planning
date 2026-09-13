@@ -21,6 +21,8 @@ import { PHASE_LABELS } from "@/lib/types";
 import { useSession } from "@/lib/auth/session-context";
 import { useSalarieId } from "@/lib/use-salarie";
 import { WelcomeBanner } from "@/components/WelcomeBanner";
+import { PhaseFicheModal } from "@/components/PhaseFicheModal";
+import { phaseIsEstimative } from "@/lib/dates-estimatives";
 
 export function MonPlanningPage() {
   const { snapshot, loading } = usePlanning();
@@ -28,6 +30,7 @@ export function MonPlanningPage() {
   const { employeeId, ready } = useSalarieId();
   const [weeks, setWeeks] = useState<1 | 2 | 3>(2);
   const [anchor, setAnchor] = useState(() => startOfWeekMonday(new Date()));
+  const [selectedPhaseId, setSelectedPhaseId] = useState<string | null>(null);
 
   const employee =
     snapshot.employees.find((item) => idsEqual(item.id, employeeId)) ??
@@ -170,13 +173,27 @@ export function MonPlanningPage() {
                 {header.weekday} {header.date}
               </h3>
               <div className="mt-2 grid grid-cols-2 gap-2">
-                <SlotBlock title="Matin" assignments={morning} />
-                <SlotBlock title="Après-midi" assignments={afternoon} />
+                <SlotBlock
+                  title="Matin"
+                  assignments={morning}
+                  onOpenPhase={setSelectedPhaseId}
+                />
+                <SlotBlock
+                  title="Après-midi"
+                  assignments={afternoon}
+                  onOpenPhase={setSelectedPhaseId}
+                />
               </div>
             </article>
           );
         })}
       </div>
+      {selectedPhaseId ? (
+        <PhaseFicheModal
+          phaseId={selectedPhaseId}
+          onClose={() => setSelectedPhaseId(null)}
+        />
+      ) : null}
     </MobileShell>
   );
 }
@@ -184,13 +201,15 @@ export function MonPlanningPage() {
 function SlotBlock({
   title,
   assignments,
+  onOpenPhase,
 }: {
   title: string;
   assignments: ReturnType<typeof assignmentsForCell>;
+  onOpenPhase: (phaseId: string) => void;
 }) {
   return (
     <div className="space-y-1.5">
-      <p className="text-[10px] uppercase tracking-wide text-stone-500">{title}</p>
+      <p className="mt-0 text-[10px] uppercase tracking-wide text-stone-500">{title}</p>
       {assignments.length === 0 && (
         <p className="rounded-md bg-stone-50 px-2 py-3 text-xs text-stone-400">Libre</p>
       )}
@@ -202,14 +221,27 @@ function SlotBlock({
             className="rounded-md px-2 py-2 text-xs"
             style={{ backgroundColor: color.bg, color: color.fg }}
           >
-            <p className="font-semibold">{assignment.chantier.nom_client}</p>
-            <p className="opacity-90">
-              {assignment.element.nom_element} ·{" "}
-              {PHASE_LABELS[assignment.phase.type_phase]}
-              {assignment.phase.heures_supplementaires_par_jour
-                ? ` · +${assignment.phase.heures_supplementaires_par_jour}h`
-                : ""}
-            </p>
+            <button
+              type="button"
+              onClick={() => onOpenPhase(assignment.phase.id)}
+              className="w-full text-left"
+            >
+              <p className="font-semibold">
+                {assignment.chantier.nom_client}
+                {phaseIsEstimative(assignment.phase) ? (
+                  <span className="ml-1 rounded bg-violet-900/80 px-1 text-[9px] font-semibold uppercase tracking-wide text-violet-50">
+                    Estimatif
+                  </span>
+                ) : null}
+              </p>
+              <p className="opacity-90">
+                {assignment.element.nom_element} ·{" "}
+                {PHASE_LABELS[assignment.phase.type_phase]}
+                {assignment.phase.heures_supplementaires_par_jour
+                  ? ` · +${assignment.phase.heures_supplementaires_par_jour}h`
+                  : ""}
+              </p>
+            </button>
             {assignment.phase.type_phase === "pose" &&
               assignment.phase.statut !== "termine" && (
                 <Link

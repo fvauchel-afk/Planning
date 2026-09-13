@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-13-estimatif-confirme",
+    title: "Dates estimatives",
+    items: [
+      "Un chantier créé en « Estimatif » passe en « Confirmé » dès que le travail démarre vraiment (aujourd’hui dans la plage), dès qu’un bon de commande est envoyé pour le thermolaquage / la galvanisation, ou dès que vous changez le début ou la fin dans la fiche du chantier.",
+      "Sur un bloc du planning, le salarié assigné (et les admins) peuvent aussi cliquer « Je valide le lancement ». Le badge Estimatif disparaît tout de suite sur le planning équipe, l’onglet Chantiers et la fiche.",
+    ],
+  },
+  {
     id: "2026-09-13-bon-de-commande",
     title: "Bon de commande",
     items: [

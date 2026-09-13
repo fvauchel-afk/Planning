@@ -35,6 +35,7 @@ import {
   localScheduleChantierDay,
   localUpsertEmployee,
   localReorderEmployees,
+  localConfirmPhaseDates,
   loadLocalSnapshot,
 } from "@/lib/store/local";
 import { fetchPlanningSnapshot, planningMutate } from "@/lib/planning/api";
@@ -95,6 +96,7 @@ type PlanningContextValue = {
   createDemande: (input: NewDemandeInput) => Promise<void>;
   updateDemande: (input: DemandeUpdateInput) => Promise<void>;
   sendDemandeMail: (id: string, templateId: string) => Promise<void>;
+  confirmPhaseDates: (ids: string[]) => Promise<void>;
   saveHoraires: (rows: HoraireSaison[]) => Promise<void>;
 };
 
@@ -534,6 +536,20 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
     [useShared, assertWritable],
   );
 
+  const confirmPhaseDates = useCallback(
+    async (ids: string[]) => {
+      assertWritable();
+      if (!ids.length) return;
+      if (useShared) {
+        await planningMutate({ action: "confirmPhaseDates", ids });
+        await refresh();
+        return;
+      }
+      setSnapshot((current) => localConfirmPhaseDates(current, ids));
+    },
+    [useShared, refresh, assertWritable],
+  );
+
   const saveHoraires = useCallback(
     async (rows: HoraireSaison[]) => {
       assertWritable();
@@ -574,6 +590,7 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
       createDemande,
       updateDemande,
       sendDemandeMail,
+      confirmPhaseDates,
       saveHoraires,
     }),
     [
@@ -602,6 +619,7 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
       createDemande,
       updateDemande,
       sendDemandeMail,
+      confirmPhaseDates,
       saveHoraires,
     ],
   );

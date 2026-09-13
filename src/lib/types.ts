@@ -116,6 +116,7 @@ export type PhasePlanning = {
   statut: StatutPhase;
   urgent: boolean;
   heures_supplementaires_par_jour?: number;
+  dates_estimatives?: boolean;
 };
 
 export type Absence = {
@@ -240,6 +241,7 @@ export type NewElementInput = {
     employe_id: string | null;
     urgent: boolean;
     heures_supplementaires_par_jour?: number;
+    dates_estimatives?: boolean;
   }[];
 };
 
@@ -315,6 +317,7 @@ export type PhaseInsert = {
   statut: StatutPhase;
   urgent: boolean;
   heures_supplementaires_par_jour?: number;
+  dates_estimatives?: boolean;
 };
 
 export type PhaseEdits = {

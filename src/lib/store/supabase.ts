@@ -1,5 +1,5 @@
 import "server-only";
-import { asAdminFlag } from "@/lib/auth/ids";
+import { chantierHasEstimativeDates, chantierIdForPhase, phaseIdsStartedToday, withConfirmedPhases } from "@/lib/dates-estimatives";
 import { phaseTypeForRoles } from "@/lib/chantier-status";
 import { normalizePhasesForPlanning } from "@/lib/engine/normalize-phases";
 import {
@@ -171,7 +171,7 @@ async function fetchSupabaseSnapshotOnce(): Promise<PlanningSnapshot> {
         })()
       : ((signalements.data ?? []) as Signalement[]);
 
-  return {
+  const snapshot: PlanningSnapshot = {
     employees: (employeeRows ?? [])
       .map((row: EmployeeRow) => ({
         id: row.id,
@@ -211,6 +211,7 @@ async function fetchSupabaseSnapshotOnce(): Promise<PlanningSnapshot> {
           typeof phase.heure_debut === "string" && phase.heure_debut.trim()
             ? phase.heure_debut.trim().slice(0, 5)
             : null,
+        dates_estimatives: Boolean(phase.dates_estimatives),
       })),
     ),
     absences: ((absences.data ?? []) as Absence[]).map((absence) => ({
@@ -275,6 +276,17 @@ async function fetchSupabaseSnapshotOnce(): Promise<PlanningSnapshot> {
       return rows.length > 0 ? rows : defaultHoraires();
     })(),
   };
+  const started = phaseIdsStartedToday(snapshot);
+  if (started.length) {
+    try {
+      await supabaseConfirmPhaseDates(snapshot, started);
+      return withConfirmedPhases(snapshot, started);
+    } catch (err) {
+      logSupabaseError(err);
+      return snapshot;
+    }
+  }
+  return snapshot;
 }
 
 function optionalTable<T>(result: {
@@ -383,10 +395,22 @@ export async function supabaseCreateChantier(
       urgent: phase.urgent,
       heures_supplementaires_par_jour:
         phase.heures_supplementaires_par_jour ?? 0,
+      dates_estimatives: Boolean(
+        phase.dates_estimatives ?? input.dates_estimatives,
+      ),
     }));
     const { error: phaseError } = await supabase.from("phases_planning").insert(rows);
     if (phaseError) {
-      if (isMissingColumnError(phaseError, "heure_debut")) {
+      if (isMissingColumnError(phaseError, "dates_estimatives")) {
+        const { error: retry } = await supabase.from("phases_planning").insert(
+          rows.map((row) => {
+            const payload = { ...row };
+            delete (payload as { dates_estimatives?: boolean }).dates_estimatives;
+            return payload;
+          }),
+        );
+        if (retry) throw wrapSupabaseError(retry);
+      } else if (isMissingColumnError(phaseError, "heure_debut")) {
         const { error: retry } = await supabase.from("phases_planning").insert(
           rows.map((row) => {
             const payload = { ...row };
@@ -722,6 +746,17 @@ async function supabaseInsertPhases(rows: PhaseInsert[]): Promise<void> {
     if (retry) throw wrapSupabaseError(retry);
     return;
   }
+  if (isMissingColumnError(error, "dates_estimatives")) {
+    const { error: retry } = await supabase.from("phases_planning").insert(
+      rows.map((row) => {
+        const payload = { ...row };
+        delete (payload as { dates_estimatives?: boolean }).dates_estimatives;
+        return payload;
+      }),
+    );
+    if (retry) throw wrapSupabaseError(retry);
+    return;
+  }
   throw wrapSupabaseError(error);
 }
 
@@ -955,18 +990,47 @@ export async function supabaseMarkBonCommande(input: {
     .update({
       date_bon_commande: input.sendDate,
       sous_traitant_id: input.sousTraitantId,
-      dates_estimatives: false,
     })
     .eq("id", input.chantierId);
   if (error && isMissingColumnError(error, "date_bon_commande")) {
-    const retry = await supabase
-      .from("chantiers")
-      .update({ dates_estimatives: false })
-      .eq("id", input.chantierId);
-    if (retry.error && !isMissingColumnError(retry.error, "dates_estimatives")) {
-      throw wrapSupabaseError(retry.error);
-    }
     return;
   }
   if (error) throw wrapSupabaseError(error);
+}
+
+export async function supabaseConfirmPhaseDates(
+  snapshot: PlanningSnapshot,
+  ids: string[],
+): Promise<void> {
+  const unique = Array.from(new Set(ids.filter(Boolean)));
+  if (unique.length === 0) return;
+  const supabase = createSupabaseServerClient();
+  const { error } = await supabase
+    .from("phases_planning")
+    .update({ dates_estimatives: false })
+    .in("id", unique);
+  if (error && isMissingColumnError(error, "dates_estimatives")) return;
+  if (error) throw wrapSupabaseError(error);
+  const next = withConfirmedPhases(snapshot, unique);
+  const chantierIds = Array.from(
+    new Set(
+      unique
+        .map((id) => chantierIdForPhase(snapshot, id))
+        .filter((id): id is string => Boolean(id)),
+    ),
+  );
+  for (const chantierId of chantierIds) {
+    const { error: chantierError } = await supabase
+      .from("chantiers")
+      .update({
+        dates_estimatives: chantierHasEstimativeDates(next, chantierId),
+      })
+      .eq("id", chantierId);
+    if (
+      chantierError &&
+      !isMissingColumnError(chantierError, "dates_estimatives")
+    ) {
+      throw wrapSupabaseError(chantierError);
+    }
+  }
 }
