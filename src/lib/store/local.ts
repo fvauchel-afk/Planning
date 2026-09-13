@@ -89,6 +89,7 @@ export function loadLocalSnapshot(): PlanningSnapshot {
         statut: row.statut === "traite" ? "traite" : "en_attente",
         archivee: Boolean(row.archivee),
       })),
+      sousTraitants: parsed.sousTraitants ?? [],
     };
   } catch {
     const seed = createSeedSnapshot();

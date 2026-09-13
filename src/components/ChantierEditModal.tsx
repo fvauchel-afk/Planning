@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { BonCommandeModal } from "@/components/BonCommandeModal";
+import { canGenerateBonCommande } from "@/lib/bon-commande/active-phase";
 import { chantierVisibleOnGrid } from "@/lib/calendar";
 import {
   STATUT_CHANTIER_LABELS,
@@ -62,6 +64,7 @@ export function ChantierEditModal({
     Boolean(chantier.dates_estimatives),
   );
   const [error, setError] = useState<string | null>(null);
+  const [bonCommande, setBonCommande] = useState(false);
 
   const info = useMemo(
     () => chantierPlanningInfo(snapshot, chantier.id),
@@ -334,6 +337,15 @@ export function ChantierEditModal({
           </fieldset>
         </div>
         {error && <p className="mt-3 text-sm text-red-700">{error}</p>}
+        {canGenerateBonCommande(snapshot, chantier.id) ? (
+          <button
+            type="button"
+            className="mt-4 w-full rounded-lg bg-amber-800 px-3 py-2 text-sm text-amber-50"
+            onClick={() => setBonCommande(true)}
+          >
+            Générer un bon de commande
+          </button>
+        ) : null}
         <div className="mt-5 flex justify-end gap-2">
           <button
             type="button"
@@ -361,6 +373,12 @@ export function ChantierEditModal({
           </button>
         </div>
       </form>
+      {bonCommande ? (
+        <BonCommandeModal
+          chantierId={chantier.id}
+          onClose={() => setBonCommande(false)}
+        />
+      ) : null}
     </div>
   );
 }

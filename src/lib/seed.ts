@@ -314,6 +314,7 @@ export function createSeedSnapshot(): PlanningSnapshot {
     receptions: [],
     demandes: [],
     horaires: defaultHoraires(),
+    sousTraitants: [],
   };
 }
 
@@ -328,5 +329,6 @@ export function createEmptySnapshot(): PlanningSnapshot {
     receptions: [],
     demandes: [],
     horaires: defaultHoraires(),
+    sousTraitants: [],
   };
 }

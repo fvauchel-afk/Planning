@@ -364,10 +364,8 @@ export function ChantierForm() {
       <div>
         <h2 className="font-serif text-3xl text-stone-900">Nouveau chantier</h2>
         <p className="mt-1 text-sm text-stone-600">
-          Indiquez si le chantier a une pose et du thermolaquage. Vous pouvez
-          aussi saisir une date de début estimative ou confirmée ; sans date,
-          le début se cale tout seul au prochain jour ouvré. L’enchaînement
-          est fabrication, puis thermolaquage, puis pose.
+          Indiquez si le chantier a une pose et du thermolaquage. Le délai de
+          5 jours ouvrés du sous-traitant démarre à l’envoi du bon de commande.
         </p>
       </div>
 
@@ -603,8 +601,9 @@ export function ChantierForm() {
                 />
               </label>
               <p className="text-xs text-stone-500 sm:col-span-3">
-                Sans dates précises : phase thermolaquage posée juste après la
-                fabrication, pour 5 jours ouvrés (ou le délai saisi).
+                Sans dates précises, le thermolaquage n’est plus calé à la
+                création. Le délai officiel de 5 jours ouvrés démarre à l’envoi
+                du bon de commande.
               </p>
             </div>
           ) : null}

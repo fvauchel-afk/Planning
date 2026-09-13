@@ -8,7 +8,14 @@ import {
   isEmployeeAbsent,
   todayIso,
 } from "@/lib/engine/slots";
-import type { NewChantierInput, NewElementInput, PlanningSnapshot, TypePhase } from "@/lib/types";
+import type {
+  NewChantierInput,
+  NewElementInput,
+  PhaseInsert,
+  PhasePatch,
+  PlanningSnapshot,
+  TypePhase,
+} from "@/lib/types";
 
 export const DEFAULT_LAQUAGE_WORKING_DAYS = 5;
 
@@ -61,6 +68,15 @@ function nextWorkingDayAfter(date: string): string {
   return addWorkingDays(date, 1);
 }
 
+export function firstWorkingOnOrAfter(date: string): string {
+  let cursor = date;
+  for (let i = 0; i < 14; i += 1) {
+    if (!isSunday(cursor) && isoWeekday(cursor) !== 6) return cursor;
+    cursor = addDays(cursor, 1);
+  }
+  return date;
+}
+
 function rangeEnd(start: string, workingDays: number): string {
   if (workingDays <= 1) return start;
   return addWorkingDays(start, workingDays - 1);
@@ -103,9 +119,7 @@ export function applyPhaseChainOnCreate(
   const chainStart =
     input.date_debut || earliestAvailableWorkDate(snapshot);
 
-  return {
-    ...input,
-    elements: input.elements.map((element) => {
+  return { ...input, elements: input.elements.map((element) => {
       const phases = element.phases.map((phase) => ({ ...phase }));
       let prevEnd: string | null = null;
 
@@ -118,6 +132,20 @@ export function applyPhaseChainOnCreate(
         const hours = Number(current.duree_estimee_heures) || 0;
         const skipEmpty =
           type !== "logistique" && hours <= 0 && !(type === "pose" && pose);
+        const pendingThermo =
+          type === "logistique" &&
+          thermo &&
+          !laquageDebut &&
+          !laquageFin &&
+          !current.date_debut &&
+          !current.date_fin;
+
+        if (pendingThermo) {
+          current.date_debut = null;
+          current.date_fin = null;
+          current.employe_id = null;
+          continue;
+        }
 
         if (skipPose || skipThermo || skipEmpty) {
           if (skipPose || skipThermo) {
@@ -169,6 +197,73 @@ export function applyPhaseChainOnCreate(
   };
 }
 
+/**
+ * Cale thermolaquage / galvanisation sur 5 jours ouvrés à partir de l’envoi du BC,
+ * puis la pose juste après.
+ */
+export function applyBonCommandeDelay(
+  snapshot: PlanningSnapshot,
+  chantierId: string,
+  sendDate: string,
+  delayDays = DEFAULT_LAQUAGE_WORKING_DAYS,
+): { patches: PhasePatch[]; inserts: PhaseInsert[] } {
+  const days = clampDelay(delayDays);
+  const start = firstWorkingOnOrAfter(sendDate);
+  const end = rangeEnd(start, days);
+  const poseStart = nextWorkingDayAfter(end);
+  const elementIds = snapshot.elements
+    .filter((element) => element.chantier_id === chantierId)
+    .map((element) => element.id);
+  const patches: PhasePatch[] = [];
+  const inserts: PhaseInsert[] = [];
+  const byElement = new Map<string, typeof snapshot.phases>();
+  for (const phase of snapshot.phases) {
+    if (!elementIds.includes(phase.element_id)) continue;
+    const list = byElement.get(phase.element_id) ?? [];
+    list.push(phase);
+    byElement.set(phase.element_id, list);
+  }
+  for (const elementId of elementIds) {
+    const phases = byElement.get(elementId) ?? [];
+    const logistique = phases.find((item) => item.type_phase === "logistique");
+    const pose = phases.find((item) => item.type_phase === "pose");
+    if (!logistique) {
+      inserts.push({
+        element_id: elementId,
+        type_phase: "logistique",
+        duree_estimee_heures: days * 8,
+        date_debut: start,
+        date_fin: end,
+        employe_id: null,
+        statut: "a_faire",
+        urgent: false,
+        heures_supplementaires_par_jour: 0,
+      });
+    } else {
+      patches.push({
+        id: logistique.id,
+        date_debut: start,
+        date_fin: end,
+        employe_id: null,
+        heure_debut: null,
+      });
+    }
+    if (pose && (pose.duree_estimee_heures > 0 || pose.date_debut)) {
+      const poseDays = pose.date_debut && pose.date_fin
+        ? inclusiveWorkingDays(pose.date_debut, pose.date_fin)
+        : workingDaysFromHours(pose.duree_estimee_heures);
+      patches.push({
+        id: pose.id,
+        date_debut: poseStart,
+        date_fin: rangeEnd(poseStart, poseDays),
+        employe_id: pose.employe_id,
+        heure_debut: pose.heure_debut ?? null,
+      });
+    }
+  }
+  return { patches, inserts };
+}
+
 function runPhaseChainSelfCheck() {
   const snapshot: PlanningSnapshot = {
     employees: [
@@ -217,14 +312,14 @@ function runPhaseChainSelfCheck() {
   });
   const log = chained.elements[0]?.phases.find((item) => item.type_phase === "logistique");
   const posePhase = chained.elements[0]?.phases.find((item) => item.type_phase === "pose");
-  if (log?.date_debut !== "2026-09-15" || log.date_fin !== "2026-09-21") {
+  if (log?.date_debut || log?.date_fin) {
     throw new Error(
-      `phase-chain: laquage 5 j. après fab du 14 doit aller du 15 au 21, reçu ${log?.date_debut} → ${log?.date_fin}`,
+      "phase-chain: le thermolaquage attend le bon de commande, pas la création",
     );
   }
-  if (posePhase?.date_debut !== "2026-09-22") {
+  if (posePhase?.date_debut !== "2026-09-15") {
     throw new Error(
-      `phase-chain: pose juste après laquage, reçu ${posePhase?.date_debut}`,
+      `phase-chain: pose juste après fab tant que le BC n’est pas envoyé, reçu ${posePhase?.date_debut}`,
     );
   }
 
@@ -262,20 +357,19 @@ function runPhaseChainSelfCheck() {
       `phase-chain: fabrication après admin, reçu ${fab?.date_debut}`,
     );
   }
-  if (thermo?.date_debut !== "2026-09-18") {
+  if (thermo?.date_debut || thermo?.date_fin) {
     throw new Error(
-      `phase-chain: thermolaquage après fabrication, reçu ${thermo?.date_debut}`,
+      "phase-chain: thermolaquage sans dates tant que le BC n’est pas envoyé",
     );
   }
-  if (!pose14?.date_debut || pose14.date_debut <= (thermo?.date_fin ?? "")) {
+  if (!pose14?.date_debut || pose14.date_debut <= (fab?.date_fin ?? "")) {
     throw new Error(
-      `phase-chain: pose après thermolaquage, reçu ${pose14?.date_debut} (thermo fin ${thermo?.date_fin})`,
+      `phase-chain: pose après fabrication tant que le BC n’est pas envoyé, reçu ${pose14?.date_debut}`,
     );
   }
   if (
     (admin.date_fin ?? "") >= (fab.date_debut ?? "") ||
-    (fab.date_fin ?? "") >= (thermo.date_debut ?? "") ||
-    (thermo.date_fin ?? "") >= (pose14.date_debut ?? "")
+    (fab.date_fin ?? "") >= (pose14.date_debut ?? "")
   ) {
     throw new Error("phase-chain: les phases ne doivent pas se chevaucher");
   }
@@ -330,13 +424,69 @@ function runPhaseChainSelfCheck() {
   });
   const shortLog = manual.elements[0]?.phases.find((item) => item.type_phase === "logistique");
   const noPose = manual.elements[0]?.phases.find((item) => item.type_phase === "pose");
-  if (shortLog?.date_debut !== "2026-09-15" || shortLog.date_fin !== "2026-09-17") {
+  if (shortLog?.date_debut || shortLog?.date_fin) {
     throw new Error(
-      `phase-chain: délai manuel 3 j. du 15 au 17, reçu ${shortLog?.date_debut} → ${shortLog?.date_fin}`,
+      "phase-chain: même avec un délai saisi, le laquage attend le bon de commande",
     );
   }
   if (noPose?.date_debut || noPose?.duree_estimee_heures) {
     throw new Error("phase-chain: sans pose, la phase pose doit rester vide");
+  }
+
+  const delayed = applyBonCommandeDelay(
+    {
+      ...snapshot,
+      chantiers: [
+        {
+          id: "ch-1",
+          nom_client: "Test",
+          adresse: "",
+          lien_dossier_onedrive: null,
+          priorite: "normal",
+          date_creation: "2026-09-01",
+        },
+      ],
+      elements: [{ id: "el-1", chantier_id: "ch-1", nom_element: "Portail" }],
+      phases: [
+        {
+          id: "log-1",
+          element_id: "el-1",
+          type_phase: "logistique",
+          duree_estimee_heures: 0,
+          date_debut: null,
+          date_fin: null,
+          employe_id: null,
+          statut: "a_faire",
+          urgent: false,
+        },
+        {
+          id: "pose-1",
+          element_id: "el-1",
+          type_phase: "pose",
+          duree_estimee_heures: 8,
+          date_debut: "2026-09-15",
+          date_fin: "2026-09-15",
+          employe_id: "emp-a",
+          statut: "a_faire",
+          urgent: false,
+        },
+      ],
+    },
+    "ch-1",
+    "2026-09-14",
+    5,
+  );
+  const logPatch = delayed.patches.find((item) => item.id === "log-1");
+  const posePatch = delayed.patches.find((item) => item.id === "pose-1");
+  if (logPatch?.date_debut !== "2026-09-14" || logPatch.date_fin !== "2026-09-18") {
+    throw new Error(
+      `phase-chain: BC du lundi 14 → 5 j. jusqu’au 18, reçu ${logPatch?.date_debut} → ${logPatch?.date_fin}`,
+    );
+  }
+  if (posePatch?.date_debut !== "2026-09-21") {
+    throw new Error(
+      `phase-chain: pose après le délai BC, reçu ${posePatch?.date_debut}`,
+    );
   }
 }
 

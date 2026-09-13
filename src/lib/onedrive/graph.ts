@@ -342,24 +342,29 @@ export async function uploadJsonToBackupFolder(input: {
   return { name: json.name || safeName, webUrl: json.webUrl };
 }
 
-export async function uploadPngToShareFolder(input: {
+export async function uploadBytesToShareFolder(input: {
   shareUrl: string;
   fileName: string;
-  pngBytes: Buffer;
+  bytes: Buffer | Uint8Array;
+  contentType: string;
 }): Promise<void> {
   const token = await getValidAccessToken();
   const folder = await resolveShareItem(token, input.shareUrl);
-  const safeName = sanitizeOnedriveName(input.fileName, "reception.png");
+  const safeName = sanitizeOnedriveName(input.fileName, "document.bin");
   const encodedName = encodeURIComponent(safeName);
+  const raw =
+    input.bytes instanceof Uint8Array
+      ? input.bytes
+      : new Uint8Array(input.bytes);
   const res = await fetch(
     `https://graph.microsoft.com/v1.0/drives/${folder.driveId}/items/${folder.itemId}:/${encodedName}:/content`,
     {
       method: "PUT",
       headers: {
         Authorization: `Bearer ${token}`,
-        "Content-Type": "image/png",
+        "Content-Type": input.contentType,
       },
-      body: new Uint8Array(input.pngBytes),
+      body: raw as unknown as BodyInit,
     },
   );
   if (!res.ok) {
@@ -368,6 +373,19 @@ export async function uploadPngToShareFolder(input: {
       json.error?.message || `Envoi du fichier OneDrive impossible (${res.status}).`,
     );
   }
+}
+
+export async function uploadPngToShareFolder(input: {
+  shareUrl: string;
+  fileName: string;
+  pngBytes: Buffer;
+}): Promise<void> {
+  await uploadBytesToShareFolder({
+    shareUrl: input.shareUrl,
+    fileName: input.fileName,
+    bytes: input.pngBytes,
+    contentType: "image/png",
+  });
 }
 
 export async function sendGraphMail(input: {

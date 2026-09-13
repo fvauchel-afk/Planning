@@ -1,7 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { BonCommandeModal } from "@/components/BonCommandeModal";
 import { ConflictModal } from "@/components/ConflictModal";
+import { canGenerateBonCommande } from "@/lib/bon-commande/active-phase";
 import { formatLongDate, formatOvertimeHours, shiftToReach } from "@/lib/dates";
 import {
   planBestDelayInWindow,
@@ -38,6 +40,7 @@ export function PhaseFicheModal({
     result: DelayPlanResult;
     halfDays: number;
   } | null>(null);
+  const [bonCommande, setBonCommande] = useState(false);
 
   const phase = snapshot.phases.find((item) => item.id === phaseId);
   const element = snapshot.elements.find((item) => item.id === phase?.element_id);
@@ -203,6 +206,15 @@ export function PhaseFicheModal({
               </div>
             )}
             <div className="mt-5 flex flex-wrap gap-2">
+              {canGenerateBonCommande(snapshot, chantier.id) ? (
+                <button
+                  type="button"
+                  className="rounded-lg bg-amber-800 px-4 py-2 text-sm text-amber-50"
+                  onClick={() => setBonCommande(true)}
+                >
+                  Générer un bon de commande
+                </button>
+              ) : null}
               <button
                 type="button"
                 className="rounded-lg bg-stone-900 px-4 py-2 text-sm text-white"
@@ -389,6 +401,12 @@ export function PhaseFicheModal({
           onCancel={() => setPending(null)}
         />
       )}
+      {bonCommande ? (
+        <BonCommandeModal
+          chantierId={chantier.id}
+          onClose={() => setBonCommande(false)}
+        />
+      ) : null}
     </div>
   );
 }

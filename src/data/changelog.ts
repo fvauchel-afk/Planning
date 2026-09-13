@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-13-bon-de-commande",
+    title: "Bon de commande",
+    items: [
+      "Quand un chantier est en fabrication, vous pouvez générer un bon de commande PDF, le vérifier, puis l’envoyer au sous-traitant (copie à f.vauchel).",
+      "Les sous-traitants se gèrent dans un nouvel onglet : nom, spécialité, e-mail. Le délai de 5 jours ouvrés pour le thermolaquage / galvanisation part de l’envoi du bon, pas de la création du chantier. Une copie du PDF va dans le dossier OneDrive.",
+    ],
+  },
+  {
     id: "2026-09-13-commandes-priorite-push",
     title: "Commandes",
     items: [

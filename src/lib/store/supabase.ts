@@ -46,6 +46,7 @@ import type {
   Signalement,
   StatutSignalement,
   TypePhase,
+  SousTraitant,
 } from "@/lib/types";
 import { TYPES_PHASE } from "@/lib/types";
 
@@ -158,8 +159,9 @@ async function fetchSupabaseSnapshotOnce(): Promise<PlanningSnapshot> {
     supabase.from("demandes").select("*").order("date_creation", {
       ascending: false,
     }),
+    supabase.from("sous_traitants").select("*").order("nom"),
   ]);
-  const [signalements, receptions, demandes] = extra;
+  const [signalements, receptions, demandes, sousTraitants] = extra;
 
   const signalementRows = isMissingSchemaError(signalements.error)
     ? []
@@ -188,6 +190,12 @@ async function fetchSupabaseSnapshotOnce(): Promise<PlanningSnapshot> {
       ...chantier,
       date_creation: asIsoDate(chantier.date_creation) ?? chantier.date_creation,
       dates_estimatives: Boolean(chantier.dates_estimatives),
+      date_bon_commande: asIsoDate(chantier.date_bon_commande) ?? chantier.date_bon_commande ?? null,
+      sous_traitant_id: chantier.sous_traitant_id ?? null,
+      delai_sous_traitance_jours:
+        typeof chantier.delai_sous_traitance_jours === "number"
+          ? chantier.delai_sous_traitance_jours
+          : 5,
     })),
     elements: (elements.data ?? []) as ElementChantier[],
     phases: normalizePhasesForPlanning(
@@ -249,6 +257,14 @@ async function fetchSupabaseSnapshotOnce(): Promise<PlanningSnapshot> {
         (left, right) =>
           Date.parse(right.date_creation) - Date.parse(left.date_creation),
       ),
+    sousTraitants: optionalTable<SousTraitant>(sousTraitants).map((row) => ({
+      id: row.id,
+      nom: row.nom,
+      specialite: row.specialite,
+      email: row.email,
+      telephone: row.telephone ?? null,
+      adresse: row.adresse ?? null,
+    })),
     horaires: (() => {
       const rows = optionalTable<HoraireSaison>(horaires).map((row) =>
         normalizeHoraire({
@@ -280,12 +296,29 @@ export async function supabaseCreateChantier(
     lien_dossier_onedrive: input.lien_dossier_onedrive,
     priorite: input.priorite,
     dates_estimatives: Boolean(input.dates_estimatives),
+    delai_sous_traitance_jours: Math.min(
+      60,
+      Math.max(1, Number(input.delai_laquage_jours) || 5),
+    ),
   };
   let inserted = await supabase
     .from("chantiers")
     .insert(payload)
     .select("id")
     .single();
+  if (inserted.error && isMissingColumnError(inserted.error, "delai_sous_traitance_jours")) {
+    inserted = await supabase
+      .from("chantiers")
+      .insert({
+        nom_client: payload.nom_client,
+        adresse: payload.adresse,
+        lien_dossier_onedrive: payload.lien_dossier_onedrive,
+        priorite: payload.priorite,
+        dates_estimatives: payload.dates_estimatives,
+      })
+      .select("id")
+      .single();
+  }
   if (inserted.error && isMissingColumnError(inserted.error, "dates_estimatives")) {
     inserted = await supabase
       .from("chantiers")
@@ -853,5 +886,87 @@ export async function supabaseReplaceHoraires(
     ordre: index,
   }));
   const { error } = await supabase.from("horaires_saisonniers").insert(payload);
+  if (error) throw wrapSupabaseError(error);
+}
+
+export async function supabaseListSousTraitants(): Promise<SousTraitant[]> {
+  const supabase = createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("sous_traitants")
+    .select("*")
+    .order("nom");
+  if (error) {
+    if (isMissingSchemaError(error)) return [];
+    throw wrapSupabaseError(error);
+  }
+  return ((data ?? []) as SousTraitant[]).map((row) => ({
+    id: row.id,
+    nom: row.nom,
+    specialite: row.specialite,
+    email: row.email,
+    telephone: row.telephone ?? null,
+    adresse: row.adresse ?? null,
+  }));
+}
+
+export async function supabaseUpsertSousTraitant(
+  input: Omit<SousTraitant, "id"> & { id?: string },
+): Promise<string> {
+  const supabase = createSupabaseServerClient();
+  const payload = {
+    nom: input.nom.trim(),
+    specialite: input.specialite.trim(),
+    email: input.email.trim(),
+    telephone: input.telephone?.trim() || null,
+    adresse: input.adresse?.trim() || null,
+    updated_at: new Date().toISOString(),
+  };
+  if (input.id) {
+    const { error } = await supabase
+      .from("sous_traitants")
+      .update(payload)
+      .eq("id", input.id);
+    if (error) throw wrapSupabaseError(error);
+    return input.id;
+  }
+  const { data, error } = await supabase
+    .from("sous_traitants")
+    .insert(payload)
+    .select("id")
+    .single();
+  if (error || !data) throw wrapSupabaseError(error ?? new Error("Création impossible."));
+  return data.id as string;
+}
+
+export async function supabaseDeleteSousTraitant(id: string): Promise<void> {
+  const supabase = createSupabaseServerClient();
+  const { error } = await supabase.from("sous_traitants").delete().eq("id", id);
+  if (error) throw wrapSupabaseError(error);
+}
+
+export async function supabaseMarkBonCommande(input: {
+  chantierId: string;
+  sousTraitantId: string;
+  sendDate: string;
+}): Promise<void> {
+  const supabase = createSupabaseServerClient();
+  const { error } = await supabase
+    .from("chantiers")
+    .update({
+      date_bon_commande: input.sendDate,
+      sous_traitant_id: input.sousTraitantId,
+      dates_estimatives: false,
+    })
+    .eq("id", input.chantierId);
+  if (error && isMissingColumnError(error, "date_bon_commande")) {
+    const retry = await supabase
+      .from("chantiers")
+      .update({ dates_estimatives: false })
+      .eq("id", input.chantierId);
+    if (retry.error && !isMissingColumnError(retry.error, "dates_estimatives")) {
+      throw wrapSupabaseError(retry.error);
+    }
+    return;
+  }
   if (error) throw wrapSupabaseError(error);
 }

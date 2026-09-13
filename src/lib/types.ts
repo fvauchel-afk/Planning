@@ -75,6 +75,15 @@ export type Employee = {
   ordre_affichage?: number;
 };
 
+export type SousTraitant = {
+  id: string;
+  nom: string;
+  specialite: string;
+  email: string;
+  telephone?: string | null;
+  adresse?: string | null;
+};
+
 export type Chantier = {
   id: string;
   nom_client: string;
@@ -84,6 +93,9 @@ export type Chantier = {
   date_creation: string;
   /** Dates approximatives, pas encore confirmées. */
   dates_estimatives?: boolean;
+  date_bon_commande?: string | null;
+  sous_traitant_id?: string | null;
+  delai_sous_traitance_jours?: number | null;
 };
 
 export type ElementChantier = {
@@ -214,6 +226,7 @@ export type PlanningSnapshot = {
   receptions: ReceptionChantier[];
   demandes: Demande[];
   horaires: HoraireSaison[];
+  sousTraitants?: SousTraitant[];
 };
 
 export type NewElementInput = {
