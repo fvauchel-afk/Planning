@@ -12,9 +12,11 @@
     "@supabase/supabase-js": "^2.116.0",
     "bcryptjs": "^3.0.3",
     "next": "14.2.35",
+    "pdf-lib": "^1.17.1",
     "react": "^18",
     "react-dom": "^18",
     "react-signature-canvas": "^1.1.0-alpha.2",
+    "resend": "^6.28.0",
     "web-push": "^3.6.7"
   },
   "devDependencies": {

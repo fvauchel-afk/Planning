@@ -44,5 +44,6 @@ export function filterSnapshotForSession(
     demandes: (snapshot.demandes ?? []).filter((row) =>
       idsEqual(row.employe_id, employeeId),
     ),
+    sousTraitants: [],
   };
 }

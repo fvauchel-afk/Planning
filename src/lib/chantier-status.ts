@@ -1,4 +1,7 @@
 import { addDays, calendarDaysBetween, formatIsoFr, toISODate } from "@/lib/dates";
+import {
+  chantierHasEstimativeDates,
+} from "@/lib/dates-estimatives";
 import type { PhasePatch, PlanningSnapshot, Role, TypePhase } from "@/lib/types";
 
 export const STATUTS_CHANTIER = [
@@ -78,9 +81,7 @@ export function chantierPlanningInfo(
     firstDate && lastDate
       ? `${formatIsoFr(firstDate)} → ${formatIsoFr(lastDate)}`
       : null;
-  const estimatif = Boolean(
-    snapshot.chantiers.find((item) => item.id === chantierId)?.dates_estimatives,
-  );
+  const estimatif = chantierHasEstimativeDates(snapshot, chantierId);
   const title = rangeLabel
     ? `${STATUT_CHANTIER_LABELS[statut]} · ${rangeLabel}${estimatif ? " · Estimatif" : ""}`
     : STATUT_CHANTIER_LABELS[statut];

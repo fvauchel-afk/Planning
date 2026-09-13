@@ -26,6 +26,7 @@ export function normalizePhasesForPlanning(
       heure_debut: heure,
       duree_estimee_heures: duree,
       employe_id: phase.employe_id,
+      dates_estimatives: Boolean(phase.dates_estimatives),
     };
   });
 }

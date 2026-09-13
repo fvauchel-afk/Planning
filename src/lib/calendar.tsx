@@ -13,6 +13,7 @@ import {
 } from "@/lib/types";
 import { colorForChantier } from "@/lib/colors";
 import { dateInRange, formatOvertimeHours } from "@/lib/dates";
+import { phaseIsEstimative } from "@/lib/dates-estimatives";
 import {
   LOGISTIQUE_ROW_LABEL,
   LOGISTIQUE_ROW_ORDRE,
@@ -233,6 +234,13 @@ export function AssignmentChip({
           · {assignment.element.nom_element}
         </span>
       )}
+      {phaseIsEstimative(assignment.phase) ? (
+        <span
+          className={`ml-1 rounded bg-violet-900/80 px-1 font-semibold uppercase tracking-wide text-violet-50 ${compact ? "text-[8px]" : "text-[9px]"}`}
+        >
+          Estimatif
+        </span>
+      ) : null}
       {assignment.phase.heures_supplementaires_par_jour ? (
         <span
           className={`ml-1 rounded bg-black/30 px-1 font-semibold ${compact ? "text-[9px]" : "text-[10px]"}`}

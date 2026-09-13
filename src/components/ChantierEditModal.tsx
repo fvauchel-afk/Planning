@@ -2,7 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { BonCommandeModal } from "@/components/BonCommandeModal";
+import { canGenerateBonCommande } from "@/lib/bon-commande/active-phase";
 import { chantierVisibleOnGrid } from "@/lib/calendar";
+import { estimativePhaseIdsForChantier } from "@/lib/dates-estimatives";
 import {
   STATUT_CHANTIER_LABELS,
   chantierPlanningInfo,
@@ -47,6 +50,7 @@ export function ChantierEditModal({
     deleteChantier,
     scheduleChantierDay,
     applyPhaseEdits,
+    confirmPhaseDates,
   } = usePlanning();
   const [nomClient, setNomClient] = useState(chantier.nom_client);
   const [adresse, setAdresse] = useState(chantier.adresse);
@@ -62,6 +66,7 @@ export function ChantierEditModal({
     Boolean(chantier.dates_estimatives),
   );
   const [error, setError] = useState<string | null>(null);
+  const [bonCommande, setBonCommande] = useState(false);
 
   const info = useMemo(
     () => chantierPlanningInfo(snapshot, chantier.id),
@@ -86,9 +91,9 @@ export function ChantierEditModal({
     setAdresse(chantier.adresse);
     setLien(chantier.lien_dossier_onedrive ?? "");
     setPriorite(chantier.priorite);
-    setDatesEstimatives(Boolean(chantier.dates_estimatives));
+    setDatesEstimatives(Boolean(info.estimatif));
     setError(null);
-  }, [chantier]);
+  }, [chantier, info.estimatif]);
 
   useEffect(() => {
     setPlanDate(info.firstDate ?? toISODate(new Date()));
@@ -146,14 +151,24 @@ export function ChantierEditModal({
     setSaving(true);
     setError(null);
     try {
+      const startBefore = info.firstDate ?? "";
+      const endBefore = info.lastDate ?? info.firstDate ?? "";
+      const datesChanged =
+        visibleOnGrid &&
+        (planDate !== startBefore || (planEnd || planDate) !== endBefore);
       await persistPlanning(false);
+      const confirmIds = estimativePhaseIdsForChantier(snapshot, chantier.id);
+      const confirmNow = (datesChanged || !datesEstimatives) && confirmIds.length > 0;
+      if (confirmNow) {
+        await confirmPhaseDates(confirmIds);
+      }
       await updateChantier({
         id: chantier.id,
         nom_client: nomClient.trim(),
         adresse: adresse.trim(),
         priorite,
         lien_dossier_onedrive: lien.trim() || null,
-        dates_estimatives: datesEstimatives,
+        dates_estimatives: confirmNow ? false : datesEstimatives,
       });
       onClose();
     } catch (err) {
@@ -286,14 +301,30 @@ export function ChantierEditModal({
                 min={planDate || undefined}
               />
             </label>
-            <label className="mt-3 flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={datesEstimatives}
-                onChange={(event) => setDatesEstimatives(event.target.checked)}
-              />
-              <span>Dates estimatives (pas encore confirmées)</span>
-            </label>
+            <div className="mt-3 flex flex-wrap gap-4 text-sm">
+              <label className="inline-flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="edit-dates-kind"
+                  checked={datesEstimatives}
+                  onChange={() => setDatesEstimatives(true)}
+                />
+                Estimatif
+              </label>
+              <label className="inline-flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="edit-dates-kind"
+                  checked={!datesEstimatives}
+                  onChange={() => setDatesEstimatives(false)}
+                />
+                Confirmé
+              </label>
+            </div>
+            <p className="mt-2 text-xs text-stone-500">
+              Modifier le début ou la fin confirme les dates. Un chantier déjà
+              commencé, un bon de commande, ou « Je valide le lancement » aussi.
+            </p>
             {visibleOnGrid ? (
               <p className="mt-2 text-xs text-stone-500">
                 Modifier le début décale toutes les phases. Modifier la fin ajoute
@@ -334,6 +365,15 @@ export function ChantierEditModal({
           </fieldset>
         </div>
         {error && <p className="mt-3 text-sm text-red-700">{error}</p>}
+        {canGenerateBonCommande(snapshot, chantier.id) ? (
+          <button
+            type="button"
+            className="mt-4 w-full rounded-lg bg-amber-800 px-3 py-2 text-sm text-amber-50"
+            onClick={() => setBonCommande(true)}
+          >
+            Générer un bon de commande
+          </button>
+        ) : null}
         <div className="mt-5 flex justify-end gap-2">
           <button
             type="button"
@@ -361,6 +401,12 @@ export function ChantierEditModal({
           </button>
         </div>
       </form>
+      {bonCommande ? (
+        <BonCommandeModal
+          chantierId={chantier.id}
+          onClose={() => setBonCommande(false)}
+        />
+      ) : null}
     </div>
   );
 }

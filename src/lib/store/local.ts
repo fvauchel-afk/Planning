@@ -30,6 +30,10 @@ import type {
   StatutSignalement,
 } from "@/lib/types";
 import { TYPES_PHASE } from "@/lib/types";
+import {
+  phaseIdsStartedToday,
+  withConfirmedPhases,
+} from "@/lib/dates-estimatives";
 
 const STORAGE_KEY = "vauchel-planning-v1";
 
@@ -49,7 +53,7 @@ export function loadLocalSnapshot(): PlanningSnapshot {
   }
   try {
     const parsed = JSON.parse(raw) as PlanningSnapshot;
-    return {
+    const loaded: PlanningSnapshot = {
       ...parsed,
       signalements: (parsed.signalements ?? []).map((item) => ({
         ...item,
@@ -63,6 +67,7 @@ export function loadLocalSnapshot(): PlanningSnapshot {
           heures_supplementaires_par_jour:
             phase.heures_supplementaires_par_jour ?? 0,
           heure_debut: phase.heure_debut ?? null,
+          dates_estimatives: Boolean(phase.dates_estimatives),
         })),
       ),
       employees: (parsed.employees ?? []).map((employee) => ({
@@ -89,7 +94,15 @@ export function loadLocalSnapshot(): PlanningSnapshot {
         statut: row.statut === "traite" ? "traite" : "en_attente",
         archivee: Boolean(row.archivee),
       })),
+      sousTraitants: parsed.sousTraitants ?? [],
     };
+    const started = phaseIdsStartedToday(loaded);
+    if (started.length) {
+      const confirmed = withConfirmedPhases(loaded, started);
+      saveLocalSnapshot(confirmed);
+      return confirmed;
+    }
+    return loaded;
   } catch {
     const seed = createSeedSnapshot();
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(seed));
@@ -139,6 +152,7 @@ export function localCreateChantier(
             employe_id: null,
             urgent: false,
             heures_supplementaires_par_jour: 0,
+            dates_estimatives: Boolean(input.dates_estimatives),
           }));
     const uniqueByType = new Map<(typeof phases)[number]["type_phase"], (typeof phases)[number]>();
     for (const phase of phases) {
@@ -158,6 +172,9 @@ export function localCreateChantier(
         urgent: phase.urgent,
         heures_supplementaires_par_jour:
           phase.heures_supplementaires_par_jour ?? 0,
+        dates_estimatives: Boolean(
+          phase.dates_estimatives ?? input.dates_estimatives,
+        ),
       });
     }
   }
@@ -443,6 +460,15 @@ export function localUpdateChantier(
         }
       : chantier,
   );
+  saveLocalSnapshot(next);
+  return next;
+}
+
+export function localConfirmPhaseDates(
+  snapshot: PlanningSnapshot,
+  ids: string[],
+): PlanningSnapshot {
+  const next = withConfirmedPhases(snapshot, ids);
   saveLocalSnapshot(next);
   return next;
 }

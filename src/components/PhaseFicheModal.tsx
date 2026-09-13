@@ -1,7 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { BonCommandeModal } from "@/components/BonCommandeModal";
 import { ConflictModal } from "@/components/ConflictModal";
+import { canGenerateBonCommande } from "@/lib/bon-commande/active-phase";
+import { idsEqual } from "@/lib/auth/ids";
+import { useSession } from "@/lib/auth/session-context";
+import { phaseIsEstimative } from "@/lib/dates-estimatives";
 import { formatLongDate, formatOvertimeHours, shiftToReach } from "@/lib/dates";
 import {
   planBestDelayInWindow,
@@ -23,7 +28,9 @@ export function PhaseFicheModal({
   phaseId: string;
   onClose: () => void;
 }) {
-  const { snapshot, applyPhasePatches, createSignalement } = usePlanning();
+  const { snapshot, applyPhasePatches, createSignalement, confirmPhaseDates } =
+    usePlanning();
+  const { session } = useSession();
   const [mode, setMode] = useState<"fiche" | "decaler">("fiche");
   const [delayKind, setDelayKind] = useState<"fixe" | "cible">("fixe");
   const [quantite, setQuantite] = useState("1");
@@ -38,6 +45,8 @@ export function PhaseFicheModal({
     result: DelayPlanResult;
     halfDays: number;
   } | null>(null);
+  const [bonCommande, setBonCommande] = useState(false);
+  const [confirming, setConfirming] = useState(false);
 
   const phase = snapshot.phases.find((item) => item.id === phaseId);
   const element = snapshot.elements.find((item) => item.id === phase?.element_id);
@@ -153,6 +162,24 @@ export function PhaseFicheModal({
     ? new Date(reception.date_signature).toLocaleString("fr-FR")
     : null;
 
+  const canValidateLaunch =
+    phaseIsEstimative(phase) &&
+    Boolean(
+      session?.isAdmin || idsEqual(phase.employe_id, session?.employeeId),
+    );
+
+  async function validateLaunch() {
+    setConfirming(true);
+    setError(null);
+    try {
+      await confirmPhaseDates([phaseId]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Confirmation impossible.");
+    } finally {
+      setConfirming(false);
+    }
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/50 p-4">
       <div className="max-h-[90vh] w-full max-w-lg overflow-auto rounded-xl bg-white p-5 shadow-xl">
@@ -164,6 +191,7 @@ export function PhaseFicheModal({
             <p className="mt-1 text-sm text-stone-600">
               {PHASE_LABELS[phase.type_phase]} · {STATUT_LABELS[phase.statut]} ·{" "}
               {PRIORITE_LABELS[chantier.priorite]}
+              {phaseIsEstimative(phase) ? " · Estimatif" : ""}
             </p>
             <p className="mt-2 text-sm text-stone-600">
               {assignee ? assignee.nom : "Thermolaquage sous-traité"}
@@ -203,6 +231,26 @@ export function PhaseFicheModal({
               </div>
             )}
             <div className="mt-5 flex flex-wrap gap-2">
+              {canValidateLaunch ? (
+                <button
+                  type="button"
+                  disabled={confirming}
+                  className="rounded-lg bg-violet-800 px-4 py-2 text-sm text-violet-50 disabled:opacity-60"
+                  onClick={() => void validateLaunch()}
+                >
+                  {confirming ? "Validation…" : "Je valide le lancement"}
+                </button>
+              ) : null}
+              {canGenerateBonCommande(snapshot, chantier.id) ? (
+                <button
+                  type="button"
+                  className="rounded-lg bg-amber-800 px-4 py-2 text-sm text-amber-50"
+                  onClick={() => setBonCommande(true)}
+                >
+                  Générer un bon de commande
+                </button>
+              ) : null}
+              {session?.isAdmin ? (
               <button
                 type="button"
                 className="rounded-lg bg-stone-900 px-4 py-2 text-sm text-white"
@@ -210,6 +258,7 @@ export function PhaseFicheModal({
               >
                 Décaler
               </button>
+              ) : null}
               <button
                 type="button"
                 className="rounded-lg px-4 py-2 text-sm text-stone-600"
@@ -389,6 +438,12 @@ export function PhaseFicheModal({
           onCancel={() => setPending(null)}
         />
       )}
+      {bonCommande ? (
+        <BonCommandeModal
+          chantierId={chantier.id}
+          onClose={() => setBonCommande(false)}
+        />
+      ) : null}
     </div>
   );
 }

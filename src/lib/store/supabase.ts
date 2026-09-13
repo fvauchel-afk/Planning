@@ -1,5 +1,6 @@
 import "server-only";
 import { asAdminFlag } from "@/lib/auth/ids";
+import { chantierHasEstimativeDates, chantierIdForPhase, phaseIdsStartedToday, withConfirmedPhases } from "@/lib/dates-estimatives";
 import { phaseTypeForRoles } from "@/lib/chantier-status";
 import { normalizePhasesForPlanning } from "@/lib/engine/normalize-phases";
 import {
@@ -46,6 +47,7 @@ import type {
   Signalement,
   StatutSignalement,
   TypePhase,
+  SousTraitant,
 } from "@/lib/types";
 import { TYPES_PHASE } from "@/lib/types";
 
@@ -158,8 +160,9 @@ async function fetchSupabaseSnapshotOnce(): Promise<PlanningSnapshot> {
     supabase.from("demandes").select("*").order("date_creation", {
       ascending: false,
     }),
+    supabase.from("sous_traitants").select("*").order("nom"),
   ]);
-  const [signalements, receptions, demandes] = extra;
+  const [signalements, receptions, demandes, sousTraitants] = extra;
 
   const signalementRows = isMissingSchemaError(signalements.error)
     ? []
@@ -169,7 +172,7 @@ async function fetchSupabaseSnapshotOnce(): Promise<PlanningSnapshot> {
         })()
       : ((signalements.data ?? []) as Signalement[]);
 
-  return {
+  const snapshot: PlanningSnapshot = {
     employees: (employeeRows ?? [])
       .map((row: EmployeeRow) => ({
         id: row.id,
@@ -188,6 +191,12 @@ async function fetchSupabaseSnapshotOnce(): Promise<PlanningSnapshot> {
       ...chantier,
       date_creation: asIsoDate(chantier.date_creation) ?? chantier.date_creation,
       dates_estimatives: Boolean(chantier.dates_estimatives),
+      date_bon_commande: asIsoDate(chantier.date_bon_commande) ?? chantier.date_bon_commande ?? null,
+      sous_traitant_id: chantier.sous_traitant_id ?? null,
+      delai_sous_traitance_jours:
+        typeof chantier.delai_sous_traitance_jours === "number"
+          ? chantier.delai_sous_traitance_jours
+          : 5,
     })),
     elements: (elements.data ?? []) as ElementChantier[],
     phases: normalizePhasesForPlanning(
@@ -203,6 +212,7 @@ async function fetchSupabaseSnapshotOnce(): Promise<PlanningSnapshot> {
           typeof phase.heure_debut === "string" && phase.heure_debut.trim()
             ? phase.heure_debut.trim().slice(0, 5)
             : null,
+        dates_estimatives: Boolean(phase.dates_estimatives),
       })),
     ),
     absences: ((absences.data ?? []) as Absence[]).map((absence) => ({
@@ -249,6 +259,14 @@ async function fetchSupabaseSnapshotOnce(): Promise<PlanningSnapshot> {
         (left, right) =>
           Date.parse(right.date_creation) - Date.parse(left.date_creation),
       ),
+    sousTraitants: optionalTable<SousTraitant>(sousTraitants).map((row) => ({
+      id: row.id,
+      nom: row.nom,
+      specialite: row.specialite,
+      email: row.email,
+      telephone: row.telephone ?? null,
+      adresse: row.adresse ?? null,
+    })),
     horaires: (() => {
       const rows = optionalTable<HoraireSaison>(horaires).map((row) =>
         normalizeHoraire({
@@ -259,6 +277,17 @@ async function fetchSupabaseSnapshotOnce(): Promise<PlanningSnapshot> {
       return rows.length > 0 ? rows : defaultHoraires();
     })(),
   };
+  const started = phaseIdsStartedToday(snapshot);
+  if (started.length) {
+    try {
+      await supabaseConfirmPhaseDates(snapshot, started);
+      return withConfirmedPhases(snapshot, started);
+    } catch (err) {
+      logSupabaseError("confirmPhaseDates today", err);
+      return snapshot;
+    }
+  }
+  return snapshot;
 }
 
 function optionalTable<T>(result: {
@@ -280,12 +309,29 @@ export async function supabaseCreateChantier(
     lien_dossier_onedrive: input.lien_dossier_onedrive,
     priorite: input.priorite,
     dates_estimatives: Boolean(input.dates_estimatives),
+    delai_sous_traitance_jours: Math.min(
+      60,
+      Math.max(1, Number(input.delai_laquage_jours) || 5),
+    ),
   };
   let inserted = await supabase
     .from("chantiers")
     .insert(payload)
     .select("id")
     .single();
+  if (inserted.error && isMissingColumnError(inserted.error, "delai_sous_traitance_jours")) {
+    inserted = await supabase
+      .from("chantiers")
+      .insert({
+        nom_client: payload.nom_client,
+        adresse: payload.adresse,
+        lien_dossier_onedrive: payload.lien_dossier_onedrive,
+        priorite: payload.priorite,
+        dates_estimatives: payload.dates_estimatives,
+      })
+      .select("id")
+      .single();
+  }
   if (inserted.error && isMissingColumnError(inserted.error, "dates_estimatives")) {
     inserted = await supabase
       .from("chantiers")
@@ -332,6 +378,7 @@ export async function supabaseCreateChantier(
             employe_id: null,
             urgent: false,
             heures_supplementaires_par_jour: 0,
+            dates_estimatives: Boolean(input.dates_estimatives),
           }));
 
     const uniqueByType = new Map<TypePhase, (typeof phases)[number]>();
@@ -350,10 +397,22 @@ export async function supabaseCreateChantier(
       urgent: phase.urgent,
       heures_supplementaires_par_jour:
         phase.heures_supplementaires_par_jour ?? 0,
+      dates_estimatives: Boolean(
+        phase.dates_estimatives ?? input.dates_estimatives,
+      ),
     }));
     const { error: phaseError } = await supabase.from("phases_planning").insert(rows);
     if (phaseError) {
-      if (isMissingColumnError(phaseError, "heure_debut")) {
+      if (isMissingColumnError(phaseError, "dates_estimatives")) {
+        const { error: retry } = await supabase.from("phases_planning").insert(
+          rows.map((row) => {
+            const payload = { ...row };
+            delete (payload as { dates_estimatives?: boolean }).dates_estimatives;
+            return payload;
+          }),
+        );
+        if (retry) throw wrapSupabaseError(retry);
+      } else if (isMissingColumnError(phaseError, "heure_debut")) {
         const { error: retry } = await supabase.from("phases_planning").insert(
           rows.map((row) => {
             const payload = { ...row };
@@ -689,6 +748,17 @@ async function supabaseInsertPhases(rows: PhaseInsert[]): Promise<void> {
     if (retry) throw wrapSupabaseError(retry);
     return;
   }
+  if (isMissingColumnError(error, "dates_estimatives")) {
+    const { error: retry } = await supabase.from("phases_planning").insert(
+      rows.map((row) => {
+        const payload = { ...row };
+        delete (payload as { dates_estimatives?: boolean }).dates_estimatives;
+        return payload;
+      }),
+    );
+    if (retry) throw wrapSupabaseError(retry);
+    return;
+  }
   throw wrapSupabaseError(error);
 }
 
@@ -854,4 +924,115 @@ export async function supabaseReplaceHoraires(
   }));
   const { error } = await supabase.from("horaires_saisonniers").insert(payload);
   if (error) throw wrapSupabaseError(error);
+}
+
+export async function supabaseListSousTraitants(): Promise<SousTraitant[]> {
+  const supabase = createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("sous_traitants")
+    .select("*")
+    .order("nom");
+  if (error) {
+    if (isMissingSchemaError(error)) return [];
+    throw wrapSupabaseError(error);
+  }
+  return ((data ?? []) as SousTraitant[]).map((row) => ({
+    id: row.id,
+    nom: row.nom,
+    specialite: row.specialite,
+    email: row.email,
+    telephone: row.telephone ?? null,
+    adresse: row.adresse ?? null,
+  }));
+}
+
+export async function supabaseUpsertSousTraitant(
+  input: Omit<SousTraitant, "id"> & { id?: string },
+): Promise<string> {
+  const supabase = createSupabaseServerClient();
+  const payload = {
+    nom: input.nom.trim(),
+    specialite: input.specialite.trim(),
+    email: input.email.trim(),
+    telephone: input.telephone?.trim() || null,
+    adresse: input.adresse?.trim() || null,
+    updated_at: new Date().toISOString(),
+  };
+  if (input.id) {
+    const { error } = await supabase
+      .from("sous_traitants")
+      .update(payload)
+      .eq("id", input.id);
+    if (error) throw wrapSupabaseError(error);
+    return input.id;
+  }
+  const { data, error } = await supabase
+    .from("sous_traitants")
+    .insert(payload)
+    .select("id")
+    .single();
+  if (error || !data) throw wrapSupabaseError(error ?? new Error("Création impossible."));
+  return data.id as string;
+}
+
+export async function supabaseDeleteSousTraitant(id: string): Promise<void> {
+  const supabase = createSupabaseServerClient();
+  const { error } = await supabase.from("sous_traitants").delete().eq("id", id);
+  if (error) throw wrapSupabaseError(error);
+}
+
+export async function supabaseMarkBonCommande(input: {
+  chantierId: string;
+  sousTraitantId: string;
+  sendDate: string;
+}): Promise<void> {
+  const supabase = createSupabaseServerClient();
+  const { error } = await supabase
+    .from("chantiers")
+    .update({
+      date_bon_commande: input.sendDate,
+      sous_traitant_id: input.sousTraitantId,
+    })
+    .eq("id", input.chantierId);
+  if (error && isMissingColumnError(error, "date_bon_commande")) {
+    return;
+  }
+  if (error) throw wrapSupabaseError(error);
+}
+
+export async function supabaseConfirmPhaseDates(
+  snapshot: PlanningSnapshot,
+  ids: string[],
+): Promise<void> {
+  const unique = Array.from(new Set(ids.filter(Boolean)));
+  if (unique.length === 0) return;
+  const supabase = createSupabaseServerClient();
+  const { error } = await supabase
+    .from("phases_planning")
+    .update({ dates_estimatives: false })
+    .in("id", unique);
+  if (error && isMissingColumnError(error, "dates_estimatives")) return;
+  if (error) throw wrapSupabaseError(error);
+  const next = withConfirmedPhases(snapshot, unique);
+  const chantierIds = Array.from(
+    new Set(
+      unique
+        .map((id) => chantierIdForPhase(snapshot, id))
+        .filter((id): id is string => Boolean(id)),
+    ),
+  );
+  for (const chantierId of chantierIds) {
+    const { error: chantierError } = await supabase
+      .from("chantiers")
+      .update({
+        dates_estimatives: chantierHasEstimativeDates(next, chantierId),
+      })
+      .eq("id", chantierId);
+    if (
+      chantierError &&
+      !isMissingColumnError(chantierError, "dates_estimatives")
+    ) {
+      throw wrapSupabaseError(chantierError);
+    }
+  }
 }

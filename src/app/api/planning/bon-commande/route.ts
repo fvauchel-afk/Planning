@@ -1,0 +1,197 @@
+import { NextRequest, NextResponse } from "next/server";
+import {
+  forbidden,
+  getSession,
+  resolveSession,
+  unauthorized,
+} from "@/lib/auth/guard";
+import { canGenerateBonCommande } from "@/lib/bon-commande/active-phase";
+import { BON_COMMANDE_CC, sendBonCommandeEmail } from "@/lib/bon-commande/mail";
+import { buildBonCommandePdf } from "@/lib/bon-commande/pdf";
+import { applyBonCommandeDelay } from "@/lib/engine/phase-chain";
+import { todayIso } from "@/lib/engine/slots";
+import {
+  createClientFolder,
+  uploadBytesToShareFolder,
+} from "@/lib/onedrive/graph";
+import { updateChantierOnedriveLink } from "@/lib/onedrive/db";
+import {
+  fetchSupabaseSnapshot,
+  invalidateSupabaseSnapshotCache,
+  supabaseApplyPhaseEdits,
+  supabaseListSousTraitants,
+  supabaseMarkBonCommande,
+  supabaseConfirmPhaseDates,
+} from "@/lib/store/supabase";
+import { formatIsoFr } from "@/lib/dates";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+type Body = {
+  chantierId?: string;
+  sousTraitantId?: string;
+  confirm?: boolean;
+};
+
+async function prepare(chantierId: string, sousTraitantId: string) {
+  const snapshot = await fetchSupabaseSnapshot();
+  const chantier = snapshot.chantiers.find((item) => item.id === chantierId);
+  if (!chantier) throw new Error("Chantier introuvable.");
+  if (!canGenerateBonCommande(snapshot, chantierId)) {
+    throw new Error(
+      "Le bon de commande se génère quand la phase active est la fabrication.",
+    );
+  }
+  const sousTraitants = snapshot.sousTraitants?.length
+    ? snapshot.sousTraitants
+    : await supabaseListSousTraitants();
+  const sousTraitant = sousTraitants.find((item) => item.id === sousTraitantId);
+  if (!sousTraitant) throw new Error("Choisissez un sous-traitant enregistré.");
+  const elements = snapshot.elements.filter(
+    (item) => item.chantier_id === chantierId,
+  );
+  const elementIds = new Set(elements.map((item) => item.id));
+  const fabrication =
+    snapshot.phases.find(
+      (item) =>
+        elementIds.has(item.element_id) && item.type_phase === "fabrication",
+    ) ?? null;
+  const dateDocument =
+    fabrication?.date_debut || todayIso();
+  const pdf = await buildBonCommandePdf({
+    chantier,
+    elements,
+    fabrication,
+    sousTraitant,
+    dateDocument,
+  });
+  const delayDays = chantier.delai_sous_traitance_jours || 5;
+  const sendDate = todayIso();
+  const delay = applyBonCommandeDelay(
+    snapshot,
+    chantierId,
+    sendDate,
+    delayDays,
+  );
+  return {
+    snapshot,
+    chantier,
+    sousTraitant,
+    pdf,
+    dateDocument,
+    sendDate,
+    delay,
+  };
+}
+
+export async function POST(request: NextRequest) {
+  const session = await resolveSession(await getSession());
+  if (!session) return unauthorized();
+  if (!session.isAdmin) return forbidden();
+  let body: Body;
+  try {
+    body = (await request.json()) as Body;
+  } catch {
+    return NextResponse.json({ error: "Requête invalide." }, { status: 400 });
+  }
+  if (!body.chantierId || !body.sousTraitantId) {
+    return NextResponse.json(
+      { error: "Chantier ou sous-traitant manquant." },
+      { status: 400 },
+    );
+  }
+  try {
+    const prepared = await prepare(body.chantierId, body.sousTraitantId);
+    const { snapshot, chantier, sousTraitant, pdf, dateDocument, sendDate, delay } =
+      prepared;
+    const subject = `Bon de commande — ${chantier.nom_client} — ${sousTraitant.specialite}`;
+    const text = [
+      `Bon de commande Ferronnerie Vauchel / La Métallerie du Sud.`,
+      `Chantier : ${chantier.nom_client}`,
+      chantier.adresse ? `Adresse : ${chantier.adresse}` : "",
+      `Départ fabrication prévu : ${formatIsoFr(dateDocument)}`,
+      `Sous-traitant : ${sousTraitant.nom} (${sousTraitant.specialite})`,
+      `Délai officiel : 5 jours ouvrés à compter de l’envoi (${formatIsoFr(sendDate)}).`,
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    if (!body.confirm) {
+      return NextResponse.json({
+        preview: true,
+        fileName: pdf.fileName,
+        pdfBase64: Buffer.from(pdf.bytes).toString("base64"),
+        to: sousTraitant.email,
+        cc: BON_COMMANDE_CC,
+        subject,
+        text,
+        dateDocument,
+        sendDate,
+      });
+    }
+
+    await sendBonCommandeEmail({
+      to: sousTraitant.email,
+      subject,
+      text,
+      fileName: pdf.fileName,
+      pdfBytes: pdf.bytes,
+    });
+
+    let onedriveWarning: string | undefined;
+    try {
+      let shareUrl = chantier.lien_dossier_onedrive;
+      if (!shareUrl) {
+        shareUrl = await createClientFolder(chantier.nom_client);
+        await updateChantierOnedriveLink(chantier.id, shareUrl);
+      }
+      await uploadBytesToShareFolder({
+        shareUrl,
+        fileName: pdf.fileName,
+        bytes: pdf.bytes,
+        contentType: "application/pdf",
+      });
+    } catch (err) {
+      onedriveWarning =
+        err instanceof Error
+          ? err.message
+          : "Copie OneDrive impossible.";
+    }
+
+    if (delay.patches.length || delay.inserts.length) {
+      await supabaseApplyPhaseEdits({
+        patches: delay.patches,
+        inserts: delay.inserts,
+      });
+    }
+    await supabaseMarkBonCommande({
+      chantierId: chantier.id,
+      sousTraitantId: sousTraitant.id,
+      sendDate,
+    });
+    const logistiqueIds = snapshot.phases
+      .filter((phase) => {
+        const element = snapshot.elements.find((item) => item.id === phase.element_id);
+        return (
+          element?.chantier_id === chantier.id &&
+          phase.type_phase === "logistique" &&
+          Boolean(phase.dates_estimatives)
+        );
+      })
+      .map((phase) => phase.id);
+    if (logistiqueIds.length) {
+      await supabaseConfirmPhaseDates(snapshot, logistiqueIds);
+    }
+    invalidateSupabaseSnapshotCache();
+    return NextResponse.json({
+      ok: true,
+      onedriveWarning,
+    });
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Bon de commande impossible." },
+      { status: 400 },
+    );
+  }
+}
