@@ -4,7 +4,9 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { OnedriveBanner } from "@/components/OnedriveBanner";
+import { CommandeAlert } from "@/components/CommandeAlert";
 import { useSession } from "@/lib/auth/session-context";
+import { usePlanning } from "@/lib/planning-context";
 
 const ADMIN_LINKS: { href: string; label: string }[] = [
   { href: "/", label: "Planning" },
@@ -37,7 +39,17 @@ export function AppShell({
 }) {
   const router = useRouter();
   const { session, ready } = useSession();
+  const { snapshot } = usePlanning();
   const [menuOpen, setMenuOpen] = useState(false);
+  const pendingCommandes =
+    session?.canReceiveCommandes
+      ? (snapshot.demandes ?? []).filter(
+          (row) =>
+            row.categorie === "commande" &&
+            row.statut !== "traite" &&
+            !row.archivee,
+        ).length
+      : 0;
 
   useEffect(() => {
     setMenuOpen(false);
@@ -87,6 +99,11 @@ export function AppShell({
                   }`}
                 >
                   {link.label}
+                  {link.href === "/demandes" && pendingCommandes > 0 ? (
+                    <span className="ml-1 rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-semibold text-stone-900">
+                      {pendingCommandes}
+                    </span>
+                  ) : null}
                 </Link>
               );
             })}
@@ -139,6 +156,11 @@ export function AppShell({
                     }`}
                   >
                     {link.label}
+                    {link.href === "/demandes" && pendingCommandes > 0 ? (
+                      <span className="ml-2 rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-semibold text-stone-900">
+                        {pendingCommandes}
+                      </span>
+                    ) : null}
                   </Link>
                 );
               })}
@@ -155,6 +177,7 @@ export function AppShell({
       </header>
       <main className="mx-auto max-w-[1600px] px-4 py-6">
         <OnedriveBanner />
+        <CommandeAlert />
         {children}
       </main>
     </div>

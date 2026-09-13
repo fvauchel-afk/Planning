@@ -94,6 +94,7 @@ type PlanningContextValue = {
   createReception: (input: NewReceptionInput) => Promise<void>;
   createDemande: (input: NewDemandeInput) => Promise<void>;
   updateDemande: (input: DemandeUpdateInput) => Promise<void>;
+  sendDemandeMail: (id: string, templateId: string) => Promise<void>;
   saveHoraires: (rows: HoraireSaison[]) => Promise<void>;
 };
 
@@ -519,6 +520,20 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
     [useShared, refresh, assertWritable],
   );
 
+  const sendDemandeMail = useCallback(
+    async (id: string, templateId: string) => {
+      assertWritable();
+      if (useShared) {
+        await planningMutate({ action: "sendDemandeMail", id, templateId });
+        return;
+      }
+      throw new Error(
+        "L’envoi d’e-mail n’est disponible qu’avec la base et OneDrive connectés.",
+      );
+    },
+    [useShared, assertWritable],
+  );
+
   const saveHoraires = useCallback(
     async (rows: HoraireSaison[]) => {
       assertWritable();
@@ -558,6 +573,7 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
       createReception,
       createDemande,
       updateDemande,
+      sendDemandeMail,
       saveHoraires,
     }),
     [
@@ -585,6 +601,7 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
       createReception,
       createDemande,
       updateDemande,
+      sendDemandeMail,
       saveHoraires,
     ],
   );

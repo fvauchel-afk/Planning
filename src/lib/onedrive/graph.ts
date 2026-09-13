@@ -369,3 +369,29 @@ export async function uploadPngToShareFolder(input: {
     );
   }
 }
+
+export async function sendGraphMail(input: {
+  to: string[];
+  subject: string;
+  text: string;
+}): Promise<void> {
+  const recipients = input.to
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .map((address) => ({ emailAddress: { address } }));
+  if (recipients.length === 0) {
+    throw new Error("Aucun destinataire e-mail.");
+  }
+  const token = await getValidAccessToken();
+  await graphFetch<void>(token, "/me/sendMail", {
+    method: "POST",
+    body: JSON.stringify({
+      message: {
+        subject: input.subject,
+        body: { contentType: "Text", content: input.text },
+        toRecipients: recipients,
+      },
+      saveToSentItems: true,
+    }),
+  });
+}

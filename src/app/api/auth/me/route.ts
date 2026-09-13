@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession, resolveSession } from "@/lib/auth/guard";
 import { canRestorePlanning } from "@/lib/auth/restore-access";
+import { canReceiveCommandes } from "@/lib/auth/commande-access";
 import { hasSupabaseServiceRole } from "@/lib/supabase/server";
 
 export async function GET() {
@@ -14,6 +15,7 @@ export async function GET() {
       nom: session.nom,
       isAdmin: session.isAdmin,
       canRestore: canRestorePlanning(session.nom),
+      canReceiveCommandes: canReceiveCommandes(session.nom),
     },
     hasServiceRole: hasSupabaseServiceRole(),
   });

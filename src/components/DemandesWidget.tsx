@@ -106,7 +106,7 @@ export function DemandesWidget() {
                 maxLength={4000}
                 placeholder={
                   categorie === "commande"
-                    ? "Matériel, outillage, fourniture…"
+                    ? "Matériel, outillage… (reçu par Alexis et Mika)"
                     : categorie === "suggestion_entreprise"
                       ? "Organisation, matériel, process atelier…"
                       : "Une idée pour améliorer le site…"

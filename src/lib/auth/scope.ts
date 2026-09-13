@@ -2,13 +2,15 @@ import type { SessionUser } from "@/lib/auth/session";
 import { idsEqual } from "@/lib/auth/ids";
 import type { PlanningSnapshot } from "@/lib/types";
 
-type SessionLike = Pick<SessionUser, "employeeId" | "isAdmin">;
+type SessionLike = Pick<SessionUser, "employeeId" | "isAdmin" | "nom">;
 
 export function filterSnapshotForSession(
   snapshot: PlanningSnapshot,
   session: SessionLike,
 ): PlanningSnapshot {
-  if (session.isAdmin) return snapshot;
+  if (session.isAdmin) {
+    return snapshot;
+  }
   const employeeId = session.employeeId;
   const self = snapshot.employees.find((employee) =>
     idsEqual(employee.id, employeeId),

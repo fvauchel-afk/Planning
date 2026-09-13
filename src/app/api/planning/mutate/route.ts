@@ -44,6 +44,12 @@ import type {
   StatutSignalement,
 } from "@/lib/types";
 import { CATEGORIES_DEMANDE, STATUTS_DEMANDE } from "@/lib/types";
+import { canReceiveCommandes } from "@/lib/auth/commande-access";
+import { sendCommandePush } from "@/lib/push/send";
+import {
+  COMMANDE_MAIL_TEMPLATES,
+  sendCommandeMailboxMessage,
+} from "@/lib/mail/commande";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -70,6 +76,11 @@ type MutateBody =
   | { action: "createReception"; input: NewReceptionInput }
   | { action: "createDemande"; input: NewDemandeInput }
   | { action: "updateDemande"; input: DemandeUpdateInput }
+  | {
+      action: "sendDemandeMail";
+      id: string;
+      templateId: string;
+    }
   | { action: "saveHoraires"; rows: HoraireSaison[] };
 
 export async function POST(request: NextRequest) {
@@ -110,6 +121,7 @@ export async function POST(request: NextRequest) {
     "setSignalementStatut",
     "validateSignalement",
     "updateDemande",
+    "sendDemandeMail",
     "saveHoraires",
   ]);
 
@@ -242,6 +254,26 @@ export async function POST(request: NextRequest) {
         message,
         employe_id: session.employeeId,
       });
+      if (body.input.categorie === "commande") {
+        const snapshot = await fetchSupabaseSnapshot();
+        const auteur =
+          snapshot.employees.find((item) =>
+            idsEqual(item.id, session.employeeId),
+          )?.nom || session.nom;
+        const mail = await sendCommandeMailboxMessage({
+          templateId: "nouvelle",
+          auteur,
+          message,
+          categorie: "commande",
+        });
+        if (mail.warning) {
+          console.warn("[commande-mail]", mail.warning);
+        }
+        const push = await sendCommandePush({ auteur, message });
+        if (push.warning) {
+          console.warn("[commande-push]", push.warning);
+        }
+      }
     } else if (body.action === "updateDemande") {
       if (!body.input?.id) {
         return NextResponse.json({ error: "Demande inconnue." }, { status: 400 });
@@ -252,11 +284,46 @@ export async function POST(request: NextRequest) {
       ) {
         return NextResponse.json({ error: "Statut invalide." }, { status: 400 });
       }
+      const current = await fetchSupabaseSnapshot();
+      const demande = current.demandes.find((row) => row.id === body.input.id);
+      if (
+        demande?.categorie === "commande" &&
+        !canReceiveCommandes(session.nom)
+      ) {
+        return forbidden("Seuls Alexis et Mika traitent les commandes.");
+      }
       await supabaseUpdateDemande({
         id: body.input.id,
         statut: body.input.statut,
         archivee: body.input.archivee,
       });
+    } else if (body.action === "sendDemandeMail") {
+      if (!canReceiveCommandes(session.nom)) {
+        return forbidden("Seuls Alexis et Mika envoient ces messages.");
+      }
+      if (!COMMANDE_MAIL_TEMPLATES.some((item) => item.id === body.templateId)) {
+        return NextResponse.json({ error: "Modèle inconnu." }, { status: 400 });
+      }
+      const current = await fetchSupabaseSnapshot();
+      const demande = current.demandes.find((row) => row.id === body.id);
+      if (!demande || demande.categorie !== "commande") {
+        return NextResponse.json({ error: "Commande introuvable." }, { status: 400 });
+      }
+      const auteur =
+        current.employees.find((item) => item.id === demande.employe_id)?.nom ??
+        "Salarié";
+      const mail = await sendCommandeMailboxMessage({
+        templateId: body.templateId,
+        auteur,
+        message: demande.message,
+        categorie: demande.categorie,
+      });
+      if (!mail.sent) {
+        return NextResponse.json(
+          { error: mail.warning || "E-mail non envoyé." },
+          { status: 400 },
+        );
+      }
     } else if (body.action === "saveHoraires") {
       await supabaseReplaceHoraires(body.rows);
     } else {

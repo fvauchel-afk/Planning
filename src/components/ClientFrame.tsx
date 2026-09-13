@@ -8,6 +8,7 @@ import { SessionProvider, useSession } from "@/lib/auth/session-context";
 import { PlanningProvider } from "@/lib/planning-context";
 import { DatabaseUnavailableGate } from "@/components/DatabaseUnavailableGate";
 import { DemandesWidget } from "@/components/DemandesWidget";
+import { CommandePushPrompt } from "@/components/CommandePushPrompt";
 
 function Shell({
   pathname,
@@ -61,6 +62,7 @@ function FramedApp({ children }: { children: React.ReactNode }) {
           <DatabaseUnavailableGate>
             <Shell pathname={pathname}>{children}</Shell>
             <DemandesWidget />
+            <CommandePushPrompt />
           </DatabaseUnavailableGate>
         </PlanningProvider>
       </div>
