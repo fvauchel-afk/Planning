@@ -11,6 +11,13 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-13-prochain-creneau-libre",
+    title: "Conflit de placement",
+    items: [
+      "Quand un créneau est déjà pris, « Utiliser ce créneau » propose le vrai prochain jour libre, après la fin du chantier qui bloque.",
+    ],
+  },
+  {
     id: "2026-09-13-chantier-onedrive-nonblocking",
     title: "Création de chantier",
     items: [
