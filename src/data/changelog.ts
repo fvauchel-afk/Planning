@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-13-sous-traitance-chevauchement",
+    title: "Thermolaquage",
+    items: [
+      "Sur la ligne Thermolaquage (et toute ligne au rôle Sous-Traitance), plusieurs chantiers peuvent se retrouver sur le même créneau : l’atelier du sous-traitant n’est pas limité à un chantier à la fois.",
+      "Pour les salariés, il reste impossible de déposer un chantier sur une case déjà prise, sauf si les chantiers collés reculent ou avancent ensemble.",
+    ],
+  },
+  {
     id: "2026-09-13-signalements-validation",
     title: "Signalements",
     items: [

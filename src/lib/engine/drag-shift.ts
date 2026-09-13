@@ -3,6 +3,7 @@ import { hoursForSlot } from "@/lib/engine/hours";
 import {
   isCompanyHoliday,
   isEmployeeAbsent,
+  isSousTraitancePlanningRow,
   slotsFromExistingPhase,
   type Half,
 } from "@/lib/engine/slots";
@@ -256,6 +257,9 @@ function landingHasConflict(
       if (cellHasBlockingAbsence(snapshot, landing.rowId, slot.date)) {
         return true;
       }
+      if (isSousTraitancePlanningRow(snapshot, landing.rowId)) {
+        continue;
+      }
       for (const occupant of cells) {
         if (
           occupant.half.date === slot.date &&
@@ -409,13 +413,15 @@ export function shiftChantierBlock(input: {
   if (!origin) return emptyDragShift();
   const { occupancy } = occupancyForRow(input.snapshot, input.rowId);
   const direction: 1 | -1 = delta > 0 ? 1 : -1;
-  const neighbors = gluedNeighbors(
-    input.snapshot,
-    occupancy,
-    blocks,
-    origin,
-    direction,
-  );
+  const neighbors = isSousTraitancePlanningRow(input.snapshot, input.rowId)
+    ? []
+    : gluedNeighbors(
+        input.snapshot,
+        occupancy,
+        blocks,
+        origin,
+        direction,
+      );
   const chain = direction > 0 ? [origin, ...neighbors] : [...neighbors, origin];
   const preview: DragShiftPreviewCell[] = [];
   const landings: { rowId: string; halves: OccupiedHalf[] }[] = [];
@@ -492,18 +498,20 @@ export function shiftOrMoveChantierBlock(input: {
     halves: previewHalves(origin, delta),
   };
   let destChain: ChantierBlock[] = [];
-  if (delta !== 0) {
-    const direction: 1 | -1 = delta > 0 ? 1 : -1;
-    destChain = destCascadeChain(
-      input.snapshot,
-      input.toRowId,
-      landing,
-      direction,
-    ).chain;
-  } else {
-    destChain = chantierBlocksForRow(input.snapshot, input.toRowId).filter(
-      (block) => halvesOverlap(block.halves, landing.halves),
-    );
+  if (!isSousTraitancePlanningRow(input.snapshot, input.toRowId)) {
+    if (delta !== 0) {
+      const direction: 1 | -1 = delta > 0 ? 1 : -1;
+      destChain = destCascadeChain(
+        input.snapshot,
+        input.toRowId,
+        landing,
+        direction,
+      ).chain;
+    } else {
+      destChain = chantierBlocksForRow(input.snapshot, input.toRowId).filter(
+        (block) => halvesOverlap(block.halves, landing.halves),
+      );
+    }
   }
   const preview: DragShiftPreviewCell[] = [
     ...previewCellsForHalves(input.toRowId, landing.halves),
@@ -748,6 +756,61 @@ function runDragShiftSelfCheck() {
       "drag-shift: un glisser horizontal sur un autre chantier non collé doit être refusé",
     );
   }
+
+  const thermoOverlap = shiftChantierBlock({
+    snapshot: sousTraitanceOverlapSnapshot(LOGISTIQUE_ROW_ID, "logistique"),
+    rowId: LOGISTIQUE_ROW_ID,
+    chantierId: "ch-a",
+    grab: { date: "2026-09-07", half: 0 },
+    drop: { date: "2026-09-09", half: 0 },
+  });
+  if (
+    thermoOverlap.blocked ||
+    thermoOverlap.patches.length !== 1 ||
+    thermoOverlap.patches[0]?.id !== "ph-a" ||
+    thermoOverlap.patches.some((patch) => patch.id === "ph-b")
+  ) {
+    throw new Error(
+      "drag-shift: deux chantiers doivent pouvoir se superposer sur une ligne sous-traitance",
+    );
+  }
+
+  const otherSousTraitance = shiftChantierBlock({
+    snapshot: sousTraitanceOverlapSnapshot("st-galva", "fabrication"),
+    rowId: "st-galva",
+    chantierId: "ch-a",
+    grab: { date: "2026-09-07", half: 0 },
+    drop: { date: "2026-09-09", half: 0 },
+  });
+  if (otherSousTraitance.blocked || otherSousTraitance.patches.length !== 1) {
+    throw new Error(
+      "drag-shift: une ligne dont le seul rôle est Sous-Traitance doit accepter le chevauchement",
+    );
+  }
+
+  const thermoHoliday = shiftChantierBlock({
+    snapshot: {
+      ...sousTraitanceOverlapSnapshot(LOGISTIQUE_ROW_ID, "logistique"),
+      absences: [
+        {
+          id: "abs-1",
+          employe_id: "emp-a",
+          type: "ferie_entreprise",
+          date_debut: "2026-09-09",
+          date_fin: "2026-09-09",
+        },
+      ],
+    },
+    rowId: LOGISTIQUE_ROW_ID,
+    chantierId: "ch-a",
+    grab: { date: "2026-09-07", half: 0 },
+    drop: { date: "2026-09-09", half: 0 },
+  });
+  if (!thermoHoliday.blocked || thermoHoliday.patches.length !== 0) {
+    throw new Error(
+      "drag-shift: un jour férié entreprise doit rester bloqué sur la ligne sous-traitance",
+    );
+  }
 }
 
 function movedAcrossSnapshot(): PlanningSnapshot {
@@ -810,6 +873,76 @@ function movedAcrossSnapshot(): PlanningSnapshot {
         date_fin: "2026-09-08",
         heure_debut: "07:30",
         employe_id: "emp-b",
+        statut: "a_faire",
+        urgent: false,
+      },
+    ],
+    absences: [],
+    signalements: [],
+    receptions: [],
+    demandes: [],
+    horaires: [],
+  };
+}
+
+function sousTraitanceOverlapSnapshot(
+  rowId: string,
+  typePhase: "logistique" | "fabrication",
+): PlanningSnapshot {
+  const employeeId = rowId === LOGISTIQUE_ROW_ID ? "emp-a" : rowId;
+  return {
+    employees: [
+      {
+        id: employeeId,
+        nom: "Sous-traitant",
+        roles: ["logistique"],
+        actif: true,
+      },
+    ],
+    chantiers: [
+      {
+        id: "ch-a",
+        nom_client: "Alpha",
+        adresse: "",
+        lien_dossier_onedrive: null,
+        priorite: "normal",
+        date_creation: "2026-09-01",
+      },
+      {
+        id: "ch-b",
+        nom_client: "Beta",
+        adresse: "",
+        lien_dossier_onedrive: null,
+        priorite: "normal",
+        date_creation: "2026-09-01",
+      },
+    ],
+    elements: [
+      { id: "el-a", chantier_id: "ch-a", nom_element: "A" },
+      { id: "el-b", chantier_id: "ch-b", nom_element: "B" },
+    ],
+    phases: [
+      {
+        id: "ph-a",
+        element_id: "el-a",
+        type_phase: typePhase,
+        duree_estimee_heures: 4,
+        date_debut: "2026-09-07",
+        date_fin: "2026-09-07",
+        heure_debut: "07:30",
+        employe_id: typePhase === "logistique" ? null : employeeId,
+        statut: "a_faire",
+        urgent: false,
+      },
+      {
+        id: "ph-b",
+        element_id: "el-b",
+        type_phase: typePhase,
+        duree_estimee_heures: 4,
+        date_debut: "2026-09-09",
+        date_fin: "2026-09-09",
+        heure_debut: "07:30",
+        employe_id: typePhase === "logistique" ? null : employeeId,
         statut: "a_faire",
         urgent: false,
       },
