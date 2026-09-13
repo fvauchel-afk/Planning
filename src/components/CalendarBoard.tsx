@@ -852,6 +852,11 @@ function DayDetail({
                               <span className="block truncate">
                                 {assignment.chantier.nom_client}
                               </span>
+                              {assignment.phase.dates_estimatives ? (
+                                <span className="mt-0.5 inline-block rounded bg-violet-900/80 px-1 text-[9px] font-semibold uppercase tracking-wide text-violet-50">
+                                  Estimatif
+                                </span>
+                              ) : null}
                             </button>
                           );
                         }),

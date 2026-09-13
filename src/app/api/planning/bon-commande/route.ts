@@ -21,6 +21,7 @@ import {
   supabaseApplyPhaseEdits,
   supabaseListSousTraitants,
   supabaseMarkBonCommande,
+  supabaseConfirmPhaseDates,
 } from "@/lib/store/supabase";
 import { formatIsoFr } from "@/lib/dates";
 
@@ -74,6 +75,7 @@ async function prepare(chantierId: string, sousTraitantId: string) {
     delayDays,
   );
   return {
+    snapshot,
     chantier,
     sousTraitant,
     pdf,
@@ -101,7 +103,7 @@ export async function POST(request: NextRequest) {
   }
   try {
     const prepared = await prepare(body.chantierId, body.sousTraitantId);
-    const { chantier, sousTraitant, pdf, dateDocument, sendDate, delay } =
+    const { snapshot, chantier, sousTraitant, pdf, dateDocument, sendDate, delay } =
       prepared;
     const subject = `Bon de commande — ${chantier.nom_client} — ${sousTraitant.specialite}`;
     const text = [
@@ -168,6 +170,19 @@ export async function POST(request: NextRequest) {
       sousTraitantId: sousTraitant.id,
       sendDate,
     });
+    const logistiqueIds = snapshot.phases
+      .filter((phase) => {
+        const element = snapshot.elements.find((item) => item.id === phase.element_id);
+        return (
+          element?.chantier_id === chantier.id &&
+          phase.type_phase === "logistique" &&
+          Boolean(phase.dates_estimatives)
+        );
+      })
+      .map((phase) => phase.id);
+    if (logistiqueIds.length) {
+      await supabaseConfirmPhaseDates(snapshot, logistiqueIds);
+    }
     invalidateSupabaseSnapshotCache();
     return NextResponse.json({
       ok: true,
