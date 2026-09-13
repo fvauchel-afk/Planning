@@ -251,6 +251,15 @@ function SlotBlock({
                   Terminer et faire signer
                 </Link>
               )}
+            {assignment.phase.type_phase === "livraison" &&
+              assignment.phase.statut !== "termine" && (
+                <Link
+                  href={`/moi/reception?phase=${assignment.phase.id}`}
+                  className="mt-1 block font-medium underline decoration-white/70"
+                >
+                  Faire signer le bon de livraison
+                </Link>
+              )}
             <div className="mt-1.5 grid grid-cols-2 gap-1">
               <Link
                 href={`/moi/retard?phase=${assignment.phase.id}&sens=retard`}

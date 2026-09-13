@@ -4,11 +4,16 @@ export function composeReceptionPng(input: {
   nomElement: string;
   nomSignataire: string;
   dateLabel: string;
+  kind?: "reception" | "livraison";
+  adresseLivraison?: string;
+  nomSalarie?: string;
+  dateLivraison?: string;
 }): Promise<string> {
+  const isLivraison = input.kind === "livraison";
   return new Promise((resolve, reject) => {
     const canvas = document.createElement("canvas");
     canvas.width = 1000;
-    canvas.height = 620;
+    canvas.height = isLivraison ? 720 : 620;
     const ctx = canvas.getContext("2d");
     if (!ctx) {
       reject(new Error("Canvas indisponible."));
@@ -18,29 +23,38 @@ export function composeReceptionPng(input: {
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.fillStyle = "#1c1917";
     ctx.font = "600 28px sans-serif";
-    ctx.fillText("Réception de chantier", 40, 52);
+    ctx.fillText(isLivraison ? "Bon de livraison" : "Réception de chantier", 40, 52);
     ctx.font = "18px sans-serif";
     ctx.fillStyle = "#44403c";
-    const lines = [
-      `Client : ${input.nomClient}`,
-      `Élément : ${input.nomElement}`,
-      `Signataire : ${input.nomSignataire}`,
-      `Date : ${input.dateLabel}`,
-    ];
+    const lines = isLivraison
+      ? [
+          `Chantier : ${input.nomClient}${input.nomElement ? ` — ${input.nomElement}` : ""}`,
+          `Adresse de livraison : ${input.adresseLivraison || "—"}`,
+          `Date : ${input.dateLivraison || input.dateLabel}`,
+          `Salarié responsable : ${input.nomSalarie || "—"}`,
+          `Signataire : ${input.nomSignataire}`,
+        ]
+      : [
+          `Client : ${input.nomClient}`,
+          `Élément : ${input.nomElement}`,
+          `Signataire : ${input.nomSignataire}`,
+          `Date : ${input.dateLabel}`,
+        ];
     lines.forEach((line, index) => {
       ctx.fillText(line, 40, 100 + index * 28);
     });
+    const boxTop = 100 + lines.length * 28 + 24;
     ctx.strokeStyle = "#d6d3d1";
-    ctx.strokeRect(40, 220, 920, 360);
+    ctx.strokeRect(40, boxTop, 920, canvas.height - boxTop - 40);
 
     const img = new Image();
     img.onload = () => {
       const maxW = 880;
-      const maxH = 320;
+      const maxH = canvas.height - boxTop - 80;
       const ratio = Math.min(maxW / img.width, maxH / img.height, 1);
       const w = img.width * ratio;
       const h = img.height * ratio;
-      ctx.drawImage(img, 60, 240, w, h);
+      ctx.drawImage(img, 60, boxTop + 20, w, h);
       resolve(canvas.toDataURL("image/png"));
     };
     img.onerror = () => reject(new Error("Lecture de la signature impossible."));
@@ -81,6 +95,7 @@ export async function requestUploadReceptionOnedrive(input: {
   dateIso: string;
   pngDataUrl: string;
   lienDossier: string | null;
+  kind?: "reception" | "livraison";
 }): Promise<{ ok: boolean; error?: string }> {
   try {
     const res = await fetch("/api/onedrive/upload-reception", {
