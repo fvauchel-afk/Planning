@@ -1,4 +1,5 @@
 import "server-only";
+import { asAdminFlag } from "@/lib/auth/ids";
 import { chantierHasEstimativeDates, chantierIdForPhase, phaseIdsStartedToday, withConfirmedPhases } from "@/lib/dates-estimatives";
 import { phaseTypeForRoles } from "@/lib/chantier-status";
 import { normalizePhasesForPlanning } from "@/lib/engine/normalize-phases";
@@ -282,7 +283,7 @@ async function fetchSupabaseSnapshotOnce(): Promise<PlanningSnapshot> {
       await supabaseConfirmPhaseDates(snapshot, started);
       return withConfirmedPhases(snapshot, started);
     } catch (err) {
-      logSupabaseError(err);
+      logSupabaseError("confirmPhaseDates today", err);
       return snapshot;
     }
   }
@@ -377,6 +378,7 @@ export async function supabaseCreateChantier(
             employe_id: null,
             urgent: false,
             heures_supplementaires_par_jour: 0,
+            dates_estimatives: Boolean(input.dates_estimatives),
           }));
 
     const uniqueByType = new Map<TypePhase, (typeof phases)[number]>();

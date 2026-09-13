@@ -152,6 +152,7 @@ export function localCreateChantier(
             employe_id: null,
             urgent: false,
             heures_supplementaires_par_jour: 0,
+            dates_estimatives: Boolean(input.dates_estimatives),
           }));
     const uniqueByType = new Map<(typeof phases)[number]["type_phase"], (typeof phases)[number]>();
     for (const phase of phases) {
