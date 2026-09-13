@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-13-edit-pose-thermo",
+    title: "Fiche chantier",
+    items: [
+      "Dans Modifier, vous pouvez changer Thermolaquage / galvanisation et Installation / pose (Oui ou Non), comme à la création.",
+      "Passer à Oui ajoute la phase au bon endroit (thermolaquage après la fabrication, pose après le thermolaquage s’il y en a un). Passer à Non demande confirmation avant de supprimer la phase.",
+    ],
+  },
+  {
     id: "2026-09-13-signalements-validation",
     title: "Signalements",
     items: [

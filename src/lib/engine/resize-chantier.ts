@@ -145,6 +145,59 @@ export function isEmptyPhaseEdits(edits: PhaseEdits): boolean {
   );
 }
 
+export function mergePhaseEdits(first: PhaseEdits, second: PhaseEdits): PhaseEdits {
+  const deleted = new Set([
+    ...(first.deleteIds ?? []),
+    ...(second.deleteIds ?? []),
+  ]);
+  const patchById = new Map<string, PhasePatch>();
+  for (const patch of [...(first.patches ?? []), ...(second.patches ?? [])]) {
+    if (deleted.has(patch.id)) continue;
+    patchById.set(patch.id, patch);
+  }
+  const patches = Array.from(patchById.values());
+  const inserts = [...(first.inserts ?? []), ...(second.inserts ?? [])];
+  const deleteIds = Array.from(deleted);
+  return {
+    patches: patches.length ? patches : undefined,
+    inserts: inserts.length ? inserts : undefined,
+    deleteIds: deleteIds.length ? deleteIds : undefined,
+  };
+}
+
+export function previewPhaseEdits(
+  snapshot: PlanningSnapshot,
+  edits: PhaseEdits,
+): PlanningSnapshot {
+  let phases = snapshot.phases;
+  const byId = new Map((edits.patches ?? []).map((patch) => [patch.id, patch]));
+  if (byId.size > 0) {
+    phases = phases.map((phase) => {
+      const patch = byId.get(phase.id);
+      if (!patch) return phase;
+      return {
+        ...phase,
+        date_debut: patch.date_debut,
+        date_fin: patch.date_fin,
+        employe_id: patch.employe_id,
+        heure_debut:
+          patch.heure_debut !== undefined ? patch.heure_debut : phase.heure_debut,
+        duree_estimee_heures:
+          patch.duree_estimee_heures ?? phase.duree_estimee_heures,
+      };
+    });
+  }
+  if (edits.deleteIds?.length) {
+    const removed = new Set(edits.deleteIds);
+    phases = phases.filter((phase) => !removed.has(phase.id));
+  }
+  const inserted = (edits.inserts ?? []).map((row, index) => ({
+    id: `preview-insert-${index}`,
+    ...row,
+  }));
+  return { ...snapshot, phases: [...phases, ...inserted] };
+}
+
 function runResizeSelfCheck() {
   const snapshot: PlanningSnapshot = {
     employees: [

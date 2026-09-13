@@ -311,6 +311,8 @@ export function localApplyPhaseEdits(
         employe_id: patch.employe_id,
         heure_debut:
           patch.heure_debut !== undefined ? patch.heure_debut : phase.heure_debut,
+        duree_estimee_heures:
+          patch.duree_estimee_heures ?? phase.duree_estimee_heures,
       };
     });
   }
@@ -477,6 +479,10 @@ export function localUpdateChantier(
           lien_dossier_onedrive: input.lien_dossier_onedrive,
           dates_estimatives:
             input.dates_estimatives ?? chantier.dates_estimatives,
+          delai_sous_traitance_jours:
+            input.delai_sous_traitance_jours !== undefined
+              ? input.delai_sous_traitance_jours
+              : chantier.delai_sous_traitance_jours,
         }
       : chantier,
   );
