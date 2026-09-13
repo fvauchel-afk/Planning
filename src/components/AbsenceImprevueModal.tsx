@@ -10,6 +10,7 @@ import {
 } from "@/lib/engine/absence-imprevue";
 import { formatLongDate, toISODate } from "@/lib/dates";
 import { needsAlgoValidation, propositionFromDelay } from "@/lib/signalements";
+import { generateDelaySolutions, propositionFromSolutions } from "@/lib/engine/plan-solutions";
 import { usePlanning } from "@/lib/planning-context";
 import {
   ABSENCE_LABELS,
@@ -122,7 +123,15 @@ export function AbsenceImprevueModal({
           note: `Absence du ${from} au ${to} : l’algorithme propose des décalages, non appliqués tant que Mika ou Alexis n’a pas validé.`,
           origine: "decalage_admin",
           statut: "en_attente",
-          proposition: propositionFromDelay(snapshot, plan),
+          proposition:
+            propositionFromSolutions(
+              generateDelaySolutions(
+                snapshot,
+                impacted[0]?.phase.id ?? plan.patches[0]?.id ?? "",
+                2,
+                plan,
+              ),
+            ) ?? propositionFromDelay(snapshot, plan),
         });
       } else if (plan.patches.length > 0) {
         await applyPhasePatches(plan.patches);

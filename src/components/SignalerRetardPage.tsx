@@ -6,6 +6,7 @@ import { MobileShell } from "@/components/MobileShell";
 import { PHASE_LABELS, type SensSignalement } from "@/lib/types";
 import { usePlanning } from "@/lib/planning-context";
 import { planDelayCascade } from "@/lib/engine/delay";
+import { generateDelaySolutions, propositionFromSolutions } from "@/lib/engine/plan-solutions";
 import { propositionFromDelay } from "@/lib/signalements";
 import { useSalarieId } from "@/lib/use-salarie";
 
@@ -75,7 +76,10 @@ export function SignalerRetardPage() {
         retard_demi_journees: halfDays,
         sens,
         note: note.trim(),
-        proposition: propositionFromDelay(snapshot, preview),
+        proposition:
+          propositionFromSolutions(
+            generateDelaySolutions(snapshot, phaseId, signed, preview),
+          ) ?? propositionFromDelay(snapshot, preview),
       });
       router.push("/moi");
     } catch (err) {

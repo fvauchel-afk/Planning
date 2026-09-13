@@ -92,6 +92,7 @@ type PlanningContextValue = {
   validateSignalement: (
     id: string,
     patches: PhasePatch[],
+    createChantier?: NewChantierInput | null,
   ) => Promise<void>;
   createReception: (input: NewReceptionInput) => Promise<void>;
   createDemande: (input: NewDemandeInput) => Promise<void>;
@@ -440,14 +441,25 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
   );
 
   const validateSignalement = useCallback(
-    async (id: string, patches: PhasePatch[]) => {
+    async (
+      id: string,
+      patches: PhasePatch[],
+      createChantier?: NewChantierInput | null,
+    ) => {
       assertWritable();
       if (useShared) {
-        await planningMutate({ action: "validateSignalement", id, patches });
+        await planningMutate({
+          action: "validateSignalement",
+          id,
+          patches,
+          createChantier,
+        });
         await refresh();
         return;
       }
-      setSnapshot((current) => localValidateSignalement(current, id, patches));
+      setSnapshot((current) =>
+        localValidateSignalement(current, id, patches, createChantier),
+      );
     },
     [useShared, refresh, assertWritable],
   );

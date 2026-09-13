@@ -2,12 +2,14 @@
 
 import { useState } from "react";
 import { ConflictModal } from "@/components/ConflictModal";
-import { PropositionImpact } from "@/components/PropositionImpact";
+import { PropositionSolutions } from "@/components/PropositionSolutions";
 import { PHASE_LABELS, SENS_LABELS, SIGNALEMENT_LABELS } from "@/lib/types";
 import { planDelayCascade, type DelayPlanResult } from "@/lib/engine/delay";
+import { allSolutionsOf } from "@/lib/engine/plan-solutions";
 import { formatLongDate } from "@/lib/dates";
 import { propositionFromDelay } from "@/lib/signalements";
 import { usePlanning } from "@/lib/planning-context";
+import type { PlanningSolution } from "@/lib/types";
 
 export function SignalementsPage() {
   const { snapshot, validateSignalement, setSignalementStatut } = usePlanning();
@@ -15,6 +17,7 @@ export function SignalementsPage() {
     id: string;
     result: DelayPlanResult;
   } | null>(null);
+  const [chosen, setChosen] = useState<Record<string, PlanningSolution>>({});
   const pendingItems = (snapshot.signalements ?? []).filter(
     (item) => item.statut === "en_attente",
   );
@@ -45,8 +48,14 @@ export function SignalementsPage() {
     halfDays: number,
     stored = pendingItems.find((item) => item.id === id)?.proposition,
   ) {
-    if (stored?.patches.length || stored?.createChantier) {
-      await validateSignalement(id, stored.patches);
+    const selected =
+      chosen[id] ?? (stored ? allSolutionsOf(stored)[0] : undefined);
+    if (selected?.patches.length || selected?.createChantier || stored?.patches.length || stored?.createChantier) {
+      await validateSignalement(
+        id,
+        selected?.patches ?? stored?.patches ?? [],
+        selected ? selected.createChantier ?? null : stored?.createChantier,
+      );
       return;
     }
     if (!phaseId) {
@@ -84,10 +93,10 @@ export function SignalementsPage() {
       <div>
         <h2 className="font-serif text-3xl text-stone-900">Signalements</h2>
         <p className="mt-1 text-sm text-stone-600">
-          Validation par Michael ou Alexis. Une proposition de l’algorithme n’est
-          jamais appliquée toute seule : vous voyez les chantiers et salariés
-          décalés, puis vous validez. Le reste du planning reste utilisable en
-          attendant.
+          Validation par Michael ou Alexis. S’il y a plusieurs solutions, choisissez
+          celle qui convient : vous voyez qui bouge, les dates, et un aperçu du
+          planning. Rien n’est appliqué tant que vous n’avez pas validé. Le reste
+          du planning reste utilisable en attendant.
         </p>
       </div>
 
@@ -142,7 +151,15 @@ export function SignalementsPage() {
                     {item.note}
                   </p>
                 )}
-                {preview ? <PropositionImpact proposition={preview} /> : null}
+                {preview ? (
+                  <PropositionSolutions
+                    snapshot={snapshot}
+                    proposition={preview}
+                    onChange={(solution) =>
+                      setChosen((current) => ({ ...current, [item.id]: solution }))
+                    }
+                  />
+                ) : null}
                 <div className="mt-3 flex flex-wrap gap-2">
                   <button
                     type="button"
@@ -152,7 +169,7 @@ export function SignalementsPage() {
                     }
                   >
                     {item.proposition
-                      ? "Valider la proposition"
+                      ? "Valider la solution choisie"
                       : item.sens === "avance"
                         ? "Valider et avancer"
                         : "Valider et décaler"}

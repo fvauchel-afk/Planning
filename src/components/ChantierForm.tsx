@@ -17,7 +17,9 @@ import {
   ensureChantierDatesOnCreate,
   inputHasExplicitDates,
 } from "@/lib/engine/earliest-date";
+import { generatePlanSolutions, propositionFromSolutions } from "@/lib/engine/plan-solutions";
 import { applyPhaseChainOnCreate } from "@/lib/engine/phase-chain";
+import { moisToToleranceJours } from "@/lib/priorite";
 import { employeeCanTakePhase } from "@/lib/chantier-status";
 import { usePlanning } from "@/lib/planning-context";
 import { useSession } from "@/lib/auth/session-context";
@@ -73,6 +75,7 @@ export function ChantierForm() {
   const [adresse, setAdresse] = useState("");
   const [lien, setLien] = useState("");
   const [priorite, setPriorite] = useState<Priorite>("normal");
+  const [toleranceMois, setToleranceMois] = useState(1);
   const [urgent, setUrgent] = useState(false);
   const [dateDebut, setDateDebut] = useState("");
   const [dateFin, setDateFin] = useState("");
@@ -177,6 +180,8 @@ export function ChantierForm() {
       adresse: adresse.trim(),
       lien_dossier_onedrive: lien.trim() || null,
       priorite,
+      tolerance_deplacement_jours:
+        priorite === "pas_presse" ? moisToToleranceJours(toleranceMois) : null,
       date_debut: dateDebut || null,
       date_fin: dateFin || dateDebut || null,
       dates_estimatives: datesEstimatives,
@@ -314,24 +319,32 @@ export function ChantierForm() {
     setSaving(true);
     try {
       const merged = mergePlanIntoInput(pendingInput, conflict.phases, urgent);
-      const patches = patchesFromConflict(conflict);
+      const solutions = generatePlanSolutions(
+        snapshot,
+        pendingInput,
+        conflict,
+        urgent,
+      );
+      const proposition =
+        propositionFromSolutions(solutions) ??
+        propositionFromDelay(
+          snapshot,
+          {
+            message: conflict.message,
+            patches: patchesFromConflict(conflict),
+            displacements: conflict.displacements,
+          },
+          { createChantier: merged },
+        );
       await createSignalement({
         employe_id: session.employeeId,
         phase_id: null,
         retard_demi_journees: 1,
         sens: "retard",
-        note: `Nouveau chantier « ${pendingInput.nom_client} » : décalages proposés, non appliqués.`,
+        note: `Nouveau chantier « ${pendingInput.nom_client} » : plusieurs solutions, non appliquées.`,
         origine: "decalage_admin",
         statut: "en_attente",
-        proposition: propositionFromDelay(
-          snapshot,
-          {
-            message: conflict.message,
-            patches,
-            displacements: conflict.displacements,
-          },
-          { createChantier: merged },
-        ),
+        proposition,
       });
       router.push("/signalements");
     } catch (err) {
@@ -527,6 +540,34 @@ export function ChantierForm() {
             ))}
           </select>
         </label>
+        {priorite === "pas_presse" ? (
+          <label className="block text-sm">
+            <span className="mb-1 block font-medium">Marge de déplacement</span>
+            <select
+              value={toleranceMois}
+              onChange={(event) => setToleranceMois(Number(event.target.value))}
+              className="w-full rounded border border-stone-300 px-3 py-2"
+            >
+              {[1, 2, 3, 4, 5, 6].map((mois) => (
+                <option key={mois} value={mois}>
+                  ± {mois} mois
+                </option>
+              ))}
+            </select>
+            <span className="mt-1 block text-xs text-stone-500">
+              En cas de conflit, l’algorithme pourra décaler ce chantier dans
+              cette fenêtre (1 mois par défaut).
+            </span>
+          </label>
+        ) : priorite === "normal" ? (
+          <p className="self-end text-xs text-stone-500">
+            Marge automatique : ± 2 semaines.
+          </p>
+        ) : (
+          <p className="self-end text-xs text-stone-500">
+            Date à tenir exactement : les autres affaires bougent d’abord.
+          </p>
+        )}
         <label className="flex items-center gap-2 text-sm md:col-span-2">
           <input
             type="checkbox"

@@ -1,5 +1,6 @@
 import { addDays, addWorkingDays, formatLongDate, formatOvertimeHours, startOfWeekIso } from "@/lib/dates";
 import { employeeCanTakePhase } from "@/lib/chantier-status";
+import { canPriorityDisplace, chantierToleranceWorkingDays } from "@/lib/priorite";
 import {
   LOGISTIQUE_ROW_ID,
   PHASE_LABELS,
@@ -73,21 +74,13 @@ export type PlanResult = {
   logisticsGaps: number[];
 };
 
-const PRIORITY_RANK: Record<Priorite, number> = {
-  pas_presse: 0,
-  normal: 1,
-  prioritaire: 2,
-};
-
 export function canDisplace(
   existing: Priorite,
   incoming: Priorite,
   incomingUrgent: boolean,
 ): boolean {
   if (!incomingUrgent) return false;
-  if (incoming === "pas_presse") return false;
-  if (existing === "prioritaire" && incoming !== "prioritaire") return false;
-  return PRIORITY_RANK[incoming] >= PRIORITY_RANK[existing];
+  return canPriorityDisplace(existing, incoming);
 }
 
 function cloneOcc(occupancy: Map<string, string>): Map<string, string> {
@@ -823,13 +816,14 @@ function buildDisplacements(
       return element?.chantier_id === chantierId && phase.date_debut && phase.date_fin;
     });
 
-    let shift = 1;
     let resolved = false;
     let shifted = chantierPhases;
-    while (shift <= 40 && !resolved) {
-      shifted = chantierPhases.map((phase) => shiftPhaseDates(phase, shift));
+    const maxShift = chantierToleranceWorkingDays(chantier);
+    if (maxShift <= 0) continue;
+    const tryShift = (amount: number) => {
+      const next = chantierPhases.map((phase) => shiftPhaseDates(phase, amount));
       const stillOverlap = slots.some((slot) =>
-        shifted.some((phase) => {
+        next.some((phase) => {
           const rowId =
             phase.type_phase === "logistique"
               ? LOGISTIQUE_ROW_ID
@@ -841,15 +835,31 @@ function buildDisplacements(
           );
         }),
       );
-      if (!stillOverlap) resolved = true;
-      else shift += 1;
+      return stillOverlap ? null : next;
+    };
+    let shift = 0;
+    for (let days = 1; days <= maxShift && !resolved; days += 1) {
+      const forward = tryShift(days);
+      if (forward) {
+        shifted = forward;
+        shift = days;
+        resolved = true;
+        break;
+      }
+      const backward = tryShift(-days);
+      if (backward) {
+        shifted = backward;
+        shift = -days;
+        resolved = true;
+        break;
+      }
     }
     if (!resolved) continue;
     displacements.push({
       chantier_id: chantierId,
       nom_client: chantier.nom_client,
       priorite: chantier.priorite,
-      working_days: shift,
+      working_days: Math.abs(shift),
       phases: shifted.map((phase) => {
         const original = chantierPhases.find((item) => item.id === phase.id)!;
         return {

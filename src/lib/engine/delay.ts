@@ -1,4 +1,5 @@
 import { addDays, addWorkingDays, datesOverlap, isWeekend, shiftToReach, workingDaysBetween } from "@/lib/dates";
+import { canPriorityDisplace, chantierToleranceWorkingDays } from "@/lib/priorite";
 import {
   TYPES_PHASE,
   type Chantier,
@@ -35,8 +36,7 @@ export function canCascadeDisplace(
   existing: Priorite,
   incoming: Priorite,
 ): boolean {
-  if (existing === "prioritaire" && incoming !== "prioritaire") return false;
-  return true;
+  return canPriorityDisplace(existing, incoming);
 }
 
 type Dated = { debut: string; fin: string };
@@ -450,15 +450,17 @@ function resultFromPacked(
     });
   }
   const displacements = buildDisplacements(snapshot, origin, patches);
+  const originPriorite = chantierOf(snapshot, origin)?.priorite ?? "normal";
+  const originChantierId = chantierOf(snapshot, origin)?.id;
   const conflict =
     packed.blocked ||
-    displacements.some(
-      (item) =>
-        !canCascadeDisplace(
-          item.priorite,
-          chantierOf(snapshot, origin)?.priorite ?? "normal",
-        ),
-    );
+    displacements.some((item) => {
+      if (item.chantier_id === originChantierId) return false;
+      if (!canCascadeDisplace(item.priorite, originPriorite)) return true;
+      const chantier = snapshot.chantiers.find((row) => row.id === item.chantier_id);
+      if (!chantier) return true;
+      return item.working_days > chantierToleranceWorkingDays(chantier);
+    });
   const originNext = packed.dates.get(origin.id);
   return {
     status: conflict ? "conflict" : "ok",

@@ -9,6 +9,7 @@ import { idsEqual } from "@/lib/auth/ids";
 import { useSession } from "@/lib/auth/session-context";
 import { phaseIsEstimative } from "@/lib/dates-estimatives";
 import { needsAlgoValidation, propositionFromDelay } from "@/lib/signalements";
+import { generateDelaySolutions, propositionFromSolutions } from "@/lib/engine/plan-solutions";
 import { formatLongDate, formatOvertimeHours, shiftToReach } from "@/lib/dates";
 import {
   planBestDelayInWindow,
@@ -119,7 +120,14 @@ export function PhaseFicheModal({
           note: delayNote,
           origine: "decalage_admin",
           statut: "en_attente",
-          proposition: propositionFromDelay(snapshot, result),
+          proposition:
+            propositionFromSolutions(
+              generateDelaySolutions(snapshot, phaseId, halfDays, result, {
+                scope,
+                target: delayKind === "cible" ? targetDate : undefined,
+                flex: delayKind === "cible" ? Number(flex) || undefined : undefined,
+              }),
+            ) ?? propositionFromDelay(snapshot, result),
         });
         onClose();
         return;

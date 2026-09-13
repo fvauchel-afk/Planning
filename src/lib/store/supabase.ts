@@ -198,6 +198,10 @@ async function fetchSupabaseSnapshotOnce(): Promise<PlanningSnapshot> {
         typeof chantier.delai_sous_traitance_jours === "number"
           ? chantier.delai_sous_traitance_jours
           : 5,
+      tolerance_deplacement_jours:
+        typeof chantier.tolerance_deplacement_jours === "number"
+          ? chantier.tolerance_deplacement_jours
+          : null,
     })),
     elements: (elements.data ?? []) as ElementChantier[],
     phases: normalizePhasesForPlanning(
@@ -318,6 +322,10 @@ export async function supabaseCreateChantier(
       60,
       Math.max(1, Number(input.delai_laquage_jours) || 5),
     ),
+    tolerance_deplacement_jours:
+      input.priorite === "pas_presse"
+        ? Math.min(180, Math.max(1, Number(input.tolerance_deplacement_jours) || 30))
+        : null,
     adresse_livraison: input.avec_livraison ? input.adresse_livraison ?? null : null,
     telephone_livraison: input.avec_livraison
       ? input.telephone_livraison ?? null
@@ -328,6 +336,22 @@ export async function supabaseCreateChantier(
     .insert(payload)
     .select("id")
     .single();
+  if (inserted.error && isMissingColumnError(inserted.error, "tolerance_deplacement_jours")) {
+    inserted = await supabase
+      .from("chantiers")
+      .insert({
+        nom_client: payload.nom_client,
+        adresse: payload.adresse,
+        lien_dossier_onedrive: payload.lien_dossier_onedrive,
+        priorite: payload.priorite,
+        dates_estimatives: payload.dates_estimatives,
+        delai_sous_traitance_jours: payload.delai_sous_traitance_jours,
+        adresse_livraison: payload.adresse_livraison,
+        telephone_livraison: payload.telephone_livraison,
+      })
+      .select("id")
+      .single();
+  }
   if (inserted.error && isMissingColumnError(inserted.error, "adresse_livraison")) {
     inserted = await supabase
       .from("chantiers")
@@ -472,10 +496,25 @@ export async function supabaseUpdateChantier(
   if (input.telephone_livraison !== undefined) {
     payload.telephone_livraison = input.telephone_livraison;
   }
+  if (input.tolerance_deplacement_jours !== undefined) {
+    payload.tolerance_deplacement_jours =
+      input.priorite === "pas_presse"
+        ? Math.min(180, Math.max(1, Number(input.tolerance_deplacement_jours) || 30))
+        : null;
+  }
   let { error } = await supabase
     .from("chantiers")
     .update(payload)
     .eq("id", input.id);
+  if (error && isMissingColumnError(error, "tolerance_deplacement_jours")) {
+    const withoutTol = { ...payload };
+    delete withoutTol.tolerance_deplacement_jours;
+    const retryTol = await supabase
+      .from("chantiers")
+      .update(withoutTol)
+      .eq("id", input.id);
+    error = retryTol.error;
+  }
   if (error && isMissingColumnError(error, "adresse_livraison")) {
     const withoutLiv = { ...payload };
     delete withoutLiv.adresse_livraison;
