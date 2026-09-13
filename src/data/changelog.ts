@@ -11,6 +11,15 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-13-signalements-validation",
+    title: "Signalements",
+    items: [
+      "Mika et Alexis reçoivent une notification dès qu’un nouveau signalement arrive (comme pour les commandes).",
+      "Si l’algorithme veut décaler d’autres chantiers, il n’applique plus rien tout seul : la proposition s’affiche dans Signalements (qui bouge, quelles dates) et attend une validation. Le reste du planning reste utilisable.",
+      "Tant qu’un signalement n’est pas traité, on ne peut pas créer un nouveau chantier — pour ne pas ajouter du travail sur un planning qui va encore bouger.",
+    ],
+  },
+  {
     id: "2026-09-13-estimatif-confirme",
     title: "Dates estimatives",
     items: [

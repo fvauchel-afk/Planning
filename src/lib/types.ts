@@ -137,26 +137,44 @@ export type SensSignalement = (typeof SENS_SIGNALEMENT)[number];
 export const ORIGINES_SIGNALEMENT = ["salarie", "decalage_admin"] as const;
 export type OrigineSignalement = (typeof ORIGINES_SIGNALEMENT)[number];
 
+export type SignalementProposition = {
+  message: string;
+  patches: PhasePatch[];
+  repercussions: {
+    phase_id: string;
+    type_phase: TypePhase;
+    nom_client: string;
+    nom_salarie: string;
+    old_debut: string;
+    old_fin: string;
+    date_debut: string;
+    date_fin: string;
+  }[];
+  createChantier?: NewChantierInput;
+};
+
 export type Signalement = {
   id: string;
   employe_id: string;
-  phase_id: string;
+  phase_id: string | null;
   retard_demi_journees: number;
   sens: SensSignalement;
   note: string;
   statut: StatutSignalement;
   date_creation: string;
   origine: OrigineSignalement;
+  proposition?: SignalementProposition | null;
 };
 
 export type NewSignalementInput = {
   employe_id: string;
-  phase_id: string;
+  phase_id?: string | null;
   retard_demi_journees: number;
   sens: SensSignalement;
   note: string;
   origine?: OrigineSignalement;
   statut?: StatutSignalement;
+  proposition?: SignalementProposition | null;
 };
 
 export type ReceptionChantier = {
