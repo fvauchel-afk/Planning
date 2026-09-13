@@ -13,9 +13,10 @@ import {
   vapidSubject,
 } from "@/lib/push/vapid";
 
-export async function sendCommandePush(input: {
-  auteur: string;
-  message: string;
+export async function sendPlanningAlertPush(input: {
+  title: string;
+  body: string;
+  url: string;
 }): Promise<{ sent: number; warning?: string }> {
   if (!vapidConfigured()) {
     return {
@@ -46,9 +47,9 @@ export async function sendCommandePush(input: {
 
   webpush.setVapidDetails(vapidSubject(), vapidPublicKey(), vapidPrivateKey());
   const payload = JSON.stringify({
-    title: "Nouvelle commande",
-    body: `${input.auteur} : ${input.message.slice(0, 140)}`,
-    url: "/demandes",
+    title: input.title,
+    body: input.body.slice(0, 180),
+    url: input.url,
   });
 
   let sent = 0;
@@ -81,4 +82,26 @@ export async function sendCommandePush(input: {
     }),
   );
   return { sent };
+}
+
+export async function sendCommandePush(input: {
+  auteur: string;
+  message: string;
+}): Promise<{ sent: number; warning?: string }> {
+  return sendPlanningAlertPush({
+    title: "Nouvelle commande",
+    body: `${input.auteur} : ${input.message.slice(0, 140)}`,
+    url: "/demandes",
+  });
+}
+
+export async function sendSignalementPush(input: {
+  auteur: string;
+  resume: string;
+}): Promise<{ sent: number; warning?: string }> {
+  return sendPlanningAlertPush({
+    title: "Nouveau signalement",
+    body: `${input.auteur} : ${input.resume}`,
+    url: "/signalements",
+  });
 }
