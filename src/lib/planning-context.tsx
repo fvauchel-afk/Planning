@@ -30,6 +30,7 @@ import {
   localSetChantierOnedriveLink,
   localSetReceptionOnedriveErreur,
   localSetSignalementStatut,
+  localValidateSignalement,
   localUpdateChantier,
   localDeleteChantier,
   localScheduleChantierDay,
@@ -436,11 +437,7 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
         await refresh();
         return;
       }
-      setSnapshot((current) => {
-        const shifted =
-          patches.length > 0 ? localApplyPhasePatches(current, patches) : current;
-        return localSetSignalementStatut(shifted, id, "valide");
-      });
+      setSnapshot((current) => localValidateSignalement(current, id, patches));
     },
     [useShared, refresh, assertWritable],
   );

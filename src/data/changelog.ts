@@ -11,6 +11,15 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-13-signalements-validation",
+    title: "Signalements",
+    items: [
+      "Mika et Alexis reçoivent une notification dès qu’un nouveau signalement arrive (comme pour les commandes).",
+      "Si l’algorithme veut décaler d’autres chantiers, il n’applique plus rien tout seul : la proposition s’affiche dans Signalements (qui bouge, quelles dates) et attend une validation. Le reste du planning reste utilisable.",
+      "Tant qu’un signalement n’est pas traité, on ne peut pas créer un nouveau chantier — pour ne pas ajouter du travail sur un planning qui va encore bouger.",
+    ],
+  },
+  {
     id: "2026-09-13-estimatif-confirme",
     title: "Dates estimatives",
     items: [
@@ -22,7 +31,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     id: "2026-09-13-bon-de-commande",
     title: "Bon de commande",
     items: [
-      "Quand un chantier est en fabrication, vous pouvez générer un bon de commande PDF, le vérifier, puis l’envoyer au sous-traitant (copie à f.vauchel).",
+      "Quand un chantier est en fabrication, vous pouvez générer un bon de commande PDF, le vérifier, puis l’envoyer au sous-traitant depuis commandes@lametalleriedusud.com (copie à f.vauchel).",
       "Les sous-traitants se gèrent dans un nouvel onglet : nom, spécialité, e-mail. Le délai de 5 jours ouvrés pour le thermolaquage / galvanisation part de l’envoi du bon, pas de la création du chantier. Une copie du PDF va dans le dossier OneDrive.",
     ],
   },

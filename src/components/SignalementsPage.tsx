@@ -2,9 +2,11 @@
 
 import { useState } from "react";
 import { ConflictModal } from "@/components/ConflictModal";
+import { PropositionImpact } from "@/components/PropositionImpact";
 import { PHASE_LABELS, SENS_LABELS, SIGNALEMENT_LABELS } from "@/lib/types";
 import { planDelayCascade, type DelayPlanResult } from "@/lib/engine/delay";
 import { formatLongDate } from "@/lib/dates";
+import { propositionFromDelay } from "@/lib/signalements";
 import { usePlanning } from "@/lib/planning-context";
 
 export function SignalementsPage() {
@@ -20,7 +22,7 @@ export function SignalementsPage() {
     (item) => item.statut !== "en_attente",
   );
 
-  function describe(phaseId: string) {
+  function describe(phaseId: string | null) {
     const phase = snapshot.phases.find((item) => item.id === phaseId);
     const element = snapshot.elements.find((item) => item.id === phase?.element_id);
     const chantier = snapshot.chantiers.find(
@@ -37,7 +39,20 @@ export function SignalementsPage() {
     };
   }
 
-  async function validate(id: string, phaseId: string, halfDays: number) {
+  async function validate(
+    id: string,
+    phaseId: string | null,
+    halfDays: number,
+    stored = pendingItems.find((item) => item.id === id)?.proposition,
+  ) {
+    if (stored?.patches.length || stored?.createChantier) {
+      await validateSignalement(id, stored.patches);
+      return;
+    }
+    if (!phaseId) {
+      await validateSignalement(id, []);
+      return;
+    }
     const result = planDelayCascade(snapshot, phaseId, halfDays);
     if (result.status === "conflict") {
       setPending({ id, result });
@@ -55,6 +70,7 @@ export function SignalementsPage() {
           displacements={pending.result.displacements}
           incoming={[]}
           showIncoming={false}
+          validateLabel="Valider quand même"
           adjustLabel="Laisser en attente"
           onValidate={() => {
             const current = pending;
@@ -68,10 +84,10 @@ export function SignalementsPage() {
       <div>
         <h2 className="font-serif text-3xl text-stone-900">Signalements</h2>
         <p className="mt-1 text-sm text-stone-600">
-          Validation par Michael ou Alexis. Un écart validé décale en cascade la
-          phase, ses suites, puis les affaires suivantes du même salarié — sans
-          sauter ni réordonner. Un chantier prioritaire n’est jamais poussé par un
-          chantier pas pressé sans arbitrage.
+          Validation par Michael ou Alexis. Une proposition de l’algorithme n’est
+          jamais appliquée toute seule : vous voyez les chantiers et salariés
+          décalés, puis vous validez. Le reste du planning reste utilisable en
+          attendant.
         </p>
       </div>
 
@@ -88,21 +104,35 @@ export function SignalementsPage() {
               item.sens === "avance"
                 ? -item.retard_demi_journees
                 : item.retard_demi_journees;
-            const preview = planDelayCascade(snapshot, item.phase_id, signed);
+            const preview =
+              item.proposition ??
+              (item.phase_id
+                ? propositionFromDelay(
+                    snapshot,
+                    planDelayCascade(snapshot, item.phase_id, signed),
+                  )
+                : null);
             return (
               <article
                 key={item.id}
                 className="rounded-lg border border-stone-300 bg-white p-4"
               >
                 <p className="font-medium">
-                  {auteur?.nom} — {info.chantier?.nom_client} /{" "}
-                  {info.element?.nom_element} (
-                  {info.phase ? PHASE_LABELS[info.phase.type_phase] : "phase"})
+                  {auteur?.nom}
+                  {item.proposition?.createChantier
+                    ? ` — Nouveau chantier « ${item.proposition.createChantier.nom_client} »`
+                    : ` — ${info.chantier?.nom_client ?? "Proposition"} / ${
+                        info.element?.nom_element ?? "—"
+                      } (${
+                        info.phase ? PHASE_LABELS[info.phase.type_phase] : "phase"
+                      })`}
                 </p>
                 <p className="mt-1 text-sm text-stone-600">
-                  {SENS_LABELS[item.sens ?? "retard"]} : {item.retard_demi_journees}{" "}
-                  demi-journée
-                  {item.retard_demi_journees > 1 ? "s" : ""}
+                  {item.proposition
+                    ? "Proposition de l’algorithme"
+                    : `${SENS_LABELS[item.sens ?? "retard"]} : ${item.retard_demi_journees} demi-journée${
+                        item.retard_demi_journees > 1 ? "s" : ""
+                      }`}
                   {info.phase?.date_debut
                     ? ` · prévu ${formatLongDate(info.phase.date_debut)} → ${formatLongDate(info.phase.date_fin ?? info.phase.date_debut)}`
                     : ""}
@@ -112,18 +142,20 @@ export function SignalementsPage() {
                     {item.note}
                   </p>
                 )}
-                <p className="mt-2 text-xs text-stone-500">{preview.message}</p>
+                {preview ? <PropositionImpact proposition={preview} /> : null}
                 <div className="mt-3 flex flex-wrap gap-2">
                   <button
                     type="button"
                     className="rounded bg-amber-700 px-3 py-2 text-sm text-amber-50"
                     onClick={() =>
-                      void validate(item.id, item.phase_id, signed)
+                      void validate(item.id, item.phase_id, signed, item.proposition)
                     }
                   >
-                    {item.sens === "avance"
-                      ? "Valider et avancer"
-                      : "Valider et décaler"}
+                    {item.proposition
+                      ? "Valider la proposition"
+                      : item.sens === "avance"
+                        ? "Valider et avancer"
+                        : "Valider et décaler"}
                   </button>
                   <button
                     type="button"
@@ -150,9 +182,11 @@ export function SignalementsPage() {
               return (
                 <li key={item.id}>
                   {SIGNALEMENT_LABELS[item.statut]} —{" "}
-                  {item.origine === "decalage_admin"
-                    ? "Décalage admin"
-                    : SENS_LABELS[item.sens ?? "retard"]}{" "}
+                  {item.proposition
+                    ? "Proposition algorithme"
+                    : item.origine === "decalage_admin"
+                      ? "Décalage admin"
+                      : SENS_LABELS[item.sens ?? "retard"]}{" "}
                   — {auteur?.nom} ({item.retard_demi_journees} ½ j.)
                   {item.note ? ` · ${item.note}` : ""}
                 </li>

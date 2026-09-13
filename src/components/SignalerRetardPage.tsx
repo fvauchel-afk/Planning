@@ -5,6 +5,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { MobileShell } from "@/components/MobileShell";
 import { PHASE_LABELS, type SensSignalement } from "@/lib/types";
 import { usePlanning } from "@/lib/planning-context";
+import { planDelayCascade } from "@/lib/engine/delay";
+import { propositionFromDelay } from "@/lib/signalements";
 import { useSalarieId } from "@/lib/use-salarie";
 
 export function SignalerRetardPage() {
@@ -65,12 +67,15 @@ export function SignalerRetardPage() {
     setSaving(true);
     setError(null);
     try {
+      const signed = sens === "avance" ? -halfDays : halfDays;
+      const preview = planDelayCascade(snapshot, phaseId, signed);
       await createSignalement({
         employe_id: employeeId,
         phase_id: phaseId,
         retard_demi_journees: halfDays,
         sens,
         note: note.trim(),
+        proposition: propositionFromDelay(snapshot, preview),
       });
       router.push("/moi");
     } catch (err) {
