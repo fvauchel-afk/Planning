@@ -28,6 +28,7 @@ import {
   occupancySpans,
   isShortTask,
   timeFromMinutes,
+  HOURS_PER_SLOT,
   type Half,
   type OccupiedSlot,
 } from "./slots";
@@ -397,6 +398,54 @@ function visitContiguousFreeRuns(
   flush();
 }
 
+function rowOccupiedOnDate(
+  occupancy: Map<string, string>,
+  rowId: string,
+  date: string,
+): boolean {
+  if (occupancy.has(slotKey(rowId, date, 0))) return true;
+  if (occupancy.has(slotKey(rowId, date, 1))) return true;
+  for (const span of occupancySpans(occupancy)) {
+    if (span.rowId === rowId && span.date === date) return true;
+  }
+  return false;
+}
+
+function firstDateWithoutOccupancy(
+  occupancy: Map<string, string>,
+  snapshot: PlanningSnapshot,
+  rowId: string,
+  fromDate: string,
+): string | null {
+  let date = fromDate;
+  for (let i = 0; i < SEARCH_DAYS; i += 1) {
+    const morningBlocked = isSlotBlockedForRow(snapshot, rowId, date, 0);
+    const afternoonBlocked = isSlotBlockedForRow(snapshot, rowId, date, 1);
+    if (!morningBlocked || !afternoonBlocked) {
+      if (!rowOccupiedOnDate(occupancy, rowId, date)) return date;
+    }
+    date = addDays(date, 1);
+  }
+  return null;
+}
+
+function windowOverlapsOccupancy(
+  occupancy: Map<string, string>,
+  snapshot: PlanningSnapshot,
+  rowId: string,
+  hours: number,
+  window: { date_debut: string; date_fin: string },
+): boolean {
+  const reconstructed = slotsFromExistingPhase(snapshot, {
+    type_phase: rowId === LOGISTIQUE_ROW_ID ? "logistique" : "administratif",
+    employe_id: rowId === LOGISTIQUE_ROW_ID ? null : rowId,
+    date_debut: window.date_debut,
+    date_fin: window.date_fin,
+    duree_estimee_heures: hours,
+  });
+  return overlappingOwners(occupancy, reconstructed).length > 0;
+}
+
 function nextContiguousFreeWindow(
   occupancy: Map<string, string>,
   snapshot: PlanningSnapshot,
@@ -404,20 +453,42 @@ function nextContiguousFreeWindow(
   hours: number,
   fromDate: string,
 ): { date_debut: string; date_fin: string } | null {
-  const slots = allocateHoursFrom(
+  const neededHours = hours > 0 ? hours : HOURS_PER_SLOT;
+  let cursor = firstDateWithoutOccupancy(
     occupancy,
     snapshot,
     rowId,
-    hours,
     fromDate,
-    0,
-    { short: isShortTask(hours) },
   );
-  if (!slots || slots.length === 0) return null;
-  return {
-    date_debut: slots[0].date,
-    date_fin: slots[slots.length - 1].date,
-  };
+  if (!cursor) return null;
+  for (let attempt = 0; attempt < SEARCH_DAYS; attempt += 1) {
+    const slots = allocateHoursFrom(
+      occupancy,
+      snapshot,
+      rowId,
+      neededHours,
+      cursor,
+      0,
+      { short: isShortTask(neededHours) },
+    );
+    if (!slots || slots.length === 0) return null;
+    const window = {
+      date_debut: slots[0].date,
+      date_fin: slots[slots.length - 1].date,
+    };
+    if (!windowOverlapsOccupancy(occupancy, snapshot, rowId, neededHours, window)) {
+      return window;
+    }
+    const next = firstDateWithoutOccupancy(
+      occupancy,
+      snapshot,
+      rowId,
+      addDays(window.date_debut, 1),
+    );
+    if (!next || next <= cursor) return null;
+    cursor = next;
+  }
+  return null;
 }
 
 const MAX_OVERTIME_HOURS_PER_DAY = 4;
@@ -589,7 +660,7 @@ function placeChantierOnOccupancy(
             debut,
           );
           const nextText = next
-            ? ` Prochain créneau libre pour ${who} : ${formatLongDate(next.date_debut)}.`
+            ? ` Prochain créneau libre pour ${who} : ${formatLongDate(next.date_debut)} → ${formatLongDate(next.date_fin)}.`
             : "";
           phases.push(
             unplacedPhase(
@@ -1174,7 +1245,7 @@ export function inspectManualSlotConflict(
         debut,
       );
       const nextText = nextFree
-        ? ` Prochain créneau libre pour ${who} : ${formatLongDate(nextFree.date_debut)}.`
+        ? ` Prochain créneau libre pour ${who} : ${formatLongDate(nextFree.date_debut)} → ${formatLongDate(nextFree.date_fin)}.`
         : "";
       return {
         elementIndex,
@@ -1237,3 +1308,93 @@ export function mergePlanIntoInput(
     })),
   };
 }
+
+function runNextFreeWindowSelfCheck() {
+  const snapshot: PlanningSnapshot = {
+    employees: [
+      {
+        id: "jon",
+        nom: "Jonathan",
+        roles: ["administratif", "fabrication", "pose"],
+        actif: true,
+      },
+    ],
+    chantiers: [
+      {
+        id: "aaa",
+        nom_client: "AAA",
+        adresse: "",
+        lien_dossier_onedrive: null,
+        priorite: "normal",
+        date_creation: "2026-01-01",
+      },
+    ],
+    elements: [{ id: "el-aaa", chantier_id: "aaa", nom_element: "Portail" }],
+    phases: [
+      {
+        id: "ph-aaa",
+        element_id: "el-aaa",
+        type_phase: "fabrication",
+        duree_estimee_heures: 0,
+        date_debut: "2026-09-14",
+        date_fin: "2026-09-18",
+        employe_id: "jon",
+        statut: "a_faire",
+        urgent: false,
+      },
+    ],
+    absences: [],
+    signalements: [],
+    receptions: [],
+    demandes: [],
+    horaires: [],
+  };
+  const incoming: NewChantierInput = {
+    nom_client: "Nouveau",
+    adresse: "",
+    lien_dossier_onedrive: null,
+    priorite: "normal",
+    elements: [
+      {
+        nom_element: "Table",
+        phases: [
+          {
+            type_phase: "administratif",
+            duree_estimee_heures: 8,
+            date_debut: "2026-09-14",
+            date_fin: "2026-09-14",
+            employe_id: "jon",
+            urgent: false,
+          },
+        ],
+      },
+    ],
+  };
+  const clash = inspectManualSlotConflict(snapshot, incoming);
+  if (!clash?.nextFree) {
+    throw new Error("planner: conflit AAA doit proposer un prochain créneau");
+  }
+  if (clash.nextFree.date_debut <= "2026-09-18") {
+    throw new Error(
+      `planner: prochain créneau doit être après AAA, reçu ${clash.nextFree.date_debut} → ${clash.nextFree.date_fin}`,
+    );
+  }
+  const retry = inspectManualSlotConflict(snapshot, {
+    ...incoming,
+    elements: incoming.elements.map((element) => ({
+      ...element,
+      phases: element.phases.map((phase) => ({
+        ...phase,
+        date_debut: clash.nextFree!.date_debut,
+        date_fin: clash.nextFree!.date_fin,
+      })),
+    })),
+  });
+  if (retry) {
+    throw new Error(
+      `planner: le créneau proposé chevauche encore (${retry.message})`,
+    );
+  }
+}
+
+runNextFreeWindowSelfCheck();
