@@ -204,7 +204,6 @@ async function fetchSupabaseSnapshotOnce(): Promise<PlanningSnapshot> {
             ? phase.heure_debut.trim().slice(0, 5)
             : null,
       })),
-      (elements.data ?? []) as ElementChantier[],
     ),
     absences: ((absences.data ?? []) as Absence[]).map((absence) => ({
       ...absence,
@@ -229,7 +228,11 @@ async function fetchSupabaseSnapshotOnce(): Promise<PlanningSnapshot> {
     demandes: optionalTable<Demande>(demandes)
       .map((row) => {
         const categorie: CategorieDemande =
-          row.categorie === "suggestion_site" ? "suggestion_site" : "commande";
+          row.categorie === "suggestion_entreprise"
+            ? "suggestion_entreprise"
+            : row.categorie === "suggestion_site"
+              ? "suggestion_site"
+              : "commande";
         const statut: StatutDemande =
           row.statut === "traite" ? "traite" : "en_attente";
         return {
@@ -331,7 +334,11 @@ export async function supabaseCreateChantier(
             heures_supplementaires_par_jour: 0,
           }));
 
-    const rows = phases.map((phase) => ({
+    const uniqueByType = new Map<TypePhase, (typeof phases)[number]>();
+    for (const phase of phases) {
+      uniqueByType.set(phase.type_phase, phase);
+    }
+    const rows = Array.from(uniqueByType.values()).map((phase) => ({
       element_id: elementRow.id,
       type_phase: phase.type_phase,
       duree_estimee_heures: phase.duree_estimee_heures,

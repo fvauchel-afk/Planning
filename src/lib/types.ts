@@ -161,12 +161,17 @@ export type NewReceptionInput = {
   image_signature: string;
 };
 
-export const CATEGORIES_DEMANDE = ["commande", "suggestion_site"] as const;
+export const CATEGORIES_DEMANDE = [
+  "commande",
+  "suggestion_site",
+  "suggestion_entreprise",
+] as const;
 export type CategorieDemande = (typeof CATEGORIES_DEMANDE)[number];
 
 export const CATEGORIE_DEMANDE_LABELS: Record<CategorieDemande, string> = {
   commande: "Commande",
   suggestion_site: "Suggestion amélioration site",
+  suggestion_entreprise: "Suggestion amélioration entreprise",
 };
 
 export const STATUTS_DEMANDE = ["en_attente", "traite"] as const;

@@ -74,7 +74,7 @@ export function DemandesWidget() {
               ×
             </button>
           </div>
-          <div className="flex gap-1 border-b border-stone-200 p-2">
+          <div className="flex flex-col gap-1 border-b border-stone-200 p-2">
             {CATEGORIES_DEMANDE.map((id) => (
               <button
                 key={id}
@@ -83,7 +83,7 @@ export function DemandesWidget() {
                   setCategorie(id);
                   setSent(false);
                 }}
-                className={`flex-1 rounded-md px-2 py-2 text-xs font-medium ${
+                className={`rounded-md px-2 py-2 text-left text-xs font-medium ${
                   categorie === id
                     ? "bg-amber-700 text-amber-50"
                     : "text-stone-600 hover:bg-stone-100"
@@ -107,7 +107,9 @@ export function DemandesWidget() {
                 placeholder={
                   categorie === "commande"
                     ? "Matériel, outillage, fourniture…"
-                    : "Une idée pour améliorer le site…"
+                    : categorie === "suggestion_entreprise"
+                      ? "Organisation, matériel, process atelier…"
+                      : "Une idée pour améliorer le site…"
                 }
                 className="w-full resize-y rounded-lg border border-stone-300 px-3 py-2 text-sm"
               />
