@@ -18,6 +18,7 @@ import {
   inputHasExplicitDates,
 } from "@/lib/engine/earliest-date";
 import { applyPhaseChainOnCreate } from "@/lib/engine/phase-chain";
+import { employeeCanTakePhase } from "@/lib/chantier-status";
 import { usePlanning } from "@/lib/planning-context";
 import { useSession } from "@/lib/auth/session-context";
 import {
@@ -78,6 +79,11 @@ export function ChantierForm() {
   const [datesEstimatives, setDatesEstimatives] = useState(true);
   const [avecPose, setAvecPose] = useState<boolean | null>(null);
   const [avecThermolaquage, setAvecThermolaquage] = useState<boolean | null>(null);
+  const [avecLivraison, setAvecLivraison] = useState<boolean | null>(null);
+  const [adresseLivraison, setAdresseLivraison] = useState("");
+  const [telephoneLivraison, setTelephoneLivraison] = useState("");
+  const [dureeLivraison, setDureeLivraison] = useState("2");
+  const [employeLivraison, setEmployeLivraison] = useState("");
   const [delaiLaquage, setDelaiLaquage] = useState("5");
   const [dateLaquageDebut, setDateLaquageDebut] = useState("");
   const [dateLaquageFin, setDateLaquageFin] = useState("");
@@ -142,6 +148,29 @@ export function ChantierForm() {
       setError("Indiquez si le chantier passe au thermolaquage.");
       return null;
     }
+    if (avecLivraison === null) {
+      setError("Indiquez si le chantier a une livraison.");
+      return null;
+    }
+    if (avecLivraison) {
+      if (!adresseLivraison.trim()) {
+        setError("Indiquez l’adresse de livraison.");
+        return null;
+      }
+      if (!telephoneLivraison.trim()) {
+        setError("Indiquez le téléphone de la personne qui réceptionne.");
+        return null;
+      }
+      if (!employeLivraison) {
+        setError("Choisissez le salarié responsable de la livraison.");
+        return null;
+      }
+      const hours = Number(dureeLivraison);
+      if (!hours || hours <= 0) {
+        setError("Indiquez la durée de livraison en heures (ex. 2).");
+        return null;
+      }
+    }
     setError(null);
     const input: NewChantierInput = {
       nom_client: nomClient.trim(),
@@ -153,6 +182,9 @@ export function ChantierForm() {
       dates_estimatives: datesEstimatives,
       avec_pose: avecPose,
       avec_thermolaquage: avecThermolaquage,
+      avec_livraison: avecLivraison,
+      adresse_livraison: avecLivraison ? adresseLivraison.trim() : null,
+      telephone_livraison: avecLivraison ? telephoneLivraison.trim() : null,
       delai_laquage_jours: avecThermolaquage
         ? Number(delaiLaquage || 5)
         : null,
@@ -162,11 +194,18 @@ export function ChantierForm() {
         nom_element: element.nom_element.trim(),
         phases: element.phases.map((phase) => ({
           type_phase: phase.type_phase,
-          duree_estimee_heures: Number(phase.duree_estimee_heures || 0),
+          duree_estimee_heures:
+            phase.type_phase === "livraison" && avecLivraison
+              ? Number(dureeLivraison || 0)
+              : Number(phase.duree_estimee_heures || 0),
           date_debut: phase.date_debut || null,
           date_fin: phase.date_fin || phase.date_debut || null,
           employe_id:
-            phase.type_phase === "logistique" ? null : phase.employe_id || null,
+            phase.type_phase === "logistique"
+              ? null
+              : phase.type_phase === "livraison" && avecLivraison
+                ? employeLivraison
+                : phase.employe_id || null,
           urgent: urgent || phase.urgent,
           heures_supplementaires_par_jour:
             phase.heures_supplementaires_par_jour || 0,
@@ -400,7 +439,7 @@ export function ChantierForm() {
       <div>
         <h2 className="font-serif text-3xl text-stone-900">Nouveau chantier</h2>
         <p className="mt-1 text-sm text-stone-600">
-          Indiquez si le chantier a une pose et du thermolaquage. Le délai de
+          Indiquez si le chantier a une pose, du thermolaquage et une livraison. Le délai de
           5 jours ouvrés du sous-traitant démarre à l’envoi du bon de commande.
         </p>
         {hasPendingSignalements(snapshot) ? (
@@ -649,6 +688,85 @@ export function ChantierForm() {
             </div>
           ) : null}
         </fieldset>
+        <fieldset className="rounded-lg border border-stone-300 bg-stone-50/60 p-3 text-sm md:col-span-2">
+          <legend className="px-1 font-medium text-stone-800">
+            Livraison <span className="text-red-700">*</span>
+          </legend>
+          <div className="flex flex-wrap gap-4">
+            <label className="inline-flex items-center gap-2">
+              <input
+                type="radio"
+                name="avec-livraison"
+                required
+                checked={avecLivraison === true}
+                onChange={() => setAvecLivraison(true)}
+              />
+              Oui
+            </label>
+            <label className="inline-flex items-center gap-2">
+              <input
+                type="radio"
+                name="avec-livraison"
+                required
+                checked={avecLivraison === false}
+                onChange={() => setAvecLivraison(false)}
+              />
+              Non
+            </label>
+          </div>
+          {avecLivraison ? (
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <label className="block sm:col-span-2">
+                <span className="mb-1 block font-medium">Adresse de livraison</span>
+                <input
+                  value={adresseLivraison}
+                  onChange={(event) => setAdresseLivraison(event.target.value)}
+                  className="w-full rounded border border-stone-300 bg-white px-3 py-2"
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1 block font-medium">
+                  Téléphone de la personne qui réceptionne
+                </span>
+                <input
+                  type="tel"
+                  value={telephoneLivraison}
+                  onChange={(event) => setTelephoneLivraison(event.target.value)}
+                  className="w-full rounded border border-stone-300 bg-white px-3 py-2"
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1 block font-medium">Durée (heures)</span>
+                <input
+                  type="number"
+                  min={0.5}
+                  step={0.5}
+                  value={dureeLivraison}
+                  onChange={(event) => setDureeLivraison(event.target.value)}
+                  className="w-full rounded border border-stone-300 bg-white px-3 py-2"
+                />
+                <p className="mt-1 text-xs text-stone-500">Exemple : 2 pour 2 h.</p>
+              </label>
+              <label className="block sm:col-span-2">
+                <span className="mb-1 block font-medium">
+                  Salarié responsable de la livraison
+                </span>
+                <select
+                  value={employeLivraison}
+                  onChange={(event) => setEmployeLivraison(event.target.value)}
+                  className="w-full rounded border border-stone-300 bg-white px-3 py-2"
+                >
+                  <option value="">Choisir…</option>
+                  {employeesByRole.map((employee) => (
+                    <option key={employee.id} value={employee.id}>
+                      {employee.nom}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          ) : null}
+        </fieldset>
         <label className="block text-sm md:col-span-2">
           <span className="mb-1 block font-medium">Adresse</span>
           <input
@@ -726,6 +844,9 @@ export function ChantierForm() {
                       ) {
                         return false;
                       }
+                      if (phase.type_phase === "livraison" && avecLivraison === false) {
+                        return false;
+                      }
                       return true;
                     })
                     .map((phase) => (
@@ -785,7 +906,7 @@ export function ChantierForm() {
                             <option value="">Auto / non assigné</option>
                             {employeesByRole
                               .filter((employee) =>
-                                employee.roles.includes(phase.type_phase),
+                                employeeCanTakePhase(employee, phase.type_phase),
                               )
                               .filter((employee) =>
                                 employeeAvailableOnRange(

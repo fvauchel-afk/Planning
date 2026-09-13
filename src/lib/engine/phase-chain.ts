@@ -23,6 +23,7 @@ const PHASE_ORDER: TypePhase[] = [
   "administratif",
   "fabrication",
   "logistique",
+  "livraison",
   "pose",
 ];
 
@@ -113,6 +114,7 @@ export function applyPhaseChainOnCreate(
 ): NewChantierInput {
   const thermo = Boolean(input.avec_thermolaquage);
   const pose = Boolean(input.avec_pose);
+  const livraison = Boolean(input.avec_livraison);
   const delayDays = clampDelay(input.delai_laquage_jours);
   const laquageDebut = input.date_laquage_debut || null;
   const laquageFin = input.date_laquage_fin || null;
@@ -129,9 +131,13 @@ export function applyPhaseChainOnCreate(
 
         const skipPose = type === "pose" && !pose;
         const skipThermo = type === "logistique" && !thermo;
+        const skipLivraison = type === "livraison" && !livraison;
         const hours = Number(current.duree_estimee_heures) || 0;
         const skipEmpty =
-          type !== "logistique" && hours <= 0 && !(type === "pose" && pose);
+          type !== "logistique" &&
+          hours <= 0 &&
+          !(type === "pose" && pose) &&
+          !(type === "livraison" && livraison);
         const pendingThermo =
           type === "logistique" &&
           thermo &&
@@ -147,11 +153,11 @@ export function applyPhaseChainOnCreate(
           continue;
         }
 
-        if (skipPose || skipThermo || skipEmpty) {
-          if (skipPose || skipThermo) {
+        if (skipPose || skipThermo || skipLivraison || skipEmpty) {
+          if (skipPose || skipThermo || skipLivraison) {
             current.date_debut = null;
             current.date_fin = null;
-            if (skipThermo || skipPose) {
+            if (skipThermo || skipPose || skipLivraison) {
               current.duree_estimee_heures = 0;
             }
             if (skipThermo) current.employe_id = null;
@@ -172,7 +178,14 @@ export function applyPhaseChainOnCreate(
         }
 
         const workingDays =
-          type === "logistique" ? delayDays : workingDaysFromHours(hours);
+          type === "logistique"
+            ? delayDays
+            : workingDaysFromHours(
+                type === "livraison" && hours <= 0 ? 2 : hours,
+              );
+        if (type === "livraison" && hours <= 0) {
+          current.duree_estimee_heures = 2;
+        }
         let end = rangeEnd(start, workingDays);
         if (type === "logistique") {
           if (laquageFin && laquageFin >= start) {
@@ -226,6 +239,7 @@ export function applyBonCommandeDelay(
   for (const elementId of elementIds) {
     const phases = byElement.get(elementId) ?? [];
     const logistique = phases.find((item) => item.type_phase === "logistique");
+    const livraison = phases.find((item) => item.type_phase === "livraison");
     const pose = phases.find((item) => item.type_phase === "pose");
     if (!logistique) {
       inserts.push({
@@ -248,14 +262,30 @@ export function applyBonCommandeDelay(
         heure_debut: null,
       });
     }
+    let followingStart = poseStart;
+    if (livraison && (livraison.duree_estimee_heures > 0 || livraison.date_debut)) {
+      const livDays =
+        livraison.date_debut && livraison.date_fin
+          ? inclusiveWorkingDays(livraison.date_debut, livraison.date_fin)
+          : workingDaysFromHours(livraison.duree_estimee_heures || 2);
+      const livEnd = rangeEnd(followingStart, livDays);
+      patches.push({
+        id: livraison.id,
+        date_debut: followingStart,
+        date_fin: livEnd,
+        employe_id: livraison.employe_id,
+        heure_debut: livraison.heure_debut ?? null,
+      });
+      followingStart = nextWorkingDayAfter(livEnd);
+    }
     if (pose && (pose.duree_estimee_heures > 0 || pose.date_debut)) {
       const poseDays = pose.date_debut && pose.date_fin
         ? inclusiveWorkingDays(pose.date_debut, pose.date_fin)
         : workingDaysFromHours(pose.duree_estimee_heures);
       patches.push({
         id: pose.id,
-        date_debut: poseStart,
-        date_fin: rangeEnd(poseStart, poseDays),
+        date_debut: followingStart,
+        date_fin: rangeEnd(followingStart, poseDays),
         employe_id: pose.employe_id,
         heure_debut: pose.heure_debut ?? null,
       });
@@ -273,7 +303,7 @@ function phaseHasContent(
 export function chantierPhaseOptions(
   snapshot: PlanningSnapshot,
   chantierId: string,
-): { avecPose: boolean; avecThermolaquage: boolean } {
+): { avecPose: boolean; avecThermolaquage: boolean; avecLivraison: boolean } {
   const chantier = snapshot.chantiers.find((item) => item.id === chantierId);
   const elementIds = new Set(
     snapshot.elements
@@ -290,6 +320,9 @@ export function chantierPhaseOptions(
       phases.some(
         (phase) => phase.type_phase === "logistique" && phaseHasContent(phase),
       ),
+    avecLivraison: phases.some(
+      (phase) => phase.type_phase === "livraison" && phaseHasContent(phase),
+    ),
   };
 }
 
@@ -330,6 +363,9 @@ export function planChantierOptionEdits(
   options: {
     avecPose: boolean;
     avecThermolaquage: boolean;
+    avecLivraison?: boolean;
+    dureeLivraisonHeures?: number | null;
+    employeLivraisonId?: string | null;
     delayDays?: number | null;
     datesEstimatives?: boolean;
   },
@@ -341,10 +377,12 @@ export function planChantierOptionEdits(
   const estimative = Boolean(
     options.datesEstimatives ?? chantier?.dates_estimatives,
   );
+  const wantLivraison = Boolean(options.avecLivraison);
   const current = chantierPhaseOptions(snapshot, chantierId);
   if (
     current.avecPose === options.avecPose &&
-    current.avecThermolaquage === options.avecThermolaquage
+    current.avecThermolaquage === options.avecThermolaquage &&
+    current.avecLivraison === wantLivraison
   ) {
     return { patches: [], inserts: [], deleteIds: [] };
   }
@@ -362,16 +400,19 @@ export function planChantierOptionEdits(
     );
     const fab = siblings.find((item) => item.type_phase === "fabrication");
     const log = siblings.find((item) => item.type_phase === "logistique");
+    const liv = siblings.find((item) => item.type_phase === "livraison");
     const pose = siblings.find((item) => item.type_phase === "pose");
     const kept = siblings.filter((phase) => {
       if (phase.type_phase === "logistique" && !options.avecThermolaquage) {
         return false;
       }
+      if (phase.type_phase === "livraison" && !wantLivraison) return false;
       if (phase.type_phase === "pose" && !options.avecPose) return false;
       return true;
     });
 
     if (!options.avecThermolaquage && log) deleteIds.push(log.id);
+    if (!wantLivraison && liv) deleteIds.push(liv.id);
     if (!options.avecPose && pose) deleteIds.push(pose.id);
 
     let thermoEnd: string | null = null;
@@ -410,6 +451,60 @@ export function planChantierOptionEdits(
       }
     }
 
+    let livraisonEnd: string | null = null;
+    if (
+      wantLivraison &&
+      current.avecLivraison &&
+      current.avecThermolaquage === options.avecThermolaquage
+    ) {
+      livraisonEnd = liv?.date_fin || liv?.date_debut || null;
+    } else if (wantLivraison) {
+      const livHours = Math.max(
+        0.5,
+        Number(options.dureeLivraisonHeures) ||
+          Number(liv?.duree_estimee_heures) ||
+          2,
+      );
+      const after =
+        thermoEnd ||
+        lastDatedEnd(
+          kept.filter((item) => item.type_phase !== "livraison"),
+          "livraison",
+        );
+      const range = scheduleAfter(
+        snapshot,
+        after,
+        workingDaysFromHours(livHours),
+      );
+      livraisonEnd = range.end;
+      const employeId =
+        options.employeLivraisonId || liv?.employe_id || fab?.employe_id || null;
+      if (liv && !deleteIds.includes(liv.id)) {
+        patches.push({
+          id: liv.id,
+          date_debut: range.start,
+          date_fin: range.end,
+          employe_id: employeId,
+          heure_debut: liv.heure_debut ?? "07:30",
+          duree_estimee_heures: livHours,
+        });
+      } else if (!liv) {
+        inserts.push({
+          element_id: element.id,
+          type_phase: "livraison",
+          duree_estimee_heures: livHours,
+          date_debut: range.start,
+          date_fin: range.end,
+          heure_debut: "07:30",
+          employe_id: employeId,
+          statut: "a_faire",
+          urgent: Boolean(fab?.urgent),
+          heures_supplementaires_par_jour: 0,
+          dates_estimatives: estimative,
+        });
+      }
+    }
+
     if (options.avecPose) {
       const poseHours = Math.max(8, Number(pose?.duree_estimee_heures) || 0);
       const poseDays =
@@ -417,6 +512,7 @@ export function planChantierOptionEdits(
           ? inclusiveWorkingDays(pose.date_debut, pose.date_fin)
           : workingDaysFromHours(poseHours);
       const after =
+        livraisonEnd ||
         thermoEnd ||
         lastDatedEnd(
           kept.filter((item) => item.type_phase !== "pose"),
@@ -427,6 +523,7 @@ export function planChantierOptionEdits(
         const shouldRecale =
           !current.avecPose ||
           current.avecThermolaquage !== options.avecThermolaquage ||
+          current.avecLivraison !== wantLivraison ||
           !pose.date_debut;
         if (shouldRecale) {
           patches.push({
@@ -684,6 +781,54 @@ function runPhaseChainSelfCheck() {
     );
   }
 
+  const withDelivery = applyPhaseChainOnCreate(snapshot, {
+    nom_client: "Livraison",
+    adresse: "",
+    lien_dossier_onedrive: null,
+    priorite: "normal",
+    date_debut: "2026-09-14",
+    avec_pose: true,
+    avec_thermolaquage: true,
+    avec_livraison: true,
+    elements: [
+      {
+        nom_element: "Portail",
+        phases: [
+          {
+            ...basePhase,
+            type_phase: "fabrication",
+            date_debut: "2026-09-14",
+            date_fin: "2026-09-14",
+          },
+          { ...basePhase, type_phase: "logistique", duree_estimee_heures: 0 },
+          {
+            ...basePhase,
+            type_phase: "livraison",
+            duree_estimee_heures: 2,
+            employe_id: "emp-a",
+          },
+          { ...basePhase, type_phase: "pose", duree_estimee_heures: 8 },
+        ],
+      },
+    ],
+  });
+  const livCreate = withDelivery.elements[0]?.phases.find(
+    (item) => item.type_phase === "livraison",
+  );
+  const poseAfterLiv = withDelivery.elements[0]?.phases.find(
+    (item) => item.type_phase === "pose",
+  );
+  if (livCreate?.date_debut !== "2026-09-15" || livCreate.duree_estimee_heures !== 2) {
+    throw new Error(
+      `phase-chain: livraison 2h après fab (thermo pas encore calé), reçu ${livCreate?.date_debut} / ${livCreate?.duree_estimee_heures}h`,
+    );
+  }
+  if (poseAfterLiv?.date_debut !== "2026-09-16") {
+    throw new Error(
+      `phase-chain: pose après livraison, reçu ${poseAfterLiv?.date_debut}`,
+    );
+  }
+
   const editBase: PlanningSnapshot = {
     ...snapshot,
     chantiers: [
@@ -766,6 +911,30 @@ function runPhaseChainSelfCheck() {
   });
   if (!removed.deleteIds.includes("pose-edit")) {
     throw new Error("phase-chain: passer Pose à Non doit supprimer la phase");
+  }
+
+  const addedLivraison = planChantierOptionEdits(editBase, "ch-edit", {
+    avecPose: true,
+    avecThermolaquage: false,
+    avecLivraison: true,
+    dureeLivraisonHeures: 2,
+    employeLivraisonId: "emp-a",
+  });
+  const livInsert = addedLivraison.inserts.find(
+    (item) => item.type_phase === "livraison",
+  );
+  const poseAfterNewLiv = addedLivraison.inserts.find(
+    (item) => item.type_phase === "pose",
+  );
+  if (livInsert?.date_debut !== "2026-09-15" || livInsert.duree_estimee_heures !== 2) {
+    throw new Error(
+      `phase-chain: livraison ajoutée après fab, reçu ${livInsert?.date_debut} / ${livInsert?.duree_estimee_heures}h`,
+    );
+  }
+  if (poseAfterNewLiv?.date_debut !== "2026-09-16") {
+    throw new Error(
+      `phase-chain: pose après la livraison ajoutée, reçu ${poseAfterNewLiv?.date_debut}`,
+    );
   }
 }
 

@@ -1,4 +1,5 @@
 import { addDays, addWorkingDays, formatLongDate, formatOvertimeHours, startOfWeekIso } from "@/lib/dates";
+import { employeeCanTakePhase } from "@/lib/chantier-status";
 import {
   LOGISTIQUE_ROW_ID,
   PHASE_LABELS,
@@ -168,7 +169,7 @@ function eligibleEmployees(
   role: TypePhase,
 ): string[] {
   return snapshot.employees
-    .filter((employee) => employee.actif && employee.roles.includes(role))
+    .filter((employee) => employeeCanTakePhase(employee, role))
     .map((employee) => employee.id);
 }
 
@@ -189,7 +190,7 @@ function pickEmployeePlacement(
         reason: `L’employé choisi pour ${PHASE_LABELS[role]} n’est pas disponible. La phase n’a pas été réassignée.`,
       };
     }
-    if (!employee.roles.includes(role)) {
+    if (!employeeCanTakePhase(employee, role)) {
       return {
         slots: null,
         reason: `${employee.nom} n’a pas le rôle ${PHASE_LABELS[role]}. La phase n’a pas été réassignée à quelqu’un d’autre.`,
@@ -538,8 +539,9 @@ function placeChantierOnOccupancy(
     let cursor = { ...notBeforeBase };
     let fabEnd: OccupiedSlot | null = null;
     let logEnd: OccupiedSlot | null = null;
+    let livEnd: OccupiedSlot | null = null;
 
-    for (const type of ["administratif", "fabrication", "logistique", "pose"] as TypePhase[]) {
+    for (const type of ["administratif", "fabrication", "logistique", "livraison", "pose"] as TypePhase[]) {
       const source = element.phases.find((phase) => phase.type_phase === type);
       const hours = source?.duree_estimee_heures ?? 0;
       const phaseUrgent = urgent || Boolean(source?.urgent);
@@ -629,6 +631,11 @@ function placeChantierOnOccupancy(
         cursor = nextAfter(snapshot, last);
         if (type === "fabrication") fabEnd = last;
         if (type === "logistique") logEnd = last;
+        if (type === "livraison") livEnd = last;
+        continue;
+      }
+
+      if (type === "livraison" && hours <= 0) {
         continue;
       }
 
@@ -647,8 +654,18 @@ function placeChantierOnOccupancy(
         continue;
       }
 
-      if (type === "pose") {
+      if (type === "livraison") {
         const after = logEnd ?? fabEnd;
+        if (after) {
+          const next = nextAfter(snapshot, after);
+          if (next.date > cursor.date || (next.date === cursor.date && next.half > cursor.half)) {
+            cursor = { rowId: cursor.rowId, date: next.date, half: next.half };
+          }
+        }
+      }
+
+      if (type === "pose") {
+        const after = livEnd ?? logEnd ?? fabEnd;
         if (after) {
           const next = nextAfter(snapshot, after);
           if (next.date > cursor.date || (next.date === cursor.date && next.half > cursor.half)) {
@@ -715,6 +732,7 @@ function placeChantierOnOccupancy(
         cursor = nextAfter(snapshot, last);
         if (type === "fabrication") fabEnd = last;
         if (type === "logistique") logEnd = last;
+        if (type === "livraison") livEnd = last;
         if (type === "pose" && fabEnd) {
           gaps.push(
             Math.max(
@@ -1016,7 +1034,7 @@ export function listPlacementAlternatives(
   const occupancy = buildOccupancy(snapshot);
   const rows: PlacementAlternative[] = [];
   for (const employee of snapshot.employees) {
-    if (!employee.actif || !employee.roles.includes(type)) continue;
+    if (!employeeCanTakePhase(employee, type)) continue;
     if (employee.id === currentEmployeeId) continue;
     const overlapping = overlappingPhasesForEmployee(
       snapshot,

@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-13-livraison",
+    title: "Livraison",
+    items: [
+      "À la création (et dans Modifier), vous pouvez ajouter une livraison : adresse, téléphone de la personne qui réceptionne, salarié responsable et durée en heures.",
+      "Elle se place après le thermolaquage s’il y en a un, et avant la pose. Le salarié de livraison ne peut pas être sur deux chantiers en même temps.",
+    ],
+  },
+  {
     id: "2026-09-13-edit-pose-thermo",
     title: "Fiche chantier",
     items: [

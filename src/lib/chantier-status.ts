@@ -141,3 +141,13 @@ export function phaseTypeForRoles(roles: Role[]): TypePhase {
   if (roles.includes("administratif")) return "administratif";
   return "logistique";
 }
+
+export function employeeCanTakePhase(
+  employee: { actif: boolean; roles: Role[] },
+  type: TypePhase,
+): boolean {
+  if (!employee.actif) return false;
+  if (type === "logistique") return false;
+  if (type === "livraison") return true;
+  return employee.roles.includes(type);
+}

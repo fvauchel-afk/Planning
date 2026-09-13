@@ -133,6 +133,8 @@ export function localCreateChantier(
     priorite: input.priorite,
     date_creation: new Date().toISOString().slice(0, 10),
     dates_estimatives: Boolean(input.dates_estimatives),
+    adresse_livraison: input.adresse_livraison ?? null,
+    telephone_livraison: input.telephone_livraison ?? null,
   });
   for (const element of input.elements) {
     const elementId = newId();
@@ -483,6 +485,14 @@ export function localUpdateChantier(
             input.delai_sous_traitance_jours !== undefined
               ? input.delai_sous_traitance_jours
               : chantier.delai_sous_traitance_jours,
+          adresse_livraison:
+            input.adresse_livraison !== undefined
+              ? input.adresse_livraison
+              : chantier.adresse_livraison,
+          telephone_livraison:
+            input.telephone_livraison !== undefined
+              ? input.telephone_livraison
+              : chantier.telephone_livraison,
         }
       : chantier,
   );
