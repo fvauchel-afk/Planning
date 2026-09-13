@@ -29,6 +29,7 @@ export async function POST(request: NextRequest) {
     dateIso?: string;
     pngDataUrl?: string;
     lienDossier?: string | null;
+    kind?: "reception" | "livraison";
   };
 
   const phaseId = body.phaseId ?? "";
@@ -49,8 +50,12 @@ export async function POST(request: NextRequest) {
     if (!session.isAdmin && isSupabaseServerConfigured()) {
       const snapshot = await fetchSupabaseSnapshot();
       const phase = snapshot.phases.find((item) => item.id === phaseId);
-      if (!phase || phase.employe_id !== session.employeeId) {
-        return forbidden("Cette pose ne vous est pas attribuée.");
+      if (
+        !phase ||
+        phase.employe_id !== session.employeeId ||
+        (phase.type_phase !== "pose" && phase.type_phase !== "livraison")
+      ) {
+        return forbidden("Cette phase ne vous est pas attribuée.");
       }
     }
     const tokens = await loadOnedriveTokens();
@@ -73,7 +78,8 @@ export async function POST(request: NextRequest) {
     }
 
     const datePart = (body.dateIso || new Date().toISOString()).slice(0, 10);
-    const fileName = `reception-${sanitizeOnedriveName(nomElement, "element")}-${datePart}.png`;
+    const prefix = body.kind === "livraison" ? "bon-livraison" : "reception";
+    const fileName = `${prefix}-${sanitizeOnedriveName(nomElement, "element")}-${datePart}.png`;
     await uploadPngToShareFolder({
       shareUrl: lien,
       fileName,

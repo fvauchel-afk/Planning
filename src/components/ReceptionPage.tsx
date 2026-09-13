@@ -5,6 +5,9 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import SignatureCanvas from "react-signature-canvas";
 import { MobileShell } from "@/components/MobileShell";
+import { idsEqual } from "@/lib/auth/ids";
+import { useSession } from "@/lib/auth/session-context";
+import { formatLongDate } from "@/lib/dates";
 import { PHASE_LABELS } from "@/lib/types";
 import { usePlanning } from "@/lib/planning-context";
 import { useSalarieId } from "@/lib/use-salarie";
@@ -13,6 +16,7 @@ export function ReceptionPage() {
   const router = useRouter();
   const params = useSearchParams();
   const { snapshot, createReception } = usePlanning();
+  const { session } = useSession();
   const { employeeId, ready } = useSalarieId();
   const phaseId = params.get("phase") ?? "";
   const canvasRef = useRef<SignatureCanvas>(null);
@@ -27,10 +31,16 @@ export function ReceptionPage() {
   const chantier = snapshot.chantiers.find(
     (item) => item.id === element?.chantier_id,
   );
+  const assignee = snapshot.employees.find((item) => item.id === phase?.employe_id);
+  const isLivraison = phase?.type_phase === "livraison";
   const existing = useMemo(
     () => snapshot.receptions.find((row) => row.phase_id === phaseId),
     [phaseId, snapshot.receptions],
   );
+  const canSign =
+    Boolean(phase) &&
+    (phase?.type_phase === "pose" || phase?.type_phase === "livraison") &&
+    (session?.isAdmin || idsEqual(phase?.employe_id, employeeId));
 
   if (!ready) {
     return (
@@ -40,21 +50,43 @@ export function ReceptionPage() {
     );
   }
 
-  if (!employee) {
+  if (!employee && !session?.isAdmin) {
     router.replace("/moi");
     return null;
   }
 
   if (done || existing) {
     return (
-      <MobileShell employeeName={employee.nom}>
-        <h2 className="font-serif text-2xl text-stone-900">Réception enregistrée</h2>
+      <MobileShell employeeName={employee?.nom ?? session?.nom}>
+        <h2 className="font-serif text-2xl text-stone-900">
+          {phase?.type_phase === "livraison"
+            ? "Bon de livraison enregistré"
+            : "Réception enregistrée"}
+        </h2>
         <p className="mt-2 text-sm text-stone-600">
-          La pose de {chantier?.nom_client ?? "ce chantier"} est clôturée.
+          {phase?.type_phase === "livraison"
+            ? `La livraison de ${chantier?.nom_client ?? "ce chantier"} est signée.`
+            : `La pose de ${chantier?.nom_client ?? "ce chantier"} est clôturée.`}
         </p>
         <Link
-          href="/moi"
+          href={session?.isAdmin ? "/" : "/moi"}
           className="mt-6 inline-flex min-h-11 items-center rounded-lg bg-stone-900 px-4 text-sm text-white"
+        >
+          {session?.isAdmin ? "Retour au planning" : "Retour au planning"}
+        </Link>
+      </MobileShell>
+    );
+  }
+
+  if (!canSign || !phase) {
+    return (
+      <MobileShell employeeName={employee?.nom ?? session?.nom}>
+        <p className="text-sm text-stone-700">
+          Cette phase n’est pas disponible pour une signature.
+        </p>
+        <Link
+          href={session?.isAdmin ? "/" : "/moi"}
+          className="mt-4 inline-block text-sm underline"
         >
           Retour au planning
         </Link>
@@ -62,22 +94,8 @@ export function ReceptionPage() {
     );
   }
 
-  if (
-    !phase ||
-    phase.employe_id !== employeeId ||
-    phase.type_phase !== "pose"
-  ) {
-    return (
-      <MobileShell employeeName={employee.nom}>
-        <p className="text-sm text-stone-700">
-          Cette phase n’est pas disponible pour une réception.
-        </p>
-        <Link href="/moi" className="mt-4 inline-block text-sm underline">
-          Retour au planning
-        </Link>
-      </MobileShell>
-    );
-  }
+  const adresseLivraison =
+    chantier?.adresse_livraison?.trim() || chantier?.adresse || "";
 
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -108,14 +126,25 @@ export function ReceptionPage() {
   }
 
   return (
-    <MobileShell employeeName={employee.nom}>
-      <h2 className="font-serif text-2xl text-stone-900">Réception de chantier</h2>
+    <MobileShell employeeName={employee?.nom ?? session?.nom}>
+      <h2 className="font-serif text-2xl text-stone-900">
+        {isLivraison ? "Bon de livraison" : "Réception de chantier"}
+      </h2>
       <p className="mt-1 text-sm text-stone-600">
-        {chantier?.nom_client} — {element?.nom_element} · {PHASE_LABELS.pose}
+        {chantier?.nom_client} — {element?.nom_element} ·{" "}
+        {PHASE_LABELS[phase.type_phase]}
       </p>
-      {chantier?.adresse && (
+      {isLivraison ? (
+        <div className="mt-2 space-y-1 text-sm text-stone-600">
+          {adresseLivraison ? <p>Livraison : {adresseLivraison}</p> : null}
+          {phase.date_debut ? (
+            <p>Date : {formatLongDate(phase.date_debut)}</p>
+          ) : null}
+          {assignee ? <p>Salarié responsable : {assignee.nom}</p> : null}
+        </div>
+      ) : chantier?.adresse ? (
         <p className="mt-1 text-sm text-stone-500">{chantier.adresse}</p>
-      )}
+      ) : null}
       {chantier?.lien_dossier_onedrive ? (
         <a
           href={chantier.lien_dossier_onedrive}
@@ -177,7 +206,11 @@ export function ReceptionPage() {
           disabled={saving}
           className="flex min-h-12 w-full items-center justify-center rounded-lg bg-stone-900 text-sm font-medium text-white disabled:opacity-60"
         >
-          {saving ? "Enregistrement…" : "Valider la réception"}
+          {saving
+            ? "Enregistrement…"
+            : isLivraison
+              ? "Valider le bon de livraison"
+              : "Valider la réception"}
         </button>
       </form>
     </MobileShell>

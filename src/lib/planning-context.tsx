@@ -117,6 +117,8 @@ async function uploadReceptionPng(input: NewReceptionInput, snap: PlanningSnapsh
   const phase = snap.phases.find((item) => item.id === input.phase_id);
   const element = snap.elements.find((item) => item.id === phase?.element_id);
   const chantier = snap.chantiers.find((item) => item.id === element?.chantier_id);
+  const salarie = snap.employees.find((item) => item.id === phase?.employe_id);
+  const isLivraison = phase?.type_phase === "livraison";
   const dateIso = new Date().toISOString();
   const dateLabel = new Date(dateIso).toLocaleString("fr-FR");
   let png = input.image_signature;
@@ -127,6 +129,13 @@ async function uploadReceptionPng(input: NewReceptionInput, snap: PlanningSnapsh
       nomElement: element?.nom_element ?? "élément",
       nomSignataire: input.nom_signataire,
       dateLabel,
+      kind: isLivraison ? "livraison" : "reception",
+      adresseLivraison:
+        chantier?.adresse_livraison?.trim() || chantier?.adresse || "",
+      nomSalarie: salarie?.nom,
+      dateLivraison: phase?.date_debut
+        ? new Date(`${phase.date_debut}T12:00:00`).toLocaleDateString("fr-FR")
+        : dateLabel,
     });
   } catch {
     // On envoie au moins la signature brute.
@@ -139,6 +148,7 @@ async function uploadReceptionPng(input: NewReceptionInput, snap: PlanningSnapsh
     dateIso,
     pngDataUrl: png,
     lienDossier: chantier?.lien_dossier_onedrive ?? null,
+    kind: isLivraison ? "livraison" : "reception",
   });
 }
 

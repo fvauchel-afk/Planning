@@ -251,18 +251,21 @@ export async function POST(request: NextRequest) {
       }
       await supabaseSetSignalementStatut(body.id, "valide");
     } else if (body.action === "createReception") {
-      if (!session.isAdmin) {
-        const snapshot = await fetchSupabaseSnapshot();
-        const phase = snapshot.phases.find(
-          (item) => item.id === body.input.phase_id,
-        );
-        if (
-          !phase ||
-          !idsEqual(phase.employe_id, session.employeeId) ||
-          phase.type_phase !== "pose"
-        ) {
-          return forbidden("Réception impossible pour cette pose.");
-        }
+      const snapshot = await fetchSupabaseSnapshot();
+      const phase = snapshot.phases.find(
+        (item) => item.id === body.input.phase_id,
+      );
+      if (
+        !phase ||
+        (phase.type_phase !== "pose" && phase.type_phase !== "livraison")
+      ) {
+        return forbidden("Signature impossible pour cette phase.");
+      }
+      if (
+        !session.isAdmin &&
+        !idsEqual(phase.employe_id, session.employeeId)
+      ) {
+        return forbidden("Signature impossible pour cette phase.");
       }
       await supabaseCreateReception(body.input);
     } else if (body.action === "createDemande") {

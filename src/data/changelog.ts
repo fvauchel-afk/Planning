@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-13-bon-livraison",
+    title: "Bon de livraison",
+    items: [
+      "Sur un bloc Livraison du planning, vous pouvez ouvrir le bon de livraison : le client signe à l’écran (téléphone ou tablette), comme pour la réception de pose.",
+      "Le document (chantier, adresse de livraison, date, salarié responsable, signature) est enregistré et classé dans le dossier OneDrive.",
+    ],
+  },
+  {
     id: "2026-09-13-livraison",
     title: "Livraison",
     items: [

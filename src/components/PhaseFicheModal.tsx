@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { BonCommandeModal } from "@/components/BonCommandeModal";
 import { ConflictModal } from "@/components/ConflictModal";
 import { canGenerateBonCommande } from "@/lib/bon-commande/active-phase";
@@ -255,7 +256,10 @@ export function PhaseFicheModal({
             {reception && (
               <div className="mt-4 space-y-2 text-sm">
                 <p>
-                  Réception signée le <strong>{signedAt}</strong> par{" "}
+                  {phase.type_phase === "livraison"
+                    ? "Bon de livraison signé le"
+                    : "Réception signée le"}{" "}
+                  <strong>{signedAt}</strong> par{" "}
                   <strong>{reception.nom_signataire}</strong>.
                 </p>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -285,6 +289,17 @@ export function PhaseFicheModal({
                 >
                   Générer un bon de commande
                 </button>
+              ) : null}
+              {phase.type_phase === "livraison" &&
+              !reception &&
+              (session?.isAdmin ||
+                idsEqual(phase.employe_id, session?.employeeId)) ? (
+                <Link
+                  href={`/moi/reception?phase=${phase.id}`}
+                  className="rounded-lg bg-sky-800 px-4 py-2 text-sm text-sky-50"
+                >
+                  Faire signer le bon de livraison
+                </Link>
               ) : null}
               {session?.isAdmin ? (
               <button
