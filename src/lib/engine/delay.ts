@@ -185,11 +185,33 @@ function minStartForPhase(
   );
   const fab = siblings.find((item) => item.type_phase === "fabrication");
   const log = siblings.find((item) => item.type_phase === "logistique");
+  const liv = siblings.find((item) => item.type_phase === "livraison");
   let min: string | null = null;
 
   if (phase.type_phase === "logistique" && fab) {
     const fabDates = dates.get(fab.id);
     if (fabDates) min = nextOpenDay(snapshot, rowId, fabDates.fin);
+  }
+  if (phase.type_phase === "livraison" && log) {
+    const logDates = dates.get(log.id);
+    if (logDates) {
+      const afterLog = nextOpenDay(snapshot, rowId, logDates.fin);
+      min = min ? maxDate(min, afterLog) : afterLog;
+    }
+  }
+  if (phase.type_phase === "livraison" && fab) {
+    const fabDates = dates.get(fab.id);
+    if (fabDates) {
+      const afterFab = nextOpenDay(snapshot, rowId, fabDates.fin);
+      min = min ? maxDate(min, afterFab) : afterFab;
+    }
+  }
+  if (phase.type_phase === "pose" && liv) {
+    const livDates = dates.get(liv.id);
+    if (livDates) {
+      const afterLiv = nextOpenDay(snapshot, rowId, livDates.fin);
+      min = min ? maxDate(min, afterLiv) : afterLiv;
+    }
   }
   if (phase.type_phase === "pose" && log) {
     const logDates = dates.get(log.id);

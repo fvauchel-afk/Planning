@@ -13,6 +13,7 @@ export const TYPES_PHASE = [
   "administratif",
   "fabrication",
   "logistique",
+  "livraison",
   "pose",
 ] as const;
 export type TypePhase = (typeof TYPES_PHASE)[number];
@@ -96,6 +97,8 @@ export type Chantier = {
   date_bon_commande?: string | null;
   sous_traitant_id?: string | null;
   delai_sous_traitance_jours?: number | null;
+  adresse_livraison?: string | null;
+  telephone_livraison?: string | null;
 };
 
 export type ElementChantier = {
@@ -274,6 +277,9 @@ export type NewChantierInput = {
   dates_estimatives?: boolean;
   avec_pose?: boolean;
   avec_thermolaquage?: boolean;
+  avec_livraison?: boolean;
+  adresse_livraison?: string | null;
+  telephone_livraison?: string | null;
   delai_laquage_jours?: number | null;
   date_laquage_debut?: string | null;
   date_laquage_fin?: string | null;
@@ -288,6 +294,8 @@ export type ChantierUpdateInput = {
   lien_dossier_onedrive: string | null;
   dates_estimatives?: boolean;
   delai_sous_traitance_jours?: number | null;
+  adresse_livraison?: string | null;
+  telephone_livraison?: string | null;
 };
 
 export type ScheduleChantierDayInput = {
@@ -357,6 +365,7 @@ export const PHASE_LABELS: Record<TypePhase, string> = {
   administratif: "Administratif",
   fabrication: "Fabrication",
   logistique: "Thermolaquage",
+  livraison: "Livraison",
   pose: "Pose",
 };
 

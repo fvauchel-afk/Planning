@@ -213,11 +213,28 @@ export function PhaseFicheModal({
               {phaseIsEstimative(phase) ? " · Estimatif" : ""}
             </p>
             <p className="mt-2 text-sm text-stone-600">
-              {assignee ? assignee.nom : "Thermolaquage sous-traité"}
+              {assignee
+                ? assignee.nom
+                : phase.type_phase === "logistique"
+                  ? "Thermolaquage sous-traité"
+                  : "Personne non assignée"}
               {phase.date_debut
                 ? ` · ${formatLongDate(phase.date_debut)} → ${formatLongDate(phase.date_fin ?? phase.date_debut)}`
                 : " · pas encore planifiée"}
+              {phase.type_phase === "livraison" && phase.duree_estimee_heures
+                ? ` · ${phase.duree_estimee_heures} h`
+                : ""}
             </p>
+            {phase.type_phase === "livraison" ? (
+              <div className="mt-2 space-y-1 text-sm text-stone-600">
+                {chantier.adresse_livraison ? (
+                  <p>Livraison : {chantier.adresse_livraison}</p>
+                ) : null}
+                {chantier.telephone_livraison ? (
+                  <p>Tél. réception : {chantier.telephone_livraison}</p>
+                ) : null}
+              </div>
+            ) : null}
             {phase.heures_supplementaires_par_jour ? (
               <p className="mt-1 text-sm font-medium text-amber-800">
                 Heures supplémentaires :{" "}

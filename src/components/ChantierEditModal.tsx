@@ -84,6 +84,15 @@ export function ChantierEditModal({
     String(chantier.delai_sous_traitance_jours || 5),
   );
   const [bonCommande, setBonCommande] = useState(false);
+  const [avecLivraison, setAvecLivraison] = useState(currentOptions.avecLivraison);
+  const [adresseLivraison, setAdresseLivraison] = useState(
+    chantier.adresse_livraison ?? "",
+  );
+  const [telephoneLivraison, setTelephoneLivraison] = useState(
+    chantier.telephone_livraison ?? "",
+  );
+  const [dureeLivraison, setDureeLivraison] = useState("2");
+  const [employeLivraison, setEmployeLivraison] = useState("");
 
   const info = useMemo(
     () => chantierPlanningInfo(snapshot, chantier.id),
@@ -111,9 +120,22 @@ export function ChantierEditModal({
     setDatesEstimatives(Boolean(info.estimatif));
     setAvecPose(currentOptions.avecPose);
     setAvecThermolaquage(currentOptions.avecThermolaquage);
+    setAvecLivraison(currentOptions.avecLivraison);
     setDelaiLaquage(String(chantier.delai_sous_traitance_jours || 5));
+    setAdresseLivraison(chantier.adresse_livraison ?? "");
+    setTelephoneLivraison(chantier.telephone_livraison ?? "");
+    const liv = snapshot.phases.find((phase) => {
+      const element = snapshot.elements.find((item) => item.id === phase.element_id);
+      return (
+        element?.chantier_id === chantier.id &&
+        phase.type_phase === "livraison" &&
+        (Boolean(phase.date_debut) || Number(phase.duree_estimee_heures) > 0)
+      );
+    });
+    setDureeLivraison(String(liv?.duree_estimee_heures || 2));
+    setEmployeLivraison(liv?.employe_id ?? "");
     setError(null);
-  }, [chantier, info.estimatif, currentOptions]);
+  }, [chantier, info.estimatif, currentOptions, snapshot]);
 
   useEffect(() => {
     setPlanDate(info.firstDate ?? toISODate(new Date()));
@@ -164,6 +186,9 @@ export function ChantierEditModal({
     const optionEdits = planChantierOptionEdits(preview, chantier.id, {
       avecPose,
       avecThermolaquage,
+      avecLivraison,
+      dureeLivraisonHeures: Number(dureeLivraison || 2),
+      employeLivraisonId: employeLivraison || null,
       delayDays: Number(delaiLaquage || 5),
       datesEstimatives,
     });
@@ -177,6 +202,24 @@ export function ChantierEditModal({
       setError("Le nom du client est obligatoire.");
       return;
     }
+    if (avecLivraison) {
+      if (!adresseLivraison.trim()) {
+        setError("Indiquez l’adresse de livraison.");
+        return;
+      }
+      if (!telephoneLivraison.trim()) {
+        setError("Indiquez le téléphone de la personne qui réceptionne.");
+        return;
+      }
+      if (!employeLivraison) {
+        setError("Choisissez le salarié responsable de la livraison.");
+        return;
+      }
+      if (!Number(dureeLivraison) || Number(dureeLivraison) <= 0) {
+        setError("Indiquez la durée de livraison en heures (ex. 2).");
+        return;
+      }
+    }
     setSaving(true);
     setError(null);
     try {
@@ -186,6 +229,9 @@ export function ChantierEditModal({
       }
       if (currentOptions.avecPose && !avecPose) {
         removed.push("Installation / Pose");
+      }
+      if (currentOptions.avecLivraison && !avecLivraison) {
+        removed.push("Livraison");
       }
       if (removed.length > 0) {
         const ok = window.confirm(
@@ -219,6 +265,8 @@ export function ChantierEditModal({
         delai_sous_traitance_jours: avecThermolaquage
           ? Math.min(60, Math.max(1, Number(delaiLaquage || 5)))
           : chantier.delai_sous_traitance_jours ?? 5,
+        adresse_livraison: avecLivraison ? adresseLivraison.trim() : null,
+        telephone_livraison: avecLivraison ? telephoneLivraison.trim() : null,
       });
       onClose();
     } catch (err) {
@@ -383,6 +431,84 @@ export function ChantierEditModal({
                   elle commence après ce thermolaquage.
                 </p>
               </label>
+            ) : null}
+          </fieldset>
+          <fieldset className="rounded-lg border border-stone-300 bg-stone-50/60 p-3 text-sm">
+            <legend className="px-1 font-medium text-stone-800">Livraison</legend>
+            <div className="mt-1 flex flex-wrap gap-4">
+              <label className="inline-flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="edit-avec-livraison"
+                  checked={avecLivraison}
+                  onChange={() => setAvecLivraison(true)}
+                />
+                Oui
+              </label>
+              <label className="inline-flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="edit-avec-livraison"
+                  checked={!avecLivraison}
+                  onChange={() => setAvecLivraison(false)}
+                />
+                Non
+              </label>
+            </div>
+            {avecLivraison ? (
+              <div className="mt-3 space-y-3">
+                <label className="block">
+                  <span className="mb-1 block font-medium">Adresse de livraison</span>
+                  <input
+                    value={adresseLivraison}
+                    onChange={(event) => setAdresseLivraison(event.target.value)}
+                    className="w-full rounded border border-stone-300 bg-white px-3 py-2"
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-1 block font-medium">
+                    Téléphone de la personne qui réceptionne
+                  </span>
+                  <input
+                    type="tel"
+                    value={telephoneLivraison}
+                    onChange={(event) => setTelephoneLivraison(event.target.value)}
+                    className="w-full rounded border border-stone-300 bg-white px-3 py-2"
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-1 block font-medium">Durée (heures)</span>
+                  <input
+                    type="number"
+                    min={0.5}
+                    step={0.5}
+                    value={dureeLivraison}
+                    onChange={(event) => setDureeLivraison(event.target.value)}
+                    className="w-full rounded border border-stone-300 bg-white px-3 py-2"
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-1 block font-medium">
+                    Salarié responsable
+                  </span>
+                  <select
+                    value={employeLivraison}
+                    onChange={(event) => setEmployeLivraison(event.target.value)}
+                    className="w-full rounded border border-stone-300 bg-white px-3 py-2"
+                  >
+                    <option value="">Choisir…</option>
+                    {activeEmployees.map((employee) => (
+                      <option key={employee.id} value={employee.id}>
+                        {employee.nom}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <p className="text-xs text-stone-500">
+                  La livraison se cale après le thermolaquage s’il y en a un, sinon
+                  après la fabrication, et avant la pose.
+                </p>
+              </div>
             ) : null}
           </fieldset>
 

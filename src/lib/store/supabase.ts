@@ -318,12 +318,30 @@ export async function supabaseCreateChantier(
       60,
       Math.max(1, Number(input.delai_laquage_jours) || 5),
     ),
+    adresse_livraison: input.avec_livraison ? input.adresse_livraison ?? null : null,
+    telephone_livraison: input.avec_livraison
+      ? input.telephone_livraison ?? null
+      : null,
   };
   let inserted = await supabase
     .from("chantiers")
     .insert(payload)
     .select("id")
     .single();
+  if (inserted.error && isMissingColumnError(inserted.error, "adresse_livraison")) {
+    inserted = await supabase
+      .from("chantiers")
+      .insert({
+        nom_client: payload.nom_client,
+        adresse: payload.adresse,
+        lien_dossier_onedrive: payload.lien_dossier_onedrive,
+        priorite: payload.priorite,
+        dates_estimatives: payload.dates_estimatives,
+        delai_sous_traitance_jours: payload.delai_sous_traitance_jours,
+      })
+      .select("id")
+      .single();
+  }
   if (inserted.error && isMissingColumnError(inserted.error, "delai_sous_traitance_jours")) {
     inserted = await supabase
       .from("chantiers")
@@ -448,10 +466,32 @@ export async function supabaseUpdateChantier(
   if (input.delai_sous_traitance_jours !== undefined) {
     payload.delai_sous_traitance_jours = input.delai_sous_traitance_jours;
   }
-  const { error } = await supabase
+  if (input.adresse_livraison !== undefined) {
+    payload.adresse_livraison = input.adresse_livraison;
+  }
+  if (input.telephone_livraison !== undefined) {
+    payload.telephone_livraison = input.telephone_livraison;
+  }
+  let { error } = await supabase
     .from("chantiers")
     .update(payload)
     .eq("id", input.id);
+  if (error && isMissingColumnError(error, "adresse_livraison")) {
+    const withoutLiv = { ...payload };
+    delete withoutLiv.adresse_livraison;
+    delete withoutLiv.telephone_livraison;
+    const retryLiv = await supabase
+      .from("chantiers")
+      .update(withoutLiv)
+      .eq("id", input.id);
+    if (retryLiv.error && isMissingColumnError(retryLiv.error, "delai_sous_traitance_jours")) {
+      error = retryLiv.error;
+    } else if (retryLiv.error) {
+      throw wrapSupabaseError(retryLiv.error);
+    } else {
+      return;
+    }
+  }
   if (error && isMissingColumnError(error, "delai_sous_traitance_jours")) {
     const withoutDelay = { ...payload };
     delete withoutDelay.delai_sous_traitance_jours;

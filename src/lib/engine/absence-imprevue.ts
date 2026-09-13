@@ -12,14 +12,13 @@ import {
   slotsFromExistingPhase,
   type OccupiedSlot,
 } from "@/lib/engine/slots";
+import { employeeCanTakePhase } from "@/lib/chantier-status";
 import type {
   Employee,
   NewAbsenceInput,
   PhasePatch,
   PhasePlanning,
   PlanningSnapshot,
-  Role,
-  TypePhase,
 } from "@/lib/types";
 
 export type AbsenceResolution = "delay" | "reassign";
@@ -34,11 +33,6 @@ export type ImpactedPhaseView = {
   nom_client: string;
   nom_element: string;
 };
-
-function roleForPhase(type: TypePhase): Role | null {
-  if (type === "logistique") return null;
-  return type;
-}
 
 export function phaseOverlapsAbsencePeriod(
   snapshot: PlanningSnapshot,
@@ -131,8 +125,6 @@ export function listReassignmentCandidates(
   absentEmployeeId: string,
   reserved: OccupiedSlot[],
 ): Employee[] {
-  const role = roleForPhase(phase.type_phase);
-  if (!role) return [];
   const occupancy = buildOccupancy(snapshot, new Set([phase.id]));
   occupySlots(occupancy, reserved, "reserved");
   const needed = slotsFromExistingPhase(snapshot, phase);
@@ -140,8 +132,9 @@ export function listReassignmentCandidates(
     phase.date_debut ?? snapshot.chantiers[0]?.date_creation ?? "",
   );
   const candidates = snapshot.employees.filter((employee) => {
-    if (!employee.actif || employee.id === absentEmployeeId) return false;
-    if (!employee.roles.includes(role)) return false;
+    if (employee.id === absentEmployeeId) return false;
+    if (phase.type_phase === "logistique") return false;
+    if (!employeeCanTakePhase(employee, phase.type_phase)) return false;
     const mapped = needed.map((slot) => ({
       ...slot,
       rowId: employee.id,
