@@ -11,6 +11,15 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-13-assign-fab-pose",
+    title: "Planning Fabrication et Pose",
+    items: [
+      "À la création, un salarié est toujours assigné à la fabrication et à la pose (même si les heures n’étaient pas renseignées), pour que les blocs apparaissent sur le planning.",
+      "S’il n’y a personne avec le bon rôle, un message d’erreur s’affiche au lieu d’enregistrer un chantier invisible.",
+      "Dans Modifier le chantier, vous pouvez voir et changer le salarié de la fabrication et de la pose, comme pour la livraison.",
+    ],
+  },
+  {
     id: "2026-09-13-bon-commande-thermo",
     title: "Bon de commande",
     items: [

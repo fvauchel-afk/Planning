@@ -20,8 +20,10 @@ import {
 } from "@/lib/engine/resize-chantier";
 import {
   chantierPhaseOptions,
+  missingGridAssignee,
   planChantierOptionEdits,
 } from "@/lib/engine/phase-chain";
+import { employeeCanTakePhase } from "@/lib/chantier-status";
 import { compareEmployeesByOrdre } from "@/lib/display-order";
 import { moisToToleranceJours, toleranceJoursToMois } from "@/lib/priorite";
 import { usePlanning } from "@/lib/planning-context";
@@ -104,6 +106,8 @@ export function ChantierEditModal({
   );
   const [dureeLivraison, setDureeLivraison] = useState("2");
   const [employeLivraison, setEmployeLivraison] = useState("");
+  const [employeFabrication, setEmployeFabrication] = useState("");
+  const [employePose, setEmployePose] = useState("");
 
   const info = useMemo(
     () => chantierPlanningInfo(snapshot, chantier.id),
@@ -147,6 +151,20 @@ export function ChantierEditModal({
     });
     setDureeLivraison(String(liv?.duree_estimee_heures || 2));
     setEmployeLivraison(liv?.employe_id ?? "");
+    const fab = snapshot.phases.find((phase) => {
+      const element = snapshot.elements.find((item) => item.id === phase.element_id);
+      return element?.chantier_id === chantier.id && phase.type_phase === "fabrication";
+    });
+    const pose = snapshot.phases.find((phase) => {
+      const element = snapshot.elements.find((item) => item.id === phase.element_id);
+      return (
+        element?.chantier_id === chantier.id &&
+        phase.type_phase === "pose" &&
+        (Boolean(phase.date_debut) || Number(phase.duree_estimee_heures) > 0)
+      );
+    });
+    setEmployeFabrication(fab?.employe_id ?? "");
+    setEmployePose(pose?.employe_id ?? "");
     setError(null);
   }, [chantier, info.estimatif, currentOptions, snapshot]);
 
@@ -202,10 +220,17 @@ export function ChantierEditModal({
       avecLivraison,
       dureeLivraisonHeures: Number(dureeLivraison || 2),
       employeLivraisonId: employeLivraison || null,
+      employeFabricationId: employeFabrication || null,
+      employePoseId: employePose || null,
       delayDays: Number(delaiLaquage || 5),
       datesEstimatives,
     });
     const edits = mergePhaseEdits(dateEdits, optionEdits);
+    const after = previewPhaseEdits(preview, optionEdits);
+    const missing = missingGridAssignee(after, chantier.id);
+    if (missing) {
+      throw new Error(missing);
+    }
     if (!isEmptyPhaseEdits(edits)) await applyPhaseEdits(edits);
   }
 
@@ -441,6 +466,51 @@ export function ChantierEditModal({
                 Non
               </label>
             </div>
+            {avecPose ? (
+              <label className="mt-3 block">
+                <span className="mb-1 block font-medium">
+                  Salarié responsable de la pose
+                </span>
+                <select
+                  value={employePose}
+                  onChange={(event) => setEmployePose(event.target.value)}
+                  className="w-full rounded border border-stone-300 bg-white px-3 py-2"
+                >
+                  <option value="">Auto (premier disponible)</option>
+                  {activeEmployees
+                    .filter((employee) => employeeCanTakePhase(employee, "pose"))
+                    .map((employee) => (
+                      <option key={employee.id} value={employee.id}>
+                        {employee.nom}
+                      </option>
+                    ))}
+                </select>
+              </label>
+            ) : null}
+          </fieldset>
+          <fieldset className="rounded-lg border border-stone-300 bg-stone-50/60 p-3 text-sm">
+            <legend className="px-1 font-medium text-stone-800">Fabrication</legend>
+            <label className="mt-1 block">
+              <span className="mb-1 block font-medium">
+                Salarié responsable de la fabrication
+              </span>
+              <select
+                value={employeFabrication}
+                onChange={(event) => setEmployeFabrication(event.target.value)}
+                className="w-full rounded border border-stone-300 bg-white px-3 py-2"
+              >
+                <option value="">Auto (premier disponible)</option>
+                {activeEmployees
+                  .filter((employee) =>
+                    employeeCanTakePhase(employee, "fabrication"),
+                  )
+                  .map((employee) => (
+                    <option key={employee.id} value={employee.id}>
+                      {employee.nom}
+                    </option>
+                  ))}
+              </select>
+            </label>
           </fieldset>
           <fieldset className="rounded-lg border border-stone-300 bg-stone-50/60 p-3 text-sm">
             <legend className="px-1 font-medium text-stone-800">
