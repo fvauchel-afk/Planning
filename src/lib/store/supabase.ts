@@ -340,7 +340,8 @@ export async function supabaseCreateChantier(
     .select("id")
     .single();
   if (inserted.error && isMissingColumnError(inserted.error, "sous_traitant_id")) {
-    const { sous_traitant_id: _ignored, ...withoutSt } = payload;
+    const withoutSt = { ...payload, sous_traitant_id: undefined };
+    delete withoutSt.sous_traitant_id;
     inserted = await supabase.from("chantiers").insert(withoutSt).select("id").single();
   }
   if (inserted.error && isMissingColumnError(inserted.error, "tolerance_deplacement_jours")) {
