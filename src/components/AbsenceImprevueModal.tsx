@@ -9,6 +9,7 @@ import {
   type AbsencePhaseChoice,
 } from "@/lib/engine/absence-imprevue";
 import { formatLongDate, toISODate } from "@/lib/dates";
+import { needsAlgoValidation, propositionFromDelay } from "@/lib/signalements";
 import { usePlanning } from "@/lib/planning-context";
 import {
   ABSENCE_LABELS,
@@ -55,7 +56,8 @@ export function AbsenceImprevueModal({
   employee: Employee;
   onClose: () => void;
 }) {
-  const { snapshot, createAbsence, applyPhasePatches } = usePlanning();
+  const { snapshot, createAbsence, applyPhasePatches, createSignalement } =
+    usePlanning();
   const today = toISODate(new Date());
   const [from, setFrom] = useState(today);
   const [to, setTo] = useState(today);
@@ -110,10 +112,21 @@ export function AbsenceImprevueModal({
         setConflict(plan);
         return;
       }
-      if (plan.patches.length > 0) {
+      await createAbsence(absence);
+      if (needsAlgoValidation(plan)) {
+        await createSignalement({
+          employe_id: employee.id,
+          phase_id: impacted[0]?.phase.id ?? plan.patches[0]?.id ?? null,
+          retard_demi_journees: 1,
+          sens: "retard",
+          note: `Absence du ${from} au ${to} : l’algorithme propose des décalages, non appliqués tant que Mika ou Alexis n’a pas validé.`,
+          origine: "decalage_admin",
+          statut: "en_attente",
+          proposition: propositionFromDelay(snapshot, plan),
+        });
+      } else if (plan.patches.length > 0) {
         await applyPhasePatches(plan.patches);
       }
-      await createAbsence(absence);
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Enregistrement impossible.");
@@ -345,6 +358,7 @@ export function AbsenceImprevueModal({
           displacements={conflict.displacements}
           incoming={[]}
           showIncoming={false}
+          validateLabel="Envoyer pour validation"
           adjustLabel="Annuler"
           onValidate={() => {
             setConflict(null);

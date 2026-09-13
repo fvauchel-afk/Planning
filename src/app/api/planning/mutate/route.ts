@@ -46,7 +46,11 @@ import type {
 } from "@/lib/types";
 import { CATEGORIES_DEMANDE, STATUTS_DEMANDE } from "@/lib/types";
 import { canReceiveCommandes } from "@/lib/auth/commande-access";
-import { sendCommandePush } from "@/lib/push/send";
+import { sendCommandePush, sendSignalementPush } from "@/lib/push/send";
+import {
+  hasPendingSignalements,
+  PENDING_CHANTIER_MESSAGE,
+} from "@/lib/signalements";
 import {
   COMMANDE_MAIL_TEMPLATES,
   sendCommandeMailboxMessage,
@@ -135,6 +139,10 @@ export async function POST(request: NextRequest) {
     let chantierId: string | undefined;
 
     if (body.action === "createChantier") {
+      const current = await fetchSupabaseSnapshot();
+      if (hasPendingSignalements(current)) {
+        return NextResponse.json({ error: PENDING_CHANTIER_MESSAGE }, { status: 400 });
+      }
       chantierId = await supabaseCreateChantier(body.input);
     } else if (body.action === "updateChantier") {
       await supabaseUpdateChantier(body.input);
@@ -154,6 +162,10 @@ export async function POST(request: NextRequest) {
       await supabaseScheduleChantierDay(body.input);
       chantierId = body.input.chantierId;
     } else if (body.action === "createChantierWithPatches") {
+      const current = await fetchSupabaseSnapshot();
+      if (hasPendingSignalements(current)) {
+        return NextResponse.json({ error: PENDING_CHANTIER_MESSAGE }, { status: 400 });
+      }
       if (body.patches?.length) await supabaseApplyPhasePatches(body.patches);
       chantierId = await supabaseCreateChantier(body.input);
     } else if (body.action === "upsertEmployee") {
@@ -207,10 +219,36 @@ export async function POST(request: NextRequest) {
         }
       }
       await supabaseCreateSignalement(input);
+      if ((input.statut ?? "en_attente") === "en_attente") {
+        const snapshot = await fetchSupabaseSnapshot();
+        const auteur =
+          snapshot.employees.find((item) => idsEqual(item.id, input.employe_id))
+            ?.nom || session.nom;
+        const resume =
+          input.proposition?.message ||
+          input.note ||
+          "Un signalement attend une validation.";
+        const push = await sendSignalementPush({ auteur, resume });
+        if (push.warning) console.warn("[signalement-push]", push.warning);
+      }
     } else if (body.action === "setSignalementStatut") {
       await supabaseSetSignalementStatut(body.id, body.statut);
     } else if (body.action === "validateSignalement") {
-      if (body.patches?.length) await supabaseApplyPhasePatches(body.patches);
+      const current = await fetchSupabaseSnapshot();
+      const item = current.signalements.find((row) => row.id === body.id);
+      const proposition = item?.proposition;
+      const patches =
+        body.patches?.length ? body.patches : proposition?.patches ?? [];
+      if (patches.length) await supabaseApplyPhasePatches(patches);
+      if (proposition?.createChantier) {
+        if (hasPendingSignalements({
+          ...current,
+          signalements: current.signalements.filter((row) => row.id !== body.id),
+        })) {
+          return NextResponse.json({ error: PENDING_CHANTIER_MESSAGE }, { status: 400 });
+        }
+        await supabaseCreateChantier(proposition.createChantier);
+      }
       await supabaseSetSignalementStatut(body.id, "valide");
     } else if (body.action === "createReception") {
       if (!session.isAdmin) {

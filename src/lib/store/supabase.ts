@@ -1,6 +1,7 @@
 import "server-only";
 import { asAdminFlag } from "@/lib/auth/ids";
 import { chantierHasEstimativeDates, chantierIdForPhase, phaseIdsStartedToday, withConfirmedPhases } from "@/lib/dates-estimatives";
+import { parseProposition } from "@/lib/signalements";
 import { phaseTypeForRoles } from "@/lib/chantier-status";
 import { normalizePhasesForPlanning } from "@/lib/engine/normalize-phases";
 import {
@@ -225,10 +226,14 @@ async function fetchSupabaseSnapshotOnce(): Promise<PlanningSnapshot> {
       const item = row as Signalement;
       return {
         ...item,
+        phase_id: item.phase_id || null,
         retard_demi_journees: Number(item.retard_demi_journees),
         date_creation: item.date_creation,
         sens: item.sens === "avance" ? "avance" : "retard",
         origine: item.origine === "decalage_admin" ? "decalage_admin" : "salarie",
+        proposition: parseProposition(
+          (row as { proposition?: unknown }).proposition,
+        ),
       };
     }),
     receptions: optionalTable<ReceptionChantier>(receptions).map((row) => ({
@@ -805,15 +810,22 @@ export async function supabaseCreateSignalement(
   const supabase = createSupabaseServerClient();
   const payload = {
     employe_id: input.employe_id,
-    phase_id: input.phase_id,
+    phase_id: input.phase_id || null,
     retard_demi_journees: input.retard_demi_journees,
     note: input.note,
     statut: input.statut ?? "en_attente",
     sens: input.sens,
     origine: input.origine ?? "salarie",
+    proposition: input.proposition ?? null,
   };
   const first = await supabase.from("signalements").insert(payload);
   if (!first.error) return;
+  if (isMissingColumnError(first.error, "proposition")) {
+    const withoutProp = { ...payload };
+    delete (withoutProp as { proposition?: unknown }).proposition;
+    const retryProp = await supabase.from("signalements").insert(withoutProp);
+    if (!retryProp.error) return;
+  }
   const retry = await supabase.from("signalements").insert({
     employe_id: payload.employe_id,
     phase_id: payload.phase_id,

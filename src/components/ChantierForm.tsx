@@ -19,6 +19,12 @@ import {
 } from "@/lib/engine/earliest-date";
 import { applyPhaseChainOnCreate } from "@/lib/engine/phase-chain";
 import { usePlanning } from "@/lib/planning-context";
+import { useSession } from "@/lib/auth/session-context";
+import {
+  hasPendingSignalements,
+  PENDING_CHANTIER_MESSAGE,
+  propositionFromDelay,
+} from "@/lib/signalements";
 import {
   PHASE_LABELS,
   PRIORITES,
@@ -60,7 +66,8 @@ function emptyPhases(): PhaseForm[] {
 
 export function ChantierForm() {
   const router = useRouter();
-  const { snapshot, createChantier, createChantierWithPatches } = usePlanning();
+  const { snapshot, createChantier, createSignalement } = usePlanning();
+  const { session } = useSession();
   const [nomClient, setNomClient] = useState("");
   const [adresse, setAdresse] = useState("");
   const [lien, setLien] = useState("");
@@ -173,6 +180,10 @@ export function ChantierForm() {
   }
 
   async function saveInput(input: NewChantierInput) {
+    if (hasPendingSignalements(snapshot)) {
+      setError(PENDING_CHANTIER_MESSAGE);
+      return;
+    }
     const clash = inspectManualSlotConflict(snapshot, input);
     if (clash) {
       setSlotConflict(clash);
@@ -210,6 +221,10 @@ export function ChantierForm() {
   }
 
   async function onAutoPlace() {
+    if (hasPendingSignalements(snapshot)) {
+      setError(PENDING_CHANTIER_MESSAGE);
+      return;
+    }
     const input = buildInput();
     if (!input) return;
     const result = planChantier(snapshot, input, { urgent });
@@ -253,15 +268,35 @@ export function ChantierForm() {
 
   async function validateConflict() {
     if (!conflict || !pendingInput) return;
+    if (!session?.employeeId) {
+      setError("Connexion requise pour envoyer la proposition.");
+      return;
+    }
     setSaving(true);
     try {
-      await createChantierWithPatches(
-        mergePlanIntoInput(pendingInput, conflict.phases, urgent),
-        patchesFromConflict(conflict),
-      );
-      router.push("/");
+      const merged = mergePlanIntoInput(pendingInput, conflict.phases, urgent);
+      const patches = patchesFromConflict(conflict);
+      await createSignalement({
+        employe_id: session.employeeId,
+        phase_id: null,
+        retard_demi_journees: 1,
+        sens: "retard",
+        note: `Nouveau chantier « ${pendingInput.nom_client} » : décalages proposés, non appliqués.`,
+        origine: "decalage_admin",
+        statut: "en_attente",
+        proposition: propositionFromDelay(
+          snapshot,
+          {
+            message: conflict.message,
+            patches,
+            displacements: conflict.displacements,
+          },
+          { createChantier: merged },
+        ),
+      });
+      router.push("/signalements");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Enregistrement impossible.");
+      setError(err instanceof Error ? err.message : "Envoi impossible.");
     } finally {
       setSaving(false);
       setConflict(null);
@@ -355,6 +390,7 @@ export function ChantierForm() {
           message={conflict.message}
           displacements={conflict.displacements}
           incoming={conflict.phases}
+          validateLabel="Envoyer pour validation"
           onValidate={() => void validateConflict()}
           onAdjust={() => void adjustConflict()}
           onCancel={() => setConflict(null)}
@@ -367,6 +403,11 @@ export function ChantierForm() {
           Indiquez si le chantier a une pose et du thermolaquage. Le délai de
           5 jours ouvrés du sous-traitant démarre à l’envoi du bon de commande.
         </p>
+        {hasPendingSignalements(snapshot) ? (
+          <p className="mt-3 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+            {PENDING_CHANTIER_MESSAGE}
+          </p>
+        ) : null}
       </div>
 
       {error && (
@@ -790,7 +831,7 @@ export function ChantierForm() {
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
-          disabled={saving}
+          disabled={saving || hasPendingSignalements(snapshot)}
           onClick={() => void onAutoPlace()}
           className="rounded bg-amber-700 px-4 py-2 text-sm font-medium text-amber-50 disabled:opacity-60"
         >
@@ -798,7 +839,7 @@ export function ChantierForm() {
         </button>
         <button
           type="submit"
-          disabled={saving}
+          disabled={saving || hasPendingSignalements(snapshot)}
           className="rounded border border-stone-400 bg-white px-4 py-2 text-sm font-medium text-stone-800 disabled:opacity-60"
         >
           Enregistrer

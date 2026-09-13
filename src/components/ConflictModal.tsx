@@ -11,6 +11,7 @@ export function ConflictModal({
   title = "Conflit d’urgence",
   incomingLabel = "Placement du chantier urgent",
   adjustLabel = "Ajuster (placer à la suite, sans décaler)",
+  validateLabel = "Valider les décalages",
   showIncoming = true,
   onValidate,
   onAdjust,
@@ -22,6 +23,7 @@ export function ConflictModal({
   title?: string;
   incomingLabel?: string;
   adjustLabel?: string;
+  validateLabel?: string;
   showIncoming?: boolean;
   onValidate: () => void;
   onAdjust: () => void;
@@ -87,7 +89,7 @@ export function ConflictModal({
             onClick={onValidate}
             className="rounded bg-amber-700 px-3 py-2 text-sm text-amber-50"
           >
-            Valider les décalages
+            {validateLabel}
           </button>
           <button
             type="button"

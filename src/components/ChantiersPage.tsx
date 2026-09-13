@@ -10,10 +10,15 @@ import {
 } from "@/lib/chantier-status";
 import { usePlanning } from "@/lib/planning-context";
 import { PRIORITE_LABELS, type Chantier } from "@/lib/types";
+import {
+  hasPendingSignalements,
+  PENDING_CHANTIER_MESSAGE,
+} from "@/lib/signalements";
 
 export function ChantiersPage() {
   const { snapshot, loading } = usePlanning();
   const [editing, setEditing] = useState<Chantier | null>(null);
+  const pendingBlock = hasPendingSignalements(snapshot);
 
   const rows = useMemo(() => {
     return [...snapshot.chantiers]
@@ -36,12 +41,24 @@ export function ChantiersPage() {
             daté depuis le formulaire d’édition.
           </p>
         </div>
-        <Link
-          href="/chantiers/nouveau"
-          className="rounded-lg bg-amber-700 px-3 py-2 text-sm font-medium text-amber-50"
-        >
-          Nouveau chantier
-        </Link>
+        {pendingBlock ? (
+          <p
+            className="max-w-sm rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950"
+            title={PENDING_CHANTIER_MESSAGE}
+          >
+            {PENDING_CHANTIER_MESSAGE}{" "}
+            <Link href="/signalements" className="font-medium underline">
+              Ouvrir les signalements
+            </Link>
+          </p>
+        ) : (
+          <Link
+            href="/chantiers/nouveau"
+            className="rounded-lg bg-amber-700 px-3 py-2 text-sm font-medium text-amber-50"
+          >
+            Nouveau chantier
+          </Link>
+        )}
       </div>
 
       {loading ? (

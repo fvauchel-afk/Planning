@@ -7,6 +7,7 @@ import { canGenerateBonCommande } from "@/lib/bon-commande/active-phase";
 import { idsEqual } from "@/lib/auth/ids";
 import { useSession } from "@/lib/auth/session-context";
 import { phaseIsEstimative } from "@/lib/dates-estimatives";
+import { needsAlgoValidation, propositionFromDelay } from "@/lib/signalements";
 import { formatLongDate, formatOvertimeHours, shiftToReach } from "@/lib/dates";
 import {
   planBestDelayInWindow,
@@ -98,22 +99,40 @@ export function PhaseFicheModal({
         setPending({ result, halfDays });
         return;
       }
+      const employeId = reporterId();
+      const delayNote =
+        delayKind === "cible"
+          ? [note.trim(), `cible ${targetDate} ±${flex} j. → ${result.chosenStart ?? targetDate}`]
+              .filter(Boolean)
+              .join(" · ")
+          : note.trim();
+      if (needsAlgoValidation(result)) {
+        if (!employeId) {
+          throw new Error("Aucun salarié pour enregistrer la proposition.");
+        }
+        await createSignalement({
+          employe_id: employeId,
+          phase_id: phaseId,
+          retard_demi_journees: Math.max(1, Math.abs(halfDays)),
+          sens: halfDays < 0 ? "avance" : "retard",
+          note: delayNote,
+          origine: "decalage_admin",
+          statut: "en_attente",
+          proposition: propositionFromDelay(snapshot, result),
+        });
+        onClose();
+        return;
+      }
       if (result.patches.length > 0) {
         await applyPhasePatches(result.patches);
       }
-      const employeId = reporterId();
       if (employeId && (halfDays !== 0 || note.trim() || delayKind === "cible")) {
         await createSignalement({
           employe_id: employeId,
           phase_id: phaseId,
           retard_demi_journees: Math.max(1, Math.abs(halfDays)),
           sens: halfDays < 0 ? "avance" : "retard",
-          note:
-            delayKind === "cible"
-              ? [note.trim(), `cible ${targetDate} ±${flex} j. → ${result.chosenStart ?? targetDate}`]
-                  .filter(Boolean)
-                  .join(" · ")
-              : note.trim(),
+          note: delayNote,
           origine: "decalage_admin",
           statut: "valide",
         });
@@ -428,6 +447,7 @@ export function PhaseFicheModal({
           displacements={pending.result.displacements}
           incoming={[]}
           showIncoming={false}
+          validateLabel="Envoyer pour validation"
           adjustLabel="Annuler"
           onValidate={() => {
             const current = pending;

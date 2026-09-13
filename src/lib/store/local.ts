@@ -60,6 +60,7 @@ export function loadLocalSnapshot(): PlanningSnapshot {
         sens: item.sens === "avance" ? "avance" : "retard",
         origine:
           item.origine === "decalage_admin" ? "decalage_admin" : "salarie",
+        proposition: item.proposition ?? null,
       })),
       phases: normalizePhasesForPlanning(
         (parsed.phases ?? []).map((phase) => ({
@@ -317,7 +318,7 @@ export function localApplyPhaseEdits(
     const removed = new Set(edits.deleteIds);
     next.phases = next.phases.filter((phase) => !removed.has(phase.id));
     next.signalements = (next.signalements ?? []).filter(
-      (item) => !removed.has(item.phase_id),
+      (item) => !item.phase_id || !removed.has(item.phase_id),
     );
     next.receptions = (next.receptions ?? []).filter(
       (item) => !removed.has(item.phase_id),
@@ -341,13 +342,14 @@ export function localCreateSignalement(
   const row: Signalement = {
     id: newId(),
     employe_id: input.employe_id,
-    phase_id: input.phase_id,
+    phase_id: input.phase_id ?? null,
     retard_demi_journees: input.retard_demi_journees,
     sens: input.sens,
     note: input.note,
     statut: input.statut ?? "en_attente",
     origine: input.origine ?? "salarie",
     date_creation: new Date().toISOString(),
+    proposition: input.proposition ?? null,
   };
   next.signalements = [...(next.signalements ?? []), row];
   saveLocalSnapshot(next);
@@ -365,6 +367,24 @@ export function localSetSignalementStatut(
   );
   saveLocalSnapshot(next);
   return next;
+}
+
+export function localValidateSignalement(
+  snapshot: PlanningSnapshot,
+  id: string,
+  patches: PhasePatch[],
+): PlanningSnapshot {
+  const item = (snapshot.signalements ?? []).find((row) => row.id === id);
+  const proposition = item?.proposition;
+  const toApply = patches.length ? patches : proposition?.patches ?? [];
+  let next = snapshot;
+  if (toApply.length) {
+    next = localApplyPhasePatches(next, toApply);
+  }
+  if (proposition?.createChantier) {
+    next = localCreateChantier(next, proposition.createChantier).snapshot;
+  }
+  return localSetSignalementStatut(next, id, "valide");
 }
 
 export function localCreateDemande(
@@ -489,7 +509,7 @@ export function localDeleteChantier(
       .map((phase) => phase.id),
   );
   next.signalements = (next.signalements ?? []).filter(
-    (item) => !phaseIds.has(item.phase_id),
+    (item) => !item.phase_id || !phaseIds.has(item.phase_id),
   );
   next.receptions = (next.receptions ?? []).filter(
     (item) => !phaseIds.has(item.phase_id),
