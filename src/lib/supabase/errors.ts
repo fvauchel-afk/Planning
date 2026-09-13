@@ -49,6 +49,17 @@ export function isMissingSchemaError(err: unknown): boolean {
   );
 }
 
+export function formatSaveError(
+  err: unknown,
+  action = "l’enregistrement a échoué",
+): string {
+  const reason =
+    err instanceof Error && err.message.trim()
+      ? err.message.trim()
+      : "erreur inconnue";
+  return `Une erreur est survenue, ${action} : ${reason}`;
+}
+
 export const DATABASE_UNAVAILABLE_MESSAGE =
   "Impossible de se connecter à la base de données, réessayez plus tard.";
 

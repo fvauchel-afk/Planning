@@ -22,6 +22,7 @@ import { applyPhaseChainOnCreate } from "@/lib/engine/phase-chain";
 import { moisToToleranceJours } from "@/lib/priorite";
 import { employeeCanTakePhase } from "@/lib/chantier-status";
 import { usePlanning } from "@/lib/planning-context";
+import { formatSaveError } from "@/lib/supabase/errors";
 import { useSession } from "@/lib/auth/session-context";
 import {
   hasPendingSignalements,
@@ -94,6 +95,7 @@ export function ChantierForm() {
     { key: "el-1", nom_element: "", phases: emptyPhases() },
   ]);
   const [saving, setSaving] = useState(false);
+  const [placing, setPlacing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [conflict, setConflict] = useState<PlanResult | null>(null);
@@ -231,7 +233,12 @@ export function ChantierForm() {
     const clash = inspectManualSlotConflict(snapshot, input);
     if (clash) {
       setSlotConflict(clash);
-      setError(null);
+      setError(
+        formatSaveError(
+          new Error(clash.message),
+          "le chantier n’a pas été enregistré",
+        ),
+      );
       return;
     }
     setSlotConflict(null);
@@ -240,7 +247,7 @@ export function ChantierForm() {
       await createChantier(input);
       router.push("/");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Enregistrement impossible.");
+      setError(formatSaveError(err, "le chantier n’a pas été enregistré"));
     } finally {
       setSaving(false);
     }
@@ -271,43 +278,55 @@ export function ChantierForm() {
     }
     const input = buildInput();
     if (!input) return;
-    const result = planChantier(snapshot, input, { urgent });
-    if (result.status === "conflict") {
-      setPendingInput(input);
-      setConflict(result);
-      setInfo(result.message);
-      return;
-    }
-    if (result.status === "blocked") {
-      const clash = inspectManualSlotConflict(snapshot, input);
-      if (clash) {
-        setSlotConflict(clash);
-        setError(null);
-      } else {
-        setError(result.message);
+    setPlacing(true);
+    try {
+      const result = planChantier(snapshot, input, { urgent });
+      if (result.status === "conflict") {
+        setPendingInput(input);
+        setConflict(result);
+        setInfo(result.message);
+        return;
       }
-      return;
-    }
-    const merged = mergePlanIntoInput(input, result.phases, urgent);
-    const placed = result.phases.filter(
-      (phase) => phase.date_debut && phase.duree_estimee_heures > 0,
-    );
-    if (placed.length === 0) {
-      setError(
-        result.message ||
-          "Le moteur n’a posé aucune date. Vérifiez les durées et les rôles de l’équipe.",
+      if (result.status === "blocked") {
+        const clash = inspectManualSlotConflict(snapshot, input);
+        if (clash) {
+          setSlotConflict(clash);
+          setError(
+            formatSaveError(
+              new Error(clash.message),
+              "le chantier n’a pas été enregistré",
+            ),
+          );
+        } else {
+          setError(result.message);
+        }
+        return;
+      }
+      const merged = mergePlanIntoInput(input, result.phases, urgent);
+      const placed = result.phases.filter(
+        (phase) => phase.date_debut && phase.duree_estimee_heures > 0,
       );
-    } else {
-      setInfo(result.message);
+      if (placed.length === 0) {
+        setError(
+          result.message ||
+            "Le moteur n’a posé aucune date. Vérifiez les durées et les rôles de l’équipe.",
+        );
+      } else {
+        setInfo(result.message);
+      }
+      await saveInput(
+        ensureChantierDatesOnCreate(snapshot, {
+          ...merged,
+          dates_estimatives: inputHasExplicitDates(input)
+            ? Boolean(input.dates_estimatives)
+            : true,
+        }),
+      );
+    } catch (err) {
+      setError(formatSaveError(err, "le chantier n’a pas été enregistré"));
+    } finally {
+      setPlacing(false);
     }
-    await saveInput(
-      ensureChantierDatesOnCreate(snapshot, {
-        ...merged,
-        dates_estimatives: inputHasExplicitDates(input)
-          ? Boolean(input.dates_estimatives)
-          : true,
-      }),
-    );
   }
 
   async function validateConflict() {
@@ -348,7 +367,7 @@ export function ChantierForm() {
       });
       router.push("/signalements");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Envoi impossible.");
+      setError(formatSaveError(err, "la proposition n’a pas été envoyée"));
     } finally {
       setSaving(false);
       setConflict(null);
@@ -993,18 +1012,18 @@ export function ChantierForm() {
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
-          disabled={saving || hasPendingSignalements(snapshot)}
+          disabled={saving || placing || hasPendingSignalements(snapshot)}
           onClick={() => void onAutoPlace()}
           className="rounded bg-amber-700 px-4 py-2 text-sm font-medium text-amber-50 disabled:opacity-60"
         >
-          {saving ? "Placement…" : "Placer automatiquement"}
+          {placing ? "Placement…" : "Placer automatiquement"}
         </button>
         <button
           type="submit"
-          disabled={saving || hasPendingSignalements(snapshot)}
+          disabled={saving || placing || hasPendingSignalements(snapshot)}
           className="rounded border border-stone-400 bg-white px-4 py-2 text-sm font-medium text-stone-800 disabled:opacity-60"
         >
-          Enregistrer
+          {saving ? "Enregistrement…" : "Enregistrer"}
         </button>
       </div>
     </form>

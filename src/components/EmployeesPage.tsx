@@ -13,6 +13,7 @@ import {
 } from "@/lib/engine/hours";
 import { compareEmployeesByOrdre } from "@/lib/display-order";
 import { usePlanning } from "@/lib/planning-context";
+import { formatSaveError } from "@/lib/supabase/errors";
 import {
   JOURS_OUVRES,
   JOUR_OUVRE_LABELS,
@@ -216,9 +217,7 @@ export function EmployeesPage() {
       await saveHoraires(saisons);
       setSaisonInfo("Dates été / hiver enregistrées.");
     } catch (err) {
-      setSaisonError(
-        err instanceof Error ? err.message : "Enregistrement impossible.",
-      );
+      setSaisonError(formatSaveError(err, "les saisons n’ont pas été enregistrées"));
     } finally {
       setSavingSaisons(false);
     }
@@ -235,16 +234,20 @@ export function EmployeesPage() {
       return;
     }
     setError(null);
-    await upsertEmployee({
-      id: editing?.id,
-      nom: nom.trim(),
-      roles,
-      actif,
-      is_admin: isAdmin,
-      pin: pin || undefined,
-      horaires,
-    });
-    resetForm();
+    try {
+      await upsertEmployee({
+        id: editing?.id,
+        nom: nom.trim(),
+        roles,
+        actif,
+        is_admin: isAdmin,
+        pin: pin || undefined,
+        horaires,
+      });
+      resetForm();
+    } catch (err) {
+      setError(formatSaveError(err, "le salarié n’a pas été enregistré"));
+    }
   }
 
   return (

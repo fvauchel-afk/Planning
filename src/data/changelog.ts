@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-13-chantier-onedrive-nonblocking",
+    title: "Création de chantier",
+    items: [
+      "Un nouveau chantier s’enregistre même si le dossier OneDrive échoue (connexion expirée, réseau…). Le lien reste vide ; vous pouvez le créer plus tard depuis Modifier.",
+      "Si l’enregistrement échoue, un message s’affiche avec la raison, au lieu d’un échec silencieux.",
+    ],
+  },
+  {
     id: "2026-09-13-calage-priorite-solutions",
     title: "Calage et conflits",
     items: [

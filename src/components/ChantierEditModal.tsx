@@ -24,6 +24,7 @@ import {
 import { compareEmployeesByOrdre } from "@/lib/display-order";
 import { moisToToleranceJours, toleranceJoursToMois } from "@/lib/priorite";
 import { usePlanning } from "@/lib/planning-context";
+import { formatSaveError } from "@/lib/supabase/errors";
 import {
   LOGISTIQUE_ROW_ID,
   PRIORITES,
@@ -58,6 +59,7 @@ export function ChantierEditModal({
     scheduleChantierDay,
     applyPhaseEdits,
     confirmPhaseDates,
+    ensureChantierOnedriveFolder,
   } = usePlanning();
   const [nomClient, setNomClient] = useState(chantier.nom_client);
   const [adresse, setAdresse] = useState(chantier.adresse);
@@ -76,6 +78,7 @@ export function ChantierEditModal({
     Boolean(chantier.dates_estimatives),
   );
   const [error, setError] = useState<string | null>(null);
+  const [creatingFolder, setCreatingFolder] = useState(false);
   const currentOptions = useMemo(
     () => chantierPhaseOptions(snapshot, chantier.id),
     [snapshot, chantier.id],
@@ -277,9 +280,21 @@ export function ChantierEditModal({
       });
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Enregistrement impossible.");
+      setError(formatSaveError(err, "le chantier n’a pas été enregistré"));
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function onCreateOnedriveFolder() {
+    setCreatingFolder(true);
+    setError(null);
+    try {
+      await ensureChantierOnedriveFolder(chantier.id);
+    } catch (err) {
+      setError(formatSaveError(err, "le dossier OneDrive n’a pas été créé"));
+    } finally {
+      setCreatingFolder(false);
     }
   }
 
@@ -289,7 +304,7 @@ export function ChantierEditModal({
     try {
       await persistPlanning(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Planification impossible.");
+      setError(formatSaveError(err, "la planification a échoué"));
     } finally {
       setScheduling(false);
     }
@@ -304,7 +319,7 @@ export function ChantierEditModal({
       onClose();
       router.push("/chantiers");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Suppression impossible.");
+      setError(formatSaveError(err, "la suppression a échoué"));
       setDeleting(false);
     }
   }
@@ -385,7 +400,16 @@ export function ChantierEditModal({
             >
               Ouvrir le dossier OneDrive
             </a>
-          ) : null}
+          ) : (
+            <button
+              type="button"
+              disabled={busy || creatingFolder}
+              onClick={() => void onCreateOnedriveFolder()}
+              className="inline-flex w-full items-center justify-center rounded border border-sky-700 bg-sky-50 px-3 py-2 text-sm font-medium text-sky-800 hover:bg-sky-100 disabled:opacity-60"
+            >
+              {creatingFolder ? "Création…" : "Créer le dossier OneDrive"}
+            </button>
+          )}
 
           <fieldset className="rounded-lg border border-stone-300 bg-stone-50/60 p-3 text-sm">
             <legend className="px-1 font-medium text-stone-800">

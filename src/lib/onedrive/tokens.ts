@@ -91,9 +91,13 @@ async function requestToken(body: URLSearchParams): Promise<TokenResponse> {
   );
   const json = (await res.json()) as TokenResponse & { error?: string; error_description?: string };
   if (!res.ok) {
-    throw new Error(
-      json.error_description || json.error || "Échange de jeton Microsoft impossible.",
-    );
+    const raw = json.error_description || json.error || "";
+    if (/AADSTS|invalid_grant/i.test(raw)) {
+      throw new Error(
+        "Connexion OneDrive expirée. Ouvrez l’onglet OneDrive et cliquez sur « Connecter OneDrive ».",
+      );
+    }
+    throw new Error(raw || "Échange de jeton Microsoft impossible.");
   }
   return json;
 }
