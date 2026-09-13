@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BonCommandeModal } from "@/components/BonCommandeModal";
+import { SousTraitantSelect } from "@/components/SousTraitantSelect";
 import { canGenerateBonCommande } from "@/lib/bon-commande/active-phase";
 import { chantierVisibleOnGrid } from "@/lib/calendar";
 import { estimativePhaseIdsForChantier } from "@/lib/dates-estimatives";
@@ -91,6 +92,9 @@ export function ChantierEditModal({
     String(chantier.delai_sous_traitance_jours || 5),
   );
   const [bonCommande, setBonCommande] = useState(false);
+  const [sousTraitantId, setSousTraitantId] = useState(
+    chantier.sous_traitant_id ?? "",
+  );
   const [avecLivraison, setAvecLivraison] = useState(currentOptions.avecLivraison);
   const [adresseLivraison, setAdresseLivraison] = useState(
     chantier.adresse_livraison ?? "",
@@ -130,6 +134,7 @@ export function ChantierEditModal({
     setAvecThermolaquage(currentOptions.avecThermolaquage);
     setAvecLivraison(currentOptions.avecLivraison);
     setDelaiLaquage(String(chantier.delai_sous_traitance_jours || 5));
+    setSousTraitantId(chantier.sous_traitant_id ?? "");
     setAdresseLivraison(chantier.adresse_livraison ?? "");
     setTelephoneLivraison(chantier.telephone_livraison ?? "");
     const liv = snapshot.phases.find((phase) => {
@@ -277,6 +282,7 @@ export function ChantierEditModal({
           : chantier.delai_sous_traitance_jours ?? 5,
         adresse_livraison: avecLivraison ? adresseLivraison.trim() : null,
         telephone_livraison: avecLivraison ? telephoneLivraison.trim() : null,
+        sous_traitant_id: avecThermolaquage ? sousTraitantId || null : null,
       });
       onClose();
     } catch (err) {
@@ -461,23 +467,30 @@ export function ChantierEditModal({
               </label>
             </div>
             {avecThermolaquage ? (
-              <label className="mt-3 block">
-                <span className="mb-1 block font-medium">
-                  Délai de laquage (jours ouvrés)
-                </span>
-                <input
-                  type="number"
-                  min={1}
-                  max={60}
-                  value={delaiLaquage}
-                  onChange={(event) => setDelaiLaquage(event.target.value)}
-                  className="w-full rounded border border-stone-300 bg-white px-3 py-2"
+              <div className="mt-3 space-y-3">
+                <label className="block">
+                  <span className="mb-1 block font-medium">
+                    Délai de laquage (jours ouvrés)
+                  </span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={60}
+                    value={delaiLaquage}
+                    onChange={(event) => setDelaiLaquage(event.target.value)}
+                    className="w-full rounded border border-stone-300 bg-white px-3 py-2"
+                  />
+                </label>
+                <SousTraitantSelect
+                  value={sousTraitantId}
+                  onChange={setSousTraitantId}
+                  rows={snapshot.sousTraitants ?? []}
                 />
-                <p className="mt-1 text-xs text-stone-500">
+                <p className="text-xs text-stone-500">
                   La phase se cale après la fabrication. Si une pose est prévue,
                   elle commence après ce thermolaquage.
                 </p>
-              </label>
+              </div>
             ) : null}
           </fieldset>
           <fieldset className="rounded-lg border border-stone-300 bg-stone-50/60 p-3 text-sm">
@@ -664,7 +677,7 @@ export function ChantierEditModal({
             className="mt-4 w-full rounded-lg bg-amber-800 px-3 py-2 text-sm text-amber-50"
             onClick={() => setBonCommande(true)}
           >
-            Générer un bon de commande
+            Générer / Envoyer le bon de commande
           </button>
         ) : null}
         <div className="mt-5 flex justify-end gap-2">

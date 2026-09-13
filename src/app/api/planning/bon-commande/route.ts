@@ -41,7 +41,7 @@ async function prepare(chantierId: string, sousTraitantId: string) {
   if (!chantier) throw new Error("Chantier introuvable.");
   if (!canGenerateBonCommande(snapshot, chantierId)) {
     throw new Error(
-      "Le bon de commande se génère quand la phase active est la fabrication.",
+      "Le bon de commande s’envoie pour un chantier qui a du thermolaquage / de la galvanisation.",
     );
   }
   const sousTraitants = snapshot.sousTraitants?.length

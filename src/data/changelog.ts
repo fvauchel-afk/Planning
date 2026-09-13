@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-13-bon-commande-thermo",
+    title: "Bon de commande",
+    items: [
+      "Sur un bloc Thermolaquage du planning, vous pouvez générer et envoyer le bon de commande au sous-traitant (aperçu PDF, puis envoi).",
+      "Le sous-traitant se choisit à la création, dans Modifier, ou au moment de l’envoi.",
+    ],
+  },
+  {
     id: "2026-09-13-prochain-creneau-libre",
     title: "Conflit de placement",
     items: [
