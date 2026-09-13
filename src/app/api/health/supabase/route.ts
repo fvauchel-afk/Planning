@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { formatSupabaseErrorDetail } from "@/lib/supabase/errors";
+import { withTransientRetry } from "@/lib/supabase/retry";
 
 export async function GET() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() ?? "";
@@ -50,20 +51,11 @@ export async function GET() {
 
   try {
     const supabase = createSupabaseServerClient();
-    const { error } = await supabase.from("employees").select("id").limit(1);
-    if (error) {
-      const detail = formatSupabaseErrorDetail(error);
-      console.error("[supabase-health] query-failed", {
-        code: error.code,
-        message: error.message,
-        details: error.details,
-        hint: error.hint,
-      });
-      return NextResponse.json(
-        { ok: false, env, query: "employees", error: detail },
-        { status: 500 },
-      );
-    }
+    await withTransientRetry(async () => {
+      const result = await supabase.from("employees").select("id").limit(1);
+      if (result.error) throw result.error;
+      return result;
+    });
     console.info("[supabase-health] ok");
     return NextResponse.json({ ok: true, env, query: "employees" });
   } catch (err) {

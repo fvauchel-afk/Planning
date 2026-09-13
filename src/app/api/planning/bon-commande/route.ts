@@ -25,9 +25,15 @@ import {
   supabaseConfirmPhaseDates,
 } from "@/lib/store/supabase";
 import { formatIsoFr } from "@/lib/dates";
+import {
+  DATABASE_UNAVAILABLE_MESSAGE,
+  isConnectivityError,
+  wrapSupabaseError,
+} from "@/lib/supabase/errors";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 type Body = {
   chantierId?: string;
@@ -182,9 +188,17 @@ export async function POST(request: NextRequest) {
       onedriveWarning,
     });
   } catch (err) {
+    const wrapped = wrapSupabaseError(err);
+    const transient =
+      isConnectivityError(err) ||
+      wrapped.message === DATABASE_UNAVAILABLE_MESSAGE;
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Bon de commande impossible." },
-      { status: 400 },
+      {
+        error: transient
+          ? DATABASE_UNAVAILABLE_MESSAGE
+          : wrapped.message || "Bon de commande impossible.",
+      },
+      { status: transient ? 503 : 400 },
     );
   }
 }
