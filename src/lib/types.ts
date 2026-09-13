@@ -91,6 +91,8 @@ export type Chantier = {
   adresse: string;
   lien_dossier_onedrive: string | null;
   priorite: Priorite;
+  /** Marge ± en jours calendaires (utilisée si priorite = pas_presse). */
+  tolerance_deplacement_jours?: number | null;
   date_creation: string;
   /** Dates approximatives, pas encore confirmées. */
   dates_estimatives?: boolean;
@@ -140,20 +142,33 @@ export type SensSignalement = (typeof SENS_SIGNALEMENT)[number];
 export const ORIGINES_SIGNALEMENT = ["salarie", "decalage_admin"] as const;
 export type OrigineSignalement = (typeof ORIGINES_SIGNALEMENT)[number];
 
+export type PropositionRepercussion = {
+  phase_id: string;
+  type_phase: TypePhase;
+  nom_client: string;
+  nom_salarie: string;
+  old_debut: string;
+  old_fin: string;
+  date_debut: string;
+  date_fin: string;
+};
+
+export type PlanningSolution = {
+  id: string;
+  title: string;
+  message: string;
+  patches: PhasePatch[];
+  repercussions: PropositionRepercussion[];
+  createChantier?: NewChantierInput;
+};
+
 export type SignalementProposition = {
   message: string;
   patches: PhasePatch[];
-  repercussions: {
-    phase_id: string;
-    type_phase: TypePhase;
-    nom_client: string;
-    nom_salarie: string;
-    old_debut: string;
-    old_fin: string;
-    date_debut: string;
-    date_fin: string;
-  }[];
+  repercussions: PropositionRepercussion[];
   createChantier?: NewChantierInput;
+  /** Autres plans proposés (le premier est aussi dans patches / message). */
+  alternatives?: PlanningSolution[];
 };
 
 export type Signalement = {
@@ -271,6 +286,7 @@ export type NewChantierInput = {
   adresse: string;
   lien_dossier_onedrive: string | null;
   priorite: Priorite;
+  tolerance_deplacement_jours?: number | null;
   /** Fenêtre saisie à la création (recopiée sur les phases sans date). */
   date_debut?: string | null;
   date_fin?: string | null;
@@ -291,6 +307,7 @@ export type ChantierUpdateInput = {
   nom_client: string;
   adresse: string;
   priorite: Priorite;
+  tolerance_deplacement_jours?: number | null;
   lien_dossier_onedrive: string | null;
   dates_estimatives?: boolean;
   delai_sous_traitance_jours?: number | null;

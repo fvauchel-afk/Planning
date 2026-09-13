@@ -9,6 +9,7 @@ import { canGenerateBonCommande } from "@/lib/bon-commande/active-phase";
 import { BON_COMMANDE_CC, sendBonCommandeEmail } from "@/lib/bon-commande/mail";
 import { buildBonCommandePdf } from "@/lib/bon-commande/pdf";
 import { applyBonCommandeDelay } from "@/lib/engine/phase-chain";
+import { phaseIdsToConfirmAfterBonCommande } from "@/lib/dates-estimatives";
 import { todayIso } from "@/lib/engine/slots";
 import {
   createClientFolder,
@@ -103,7 +104,7 @@ export async function POST(request: NextRequest) {
   }
   try {
     const prepared = await prepare(body.chantierId, body.sousTraitantId);
-    const { snapshot, chantier, sousTraitant, pdf, dateDocument, sendDate, delay } =
+    const { chantier, sousTraitant, pdf, dateDocument, sendDate, delay } =
       prepared;
     const subject = `Bon de commande — ${chantier.nom_client} — ${sousTraitant.specialite}`;
     const text = [
@@ -170,18 +171,10 @@ export async function POST(request: NextRequest) {
       sousTraitantId: sousTraitant.id,
       sendDate,
     });
-    const logistiqueIds = snapshot.phases
-      .filter((phase) => {
-        const element = snapshot.elements.find((item) => item.id === phase.element_id);
-        return (
-          element?.chantier_id === chantier.id &&
-          phase.type_phase === "logistique" &&
-          Boolean(phase.dates_estimatives)
-        );
-      })
-      .map((phase) => phase.id);
-    if (logistiqueIds.length) {
-      await supabaseConfirmPhaseDates(snapshot, logistiqueIds);
+    const after = await fetchSupabaseSnapshot();
+    const confirmIds = phaseIdsToConfirmAfterBonCommande(after, chantier.id);
+    if (confirmIds.length) {
+      await supabaseConfirmPhaseDates(after, confirmIds);
     }
     invalidateSupabaseSnapshotCache();
     return NextResponse.json({

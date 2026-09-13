@@ -11,6 +11,15 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-13-calage-priorite-solutions",
+    title: "Calage et conflits",
+    items: [
+      "Dès la création, toute la chaîne (fabrication, thermolaquage, livraison, pose) est datée, même si le délai de 5 jours du laquage ne devient officiel qu’à l’envoi du bon de commande. Ces dates portent le badge Estimatif, puis passent en Confirmé quand l’événement a lieu.",
+      "La priorité donne une marge à l’algorithme : Pas pressé (± 1 mois, réglable à la création), Normal (± 2 semaines), Prioritaire (date tenue, les autres bougent d’abord).",
+      "En cas de conflit, plusieurs solutions sont proposées dans Signalements, avec qui bouge, les dates, et un aperçu du planning. Rien n’est appliqué sans validation Mika / Alexis.",
+    ],
+  },
+  {
     id: "2026-09-13-bon-livraison",
     title: "Bon de livraison",
     items: [

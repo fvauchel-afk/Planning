@@ -135,6 +135,10 @@ export function localCreateChantier(
     dates_estimatives: Boolean(input.dates_estimatives),
     adresse_livraison: input.adresse_livraison ?? null,
     telephone_livraison: input.telephone_livraison ?? null,
+    tolerance_deplacement_jours:
+      input.priorite === "pas_presse"
+        ? Math.min(180, Math.max(1, Number(input.tolerance_deplacement_jours) || 30))
+        : null,
   });
   for (const element of input.elements) {
     const elementId = newId();
@@ -377,6 +381,7 @@ export function localValidateSignalement(
   snapshot: PlanningSnapshot,
   id: string,
   patches: PhasePatch[],
+  createChantier?: NewChantierInput | null,
 ): PlanningSnapshot {
   const item = (snapshot.signalements ?? []).find((row) => row.id === id);
   const proposition = item?.proposition;
@@ -385,8 +390,12 @@ export function localValidateSignalement(
   if (toApply.length) {
     next = localApplyPhasePatches(next, toApply);
   }
-  if (proposition?.createChantier) {
-    next = localCreateChantier(next, proposition.createChantier).snapshot;
+  const toCreate =
+    createChantier === undefined
+      ? proposition?.createChantier
+      : createChantier ?? undefined;
+  if (toCreate) {
+    next = localCreateChantier(next, toCreate).snapshot;
   }
   return localSetSignalementStatut(next, id, "valide");
 }
@@ -493,6 +502,12 @@ export function localUpdateChantier(
             input.telephone_livraison !== undefined
               ? input.telephone_livraison
               : chantier.telephone_livraison,
+          tolerance_deplacement_jours:
+            input.tolerance_deplacement_jours !== undefined
+              ? input.tolerance_deplacement_jours
+              : input.priorite === "pas_presse"
+                ? chantier.tolerance_deplacement_jours
+                : null,
         }
       : chantier,
   );

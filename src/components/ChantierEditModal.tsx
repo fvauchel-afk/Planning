@@ -22,6 +22,7 @@ import {
   planChantierOptionEdits,
 } from "@/lib/engine/phase-chain";
 import { compareEmployeesByOrdre } from "@/lib/display-order";
+import { moisToToleranceJours, toleranceJoursToMois } from "@/lib/priorite";
 import { usePlanning } from "@/lib/planning-context";
 import {
   LOGISTIQUE_ROW_ID,
@@ -62,6 +63,9 @@ export function ChantierEditModal({
   const [adresse, setAdresse] = useState(chantier.adresse);
   const [lien, setLien] = useState(chantier.lien_dossier_onedrive ?? "");
   const [priorite, setPriorite] = useState<Priorite>(chantier.priorite);
+  const [toleranceMois, setToleranceMois] = useState(
+    toleranceJoursToMois(chantier.tolerance_deplacement_jours),
+  );
   const [saving, setSaving] = useState(false);
   const [scheduling, setScheduling] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -117,6 +121,7 @@ export function ChantierEditModal({
     setAdresse(chantier.adresse);
     setLien(chantier.lien_dossier_onedrive ?? "");
     setPriorite(chantier.priorite);
+    setToleranceMois(toleranceJoursToMois(chantier.tolerance_deplacement_jours));
     setDatesEstimatives(Boolean(info.estimatif));
     setAvecPose(currentOptions.avecPose);
     setAvecThermolaquage(currentOptions.avecThermolaquage);
@@ -260,6 +265,8 @@ export function ChantierEditModal({
         nom_client: nomClient.trim(),
         adresse: adresse.trim(),
         priorite,
+        tolerance_deplacement_jours:
+          priorite === "pas_presse" ? moisToToleranceJours(toleranceMois) : null,
         lien_dossier_onedrive: lien.trim() || null,
         dates_estimatives: confirmNow ? false : datesEstimatives,
         delai_sous_traitance_jours: avecThermolaquage
@@ -345,6 +352,22 @@ export function ChantierEditModal({
               ))}
             </select>
           </label>
+          {priorite === "pas_presse" ? (
+            <label className="block text-sm">
+              <span className="mb-1 block">Marge de déplacement</span>
+              <select
+                value={toleranceMois}
+                onChange={(event) => setToleranceMois(Number(event.target.value))}
+                className="w-full rounded border border-stone-300 px-3 py-2"
+              >
+                {[1, 2, 3, 4, 5, 6].map((mois) => (
+                  <option key={mois} value={mois}>
+                    ± {mois} mois
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
           <label className="block text-sm">
             <span className="mb-1 block">Lien dossier OneDrive</span>
             <input

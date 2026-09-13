@@ -77,7 +77,7 @@ type MutateBody =
   | { action: "applyPhaseEdits"; edits: PhaseEdits }
   | { action: "createSignalement"; input: NewSignalementInput }
   | { action: "setSignalementStatut"; id: string; statut: StatutSignalement }
-  | { action: "validateSignalement"; id: string; patches: PhasePatch[] }
+  | { action: "validateSignalement"; id: string; patches: PhasePatch[]; createChantier?: NewChantierInput | null }
   | { action: "createReception"; input: NewReceptionInput }
   | { action: "createDemande"; input: NewDemandeInput }
   | { action: "updateDemande"; input: DemandeUpdateInput }
@@ -240,14 +240,18 @@ export async function POST(request: NextRequest) {
       const patches =
         body.patches?.length ? body.patches : proposition?.patches ?? [];
       if (patches.length) await supabaseApplyPhasePatches(patches);
-      if (proposition?.createChantier) {
+      const toCreate =
+        body.createChantier === undefined
+          ? proposition?.createChantier
+          : body.createChantier ?? undefined;
+      if (toCreate) {
         if (hasPendingSignalements({
           ...current,
           signalements: current.signalements.filter((row) => row.id !== body.id),
         })) {
           return NextResponse.json({ error: PENDING_CHANTIER_MESSAGE }, { status: 400 });
         }
-        await supabaseCreateChantier(proposition.createChantier);
+        await supabaseCreateChantier(toCreate);
       }
       await supabaseSetSignalementStatut(body.id, "valide");
     } else if (body.action === "createReception") {

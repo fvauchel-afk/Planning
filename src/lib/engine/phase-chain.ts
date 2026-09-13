@@ -105,8 +105,9 @@ function laterDate(left: string, right: string): string {
 }
 
 /**
- * Cale les phases dans l’ordre Administratif → Fabrication → Thermolaquage → Pose.
- * Chaque phase commence au jour ouvré suivant la fin de la précédente (pas de chevauchement).
+ * Cale toute la chaîne (Administratif → Fabrication → Thermolaquage → Livraison → Pose)
+ * dès la création, même si un délai (ex. 5 j. de laquage) ne sera officiel qu’au bon de commande.
+ * Les phases qui attendent cet événement portent le badge estimatif.
  */
 export function applyPhaseChainOnCreate(
   snapshot: PlanningSnapshot,
@@ -138,20 +139,7 @@ export function applyPhaseChainOnCreate(
           hours <= 0 &&
           !(type === "pose" && pose) &&
           !(type === "livraison" && livraison);
-        const pendingThermo =
-          type === "logistique" &&
-          thermo &&
-          !laquageDebut &&
-          !laquageFin &&
-          !current.date_debut &&
-          !current.date_fin;
-
-        if (pendingThermo) {
-          current.date_debut = null;
-          current.date_fin = null;
-          current.employe_id = null;
-          continue;
-        }
+        const waitingOnBonCommande = Boolean(thermo);
 
         if (skipPose || skipThermo || skipLivraison || skipEmpty) {
           if (skipPose || skipThermo || skipLivraison) {
@@ -202,6 +190,12 @@ export function applyPhaseChainOnCreate(
 
         current.date_debut = start;
         current.date_fin = end < start ? start : end;
+        if (
+          waitingOnBonCommande &&
+          (type === "logistique" || type === "livraison" || type === "pose")
+        ) {
+          current.dates_estimatives = true;
+        }
         prevEnd = current.date_fin;
       }
 
@@ -211,8 +205,8 @@ export function applyPhaseChainOnCreate(
 }
 
 /**
- * Cale thermolaquage / galvanisation sur 5 jours ouvrés à partir de l’envoi du BC,
- * puis la pose juste après.
+ * Recale thermolaquage / galvanisation sur N jours ouvrés à partir de l’envoi du BC,
+ * puis toutes les phases suivantes (livraison, pose). Ces dates deviennent confirmées.
  */
 export function applyBonCommandeDelay(
   snapshot: PlanningSnapshot,
@@ -604,14 +598,17 @@ function runPhaseChainSelfCheck() {
   });
   const log = chained.elements[0]?.phases.find((item) => item.type_phase === "logistique");
   const posePhase = chained.elements[0]?.phases.find((item) => item.type_phase === "pose");
-  if (log?.date_debut || log?.date_fin) {
+  if (log?.date_debut !== "2026-09-15" || log.date_fin !== "2026-09-21") {
     throw new Error(
-      "phase-chain: le thermolaquage attend le bon de commande, pas la création",
+      `phase-chain: thermo provisoire 5 j. après fab, reçu ${log?.date_debut} → ${log?.date_fin}`,
     );
   }
-  if (posePhase?.date_debut !== "2026-09-15") {
+  if (!log?.dates_estimatives || !posePhase?.dates_estimatives) {
+    throw new Error("phase-chain: thermo et pose restent estimatifs avant le BC");
+  }
+  if (posePhase?.date_debut !== "2026-09-22") {
     throw new Error(
-      `phase-chain: pose juste après fab tant que le BC n’est pas envoyé, reçu ${posePhase?.date_debut}`,
+      `phase-chain: pose après le thermo provisoire, reçu ${posePhase?.date_debut}`,
     );
   }
 
@@ -649,19 +646,20 @@ function runPhaseChainSelfCheck() {
       `phase-chain: fabrication après admin, reçu ${fab?.date_debut}`,
     );
   }
-  if (thermo?.date_debut || thermo?.date_fin) {
+  if (thermo?.date_debut !== "2026-09-18" || thermo.date_fin !== "2026-09-24") {
     throw new Error(
-      "phase-chain: thermolaquage sans dates tant que le BC n’est pas envoyé",
+      `phase-chain: thermo provisoire après fab 14 h, reçu ${thermo?.date_debut} → ${thermo?.date_fin}`,
     );
   }
-  if (!pose14?.date_debut || pose14.date_debut <= (fab?.date_fin ?? "")) {
+  if (pose14?.date_debut !== "2026-09-25") {
     throw new Error(
-      `phase-chain: pose après fabrication tant que le BC n’est pas envoyé, reçu ${pose14?.date_debut}`,
+      `phase-chain: pose après le thermo provisoire, reçu ${pose14?.date_debut}`,
     );
   }
   if (
     (admin.date_fin ?? "") >= (fab.date_debut ?? "") ||
-    (fab.date_fin ?? "") >= (pose14.date_debut ?? "")
+    (fab.date_fin ?? "") >= (thermo.date_debut ?? "") ||
+    (thermo.date_fin ?? "") >= (pose14.date_debut ?? "")
   ) {
     throw new Error("phase-chain: les phases ne doivent pas se chevaucher");
   }
@@ -716,10 +714,13 @@ function runPhaseChainSelfCheck() {
   });
   const shortLog = manual.elements[0]?.phases.find((item) => item.type_phase === "logistique");
   const noPose = manual.elements[0]?.phases.find((item) => item.type_phase === "pose");
-  if (shortLog?.date_debut || shortLog?.date_fin) {
+  if (shortLog?.date_debut !== "2026-09-15" || shortLog?.date_fin !== "2026-09-17") {
     throw new Error(
-      "phase-chain: même avec un délai saisi, le laquage attend le bon de commande",
+      `phase-chain: laquage provisoire 3 j. après fab, reçu ${shortLog?.date_debut} → ${shortLog?.date_fin}`,
     );
+  }
+  if (!shortLog?.dates_estimatives) {
+    throw new Error("phase-chain: le laquage provisoire doit rester estimatif jusqu’au BC");
   }
   if (noPose?.date_debut || noPose?.duree_estimee_heures) {
     throw new Error("phase-chain: sans pose, la phase pose doit rester vide");
@@ -744,23 +745,25 @@ function runPhaseChainSelfCheck() {
           id: "log-1",
           element_id: "el-1",
           type_phase: "logistique",
-          duree_estimee_heures: 0,
-          date_debut: null,
-          date_fin: null,
+          duree_estimee_heures: 40,
+          date_debut: "2026-09-15",
+          date_fin: "2026-09-21",
           employe_id: null,
           statut: "a_faire",
           urgent: false,
+          dates_estimatives: true,
         },
         {
           id: "pose-1",
           element_id: "el-1",
           type_phase: "pose",
           duree_estimee_heures: 8,
-          date_debut: "2026-09-15",
-          date_fin: "2026-09-15",
+          date_debut: "2026-09-22",
+          date_fin: "2026-09-22",
           employe_id: "emp-a",
           statut: "a_faire",
           urgent: false,
+          dates_estimatives: true,
         },
       ],
     },
@@ -818,12 +821,23 @@ function runPhaseChainSelfCheck() {
   const poseAfterLiv = withDelivery.elements[0]?.phases.find(
     (item) => item.type_phase === "pose",
   );
-  if (livCreate?.date_debut !== "2026-09-15" || livCreate.duree_estimee_heures !== 2) {
+  const thermoCreate = withDelivery.elements[0]?.phases.find(
+    (item) => item.type_phase === "logistique",
+  );
+  if (thermoCreate?.date_debut !== "2026-09-15" || thermoCreate.date_fin !== "2026-09-21") {
     throw new Error(
-      `phase-chain: livraison 2h après fab (thermo pas encore calé), reçu ${livCreate?.date_debut} / ${livCreate?.duree_estimee_heures}h`,
+      `phase-chain: thermo provisoire 5 j. après fab, reçu ${thermoCreate?.date_debut} → ${thermoCreate?.date_fin}`,
     );
   }
-  if (poseAfterLiv?.date_debut !== "2026-09-16") {
+  if (!thermoCreate?.dates_estimatives || !livCreate?.dates_estimatives || !poseAfterLiv?.dates_estimatives) {
+    throw new Error("phase-chain: thermo / livraison / pose restent estimatifs avant le BC");
+  }
+  if (livCreate?.date_debut !== "2026-09-22" || livCreate.duree_estimee_heures !== 2) {
+    throw new Error(
+      `phase-chain: livraison après le thermo provisoire, reçu ${livCreate?.date_debut} / ${livCreate?.duree_estimee_heures}h`,
+    );
+  }
+  if (poseAfterLiv?.date_debut !== "2026-09-23") {
     throw new Error(
       `phase-chain: pose après livraison, reçu ${poseAfterLiv?.date_debut}`,
     );

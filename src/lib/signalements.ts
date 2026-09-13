@@ -32,6 +32,18 @@ export function parseProposition(raw: unknown): SignalementProposition | null {
     ),
     repercussions: Array.isArray(value.repercussions) ? value.repercussions : [],
     createChantier: value.createChantier,
+    alternatives: Array.isArray(value.alternatives)
+      ? value.alternatives.filter(
+          (item): item is NonNullable<SignalementProposition["alternatives"]>[number] =>
+            Boolean(
+              item &&
+                typeof item === "object" &&
+                Array.isArray(
+                  (item as { patches?: unknown }).patches,
+                ),
+            ),
+        )
+      : undefined,
   };
 }
 

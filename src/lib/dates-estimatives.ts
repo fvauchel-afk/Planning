@@ -72,6 +72,27 @@ export function estimativePhaseIdsForChantier(
     .map((phase) => phase.id);
 }
 
+export function phaseIdsToConfirmAfterBonCommande(
+  snapshot: PlanningSnapshot,
+  chantierId: string,
+): string[] {
+  const elementIds = new Set(
+    snapshot.elements
+      .filter((element) => element.chantier_id === chantierId)
+      .map((element) => element.id),
+  );
+  return snapshot.phases
+    .filter(
+      (phase) =>
+        elementIds.has(phase.element_id) &&
+        (phase.type_phase === "logistique" ||
+          phase.type_phase === "livraison" ||
+          phase.type_phase === "pose") &&
+        Boolean(phase.date_debut),
+    )
+    .map((phase) => phase.id);
+}
+
 export function chantierIdForPhase(
   snapshot: PlanningSnapshot,
   phaseId: string,
