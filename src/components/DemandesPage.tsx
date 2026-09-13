@@ -27,21 +27,51 @@ export function DemandesPage() {
   const { session } = useSession();
   const canMail = Boolean(session?.canReceiveCommandes);
   const [filtre, setFiltre] = useState<"tout" | CategorieDemande>("tout");
+  const [filtreChoisi, setFiltreChoisi] = useState(false);
   const [archives, setArchives] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [mailNote, setMailNote] = useState<string | null>(null);
 
+  const activeFiltre: "tout" | CategorieDemande =
+    !filtreChoisi && canMail ? "commande" : filtre;
+
+  const nouveauCommandes = useMemo(
+    () =>
+      (snapshot.demandes ?? []).filter(
+        (row) =>
+          row.categorie === "commande" &&
+          row.statut !== "traite" &&
+          !row.archivee,
+      ).length,
+    [snapshot.demandes],
+  );
+
+  const categoryTabs = useMemo(() => {
+    if (!canMail) return [...CATEGORIES_DEMANDE];
+    return [
+      "commande" as const,
+      ...CATEGORIES_DEMANDE.filter((id) => id !== "commande"),
+    ];
+  }, [canMail]);
+
   const rows = useMemo(() => {
-    const list = [...(snapshot.demandes ?? [])]
-      .filter((row) => (archives ? row.archivee : !row.archivee))
-      .sort(
-        (left, right) =>
-          Date.parse(right.date_creation) - Date.parse(left.date_creation),
-      );
-    if (filtre === "tout") return list;
-    return list.filter((row) => row.categorie === filtre);
-  }, [snapshot.demandes, filtre, archives]);
+    const list = [...(snapshot.demandes ?? [])].filter((row) =>
+      archives ? row.archivee : !row.archivee,
+    );
+    list.sort((left, right) => {
+      if (canMail && activeFiltre === "tout") {
+        const leftNew =
+          left.categorie === "commande" && left.statut !== "traite" ? 1 : 0;
+        const rightNew =
+          right.categorie === "commande" && right.statut !== "traite" ? 1 : 0;
+        if (leftNew !== rightNew) return rightNew - leftNew;
+      }
+      return Date.parse(right.date_creation) - Date.parse(left.date_creation);
+    });
+    if (activeFiltre === "tout") return list;
+    return list.filter((row) => row.categorie === activeFiltre);
+  }, [snapshot.demandes, activeFiltre, archives, canMail]);
 
   useEffect(() => {
     const ids = (snapshot.demandes ?? [])
@@ -89,8 +119,8 @@ export function DemandesPage() {
             {archives
               ? "Anciennes demandes mises de côté, sans les supprimer."
               : canMail
-                ? "Les commandes (matériel, outillage…) sont à traiter par Alexis et Mika. Un e-mail part aussi sur la boîte f.vauchel. Les autres admins voient la liste complète pour supervision."
-                : "Toutes les demandes, y compris les commandes. Le traitement et les e-mails de commandes sont gérés par Alexis et Mika."}
+                ? "Vue commandes en priorité. Un e-mail part aussi sur f.vauchel. Les autres admins voient toute la liste."
+                : "Liste complète de toutes les demandes, pour supervision."}
           </p>
         </div>
         <button
@@ -104,27 +134,46 @@ export function DemandesPage() {
       <div className="inline-flex flex-wrap rounded-md border border-stone-300 bg-white p-0.5">
         <button
           type="button"
-          onClick={() => setFiltre("tout")}
+          onClick={() => {
+            setFiltreChoisi(true);
+            setFiltre("tout");
+          }}
           className={`rounded px-3 py-1.5 text-sm ${
-            filtre === "tout"
+            activeFiltre === "tout"
               ? "bg-stone-900 text-white"
               : "text-stone-700 hover:bg-stone-100"
           }`}
         >
           Tout
         </button>
-        {CATEGORIES_DEMANDE.map((id) => (
+        {categoryTabs.map((id) => (
           <button
             key={id}
             type="button"
-            onClick={() => setFiltre(id)}
-            className={`rounded px-3 py-1.5 text-sm ${
-              filtre === id
+            onClick={() => {
+              setFiltreChoisi(true);
+              setFiltre(id);
+            }}
+            className={`inline-flex items-center gap-1.5 rounded px-3 py-1.5 text-sm ${
+              activeFiltre === id
                 ? "bg-stone-900 text-white"
                 : "text-stone-700 hover:bg-stone-100"
             }`}
           >
             {CATEGORIE_DEMANDE_LABELS[id]}
+            {id === "commande" && nouveauCommandes > 0 ? (
+              <span
+                className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase ${
+                  activeFiltre === id
+                    ? "bg-amber-400 text-stone-900"
+                    : "bg-amber-200 text-amber-950"
+                }`}
+              >
+                {nouveauCommandes > 1
+                  ? `${nouveauCommandes} nouveau`
+                  : "nouveau"}
+              </span>
+            ) : null}
           </button>
         ))}
       </div>
@@ -179,6 +228,14 @@ export function DemandesPage() {
                   >
                     {STATUT_DEMANDE_LABELS[demande.statut]}
                   </span>
+                  {canMail &&
+                  demande.categorie === "commande" &&
+                  waiting &&
+                  !demande.archivee ? (
+                    <span className="rounded-full bg-amber-200 px-2 py-0.5 text-[11px] font-semibold uppercase text-amber-950">
+                      Nouveau
+                    </span>
+                  ) : null}
                 </div>
                 <p className="mt-2 whitespace-pre-wrap text-sm text-stone-700">
                   {demande.message}

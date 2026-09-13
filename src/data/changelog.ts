@@ -11,11 +11,18 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
-    id: "2026-09-13-commandes-alexis-mika",
+    id: "2026-09-13-commandes-priorite-push",
     title: "Commandes",
     items: [
-      "Les commandes (matériel, outillage…) sont signalées en priorité à Alexis et Mika : pastille sur Demandes, bandeau dans l’application, et notification du navigateur si elle est autorisée. Les autres admins voient toujours la liste complète.",
-      "Un e-mail est envoyé depuis la boîte f.vauchel. Alexis et Mika peuvent aussi envoyer des messages types (reçu, en cours, effectuée).",
+      "Dans Demandes, Alexis et Mika arrivent directement sur les commandes, avec un badge Nouveau. Jonathan et les autres admins gardent la liste complète de toutes les demandes.",
+      "Alexis et Mika peuvent activer une notification même si l’application est fermée (sur iPhone : ajouter Planning à l’écran d’accueil, puis autoriser les notifications).",
+    ],
+  },
+  {
+    id: "2026-09-13-commandes-alexis-mika",
+    title: "Commandes et e-mail",
+    items: [
+      "Les commandes sont signalées à Alexis et Mika : pastille, bandeau, et e-mail depuis la boîte f.vauchel, avec des messages types (reçu, en cours, effectuée).",
     ],
   },
   {

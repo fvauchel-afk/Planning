@@ -45,6 +45,7 @@ import type {
 } from "@/lib/types";
 import { CATEGORIES_DEMANDE, STATUTS_DEMANDE } from "@/lib/types";
 import { canReceiveCommandes } from "@/lib/auth/commande-access";
+import { sendCommandePush } from "@/lib/push/send";
 import {
   COMMANDE_MAIL_TEMPLATES,
   sendCommandeMailboxMessage,
@@ -267,6 +268,10 @@ export async function POST(request: NextRequest) {
         });
         if (mail.warning) {
           console.warn("[commande-mail]", mail.warning);
+        }
+        const push = await sendCommandePush({ auteur, message });
+        if (push.warning) {
+          console.warn("[commande-push]", push.warning);
         }
       }
     } else if (body.action === "updateDemande") {
