@@ -22,14 +22,20 @@ export function BonCommandeModal({
   onClose: () => void;
 }) {
   const { snapshot, refresh } = usePlanning();
-  const [sousTraitantId, setSousTraitantId] = useState("");
-  const [specialite, setSpecialite] = useState("tout");
+  const chantier = snapshot.chantiers.find((item) => item.id === chantierId);
+  const rows = useMemo(() => snapshot.sousTraitants ?? [], [snapshot.sousTraitants]);
+  const [sousTraitantId, setSousTraitantId] = useState(
+    chantier?.sous_traitant_id ?? "",
+  );
+  const [specialite, setSpecialite] = useState(() => {
+    const saved = rows.find((row) => row.id === chantier?.sous_traitant_id);
+    return saved?.specialite || "tout";
+  });
   const [preview, setPreview] = useState<Preview | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
 
-  const rows = useMemo(() => snapshot.sousTraitants ?? [], [snapshot.sousTraitants]);
   const specialites = useMemo(() => {
     return Array.from(new Set(rows.map((row) => row.specialite).filter(Boolean))).sort(
       (a, b) => a.localeCompare(b, "fr"),

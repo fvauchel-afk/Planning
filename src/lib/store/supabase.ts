@@ -330,12 +330,19 @@ export async function supabaseCreateChantier(
     telephone_livraison: input.avec_livraison
       ? input.telephone_livraison ?? null
       : null,
+    sous_traitant_id: input.avec_thermolaquage
+      ? input.sous_traitant_id || null
+      : null,
   };
   let inserted = await supabase
     .from("chantiers")
     .insert(payload)
     .select("id")
     .single();
+  if (inserted.error && isMissingColumnError(inserted.error, "sous_traitant_id")) {
+    const { sous_traitant_id: _ignored, ...withoutSt } = payload;
+    inserted = await supabase.from("chantiers").insert(withoutSt).select("id").single();
+  }
   if (inserted.error && isMissingColumnError(inserted.error, "tolerance_deplacement_jours")) {
     inserted = await supabase
       .from("chantiers")
@@ -496,6 +503,9 @@ export async function supabaseUpdateChantier(
   if (input.telephone_livraison !== undefined) {
     payload.telephone_livraison = input.telephone_livraison;
   }
+  if (input.sous_traitant_id !== undefined) {
+    payload.sous_traitant_id = input.sous_traitant_id;
+  }
   if (input.tolerance_deplacement_jours !== undefined) {
     payload.tolerance_deplacement_jours =
       input.priorite === "pas_presse"
@@ -506,6 +516,15 @@ export async function supabaseUpdateChantier(
     .from("chantiers")
     .update(payload)
     .eq("id", input.id);
+  if (error && isMissingColumnError(error, "sous_traitant_id")) {
+    const withoutSt = { ...payload };
+    delete withoutSt.sous_traitant_id;
+    const retrySt = await supabase
+      .from("chantiers")
+      .update(withoutSt)
+      .eq("id", input.id);
+    error = retrySt.error;
+  }
   if (error && isMissingColumnError(error, "tolerance_deplacement_jours")) {
     const withoutTol = { ...payload };
     delete withoutTol.tolerance_deplacement_jours;

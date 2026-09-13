@@ -289,13 +289,16 @@ export function PhaseFicheModal({
                   {confirming ? "Validation…" : "Je valide le lancement"}
                 </button>
               ) : null}
-              {canGenerateBonCommande(snapshot, chantier.id) ? (
+              {session?.isAdmin &&
+              (phase.type_phase === "logistique" ||
+                phase.type_phase === "fabrication") &&
+              canGenerateBonCommande(snapshot, chantier.id) ? (
                 <button
                   type="button"
                   className="rounded-lg bg-amber-800 px-4 py-2 text-sm text-amber-50"
                   onClick={() => setBonCommande(true)}
                 >
-                  Générer un bon de commande
+                  Générer / Envoyer le bon de commande
                 </button>
               ) : null}
               {phase.type_phase === "livraison" &&

@@ -135,6 +135,9 @@ export function localCreateChantier(
     dates_estimatives: Boolean(input.dates_estimatives),
     adresse_livraison: input.adresse_livraison ?? null,
     telephone_livraison: input.telephone_livraison ?? null,
+    sous_traitant_id: input.avec_thermolaquage
+      ? input.sous_traitant_id || null
+      : null,
     tolerance_deplacement_jours:
       input.priorite === "pas_presse"
         ? Math.min(180, Math.max(1, Number(input.tolerance_deplacement_jours) || 30))
@@ -502,6 +505,10 @@ export function localUpdateChantier(
             input.telephone_livraison !== undefined
               ? input.telephone_livraison
               : chantier.telephone_livraison,
+          sous_traitant_id:
+            input.sous_traitant_id !== undefined
+              ? input.sous_traitant_id
+              : chantier.sous_traitant_id,
           tolerance_deplacement_jours:
             input.tolerance_deplacement_jours !== undefined
               ? input.tolerance_deplacement_jours

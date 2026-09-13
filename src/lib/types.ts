@@ -299,6 +299,7 @@ export type NewChantierInput = {
   delai_laquage_jours?: number | null;
   date_laquage_debut?: string | null;
   date_laquage_fin?: string | null;
+  sous_traitant_id?: string | null;
   elements: NewElementInput[];
 };
 
@@ -313,6 +314,7 @@ export type ChantierUpdateInput = {
   delai_sous_traitance_jours?: number | null;
   adresse_livraison?: string | null;
   telephone_livraison?: string | null;
+  sous_traitant_id?: string | null;
 };
 
 export type ScheduleChantierDayInput = {

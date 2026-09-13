@@ -22,6 +22,7 @@ import { applyPhaseChainOnCreate } from "@/lib/engine/phase-chain";
 import { moisToToleranceJours } from "@/lib/priorite";
 import { employeeCanTakePhase } from "@/lib/chantier-status";
 import { usePlanning } from "@/lib/planning-context";
+import { SousTraitantSelect } from "@/components/SousTraitantSelect";
 import { formatSaveError } from "@/lib/supabase/errors";
 import { useSession } from "@/lib/auth/session-context";
 import {
@@ -91,6 +92,7 @@ export function ChantierForm() {
   const [delaiLaquage, setDelaiLaquage] = useState("5");
   const [dateLaquageDebut, setDateLaquageDebut] = useState("");
   const [dateLaquageFin, setDateLaquageFin] = useState("");
+  const [sousTraitantId, setSousTraitantId] = useState("");
   const [elements, setElements] = useState<ElementForm[]>([
     { key: "el-1", nom_element: "", phases: emptyPhases() },
   ]);
@@ -197,6 +199,7 @@ export function ChantierForm() {
         : null,
       date_laquage_debut: avecThermolaquage ? dateLaquageDebut || null : null,
       date_laquage_fin: avecThermolaquage ? dateLaquageFin || null : null,
+      sous_traitant_id: avecThermolaquage ? sousTraitantId || null : null,
       elements: namedElements.map((element) => ({
         nom_element: element.nom_element.trim(),
         phases: element.phases.map((phase) => ({
@@ -740,6 +743,13 @@ export function ChantierForm() {
                   className="w-full rounded border border-stone-300 bg-white px-3 py-2"
                 />
               </label>
+              <div className="sm:col-span-3">
+                <SousTraitantSelect
+                  value={sousTraitantId}
+                  onChange={setSousTraitantId}
+                  rows={snapshot.sousTraitants ?? []}
+                />
+              </div>
               <p className="text-xs text-stone-500 sm:col-span-3">
                 Sans dates précises, le thermolaquage n’est plus calé à la
                 création. Le délai officiel de 5 jours ouvrés démarre à l’envoi
