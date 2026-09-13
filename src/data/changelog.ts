@@ -11,6 +11,13 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-13-redeploiement",
+    title: "Mise à jour",
+    items: [
+      "Cette version rassemble les dernières améliorations : on ne peut plus déposer un chantier sur une case occupée, les dates peuvent être estimatives, les demandes se traitent et s’archivent, et un nouveau chantier enchaîne fabrication, thermolaquage puis pose.",
+    ],
+  },
+  {
     id: "2026-09-12-pose-thermolaquage",
     title: "Nouveau chantier",
     items: [
