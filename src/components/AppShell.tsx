@@ -40,7 +40,7 @@ export function AppShell({
 }) {
   const router = useRouter();
   const { session, ready } = useSession();
-  const { snapshot } = usePlanning();
+  const { snapshot, saveNotice, clearSaveNotice } = usePlanning();
   const [menuOpen, setMenuOpen] = useState(false);
   const pendingCommandes =
     session?.canReceiveCommandes
@@ -178,6 +178,24 @@ export function AppShell({
       </header>
       <main className="mx-auto max-w-[1600px] px-4 py-6">
         <OnedriveBanner />
+        {saveNotice ? (
+          <div
+            className={`mb-4 flex items-start justify-between gap-3 rounded-lg border px-4 py-3 text-sm ${
+              saveNotice.kind === "error"
+                ? "border-red-200 bg-red-50 text-red-900"
+                : "border-amber-300 bg-amber-50 text-amber-950"
+            }`}
+          >
+            <p>{saveNotice.message}</p>
+            <button
+              type="button"
+              onClick={() => clearSaveNotice()}
+              className="shrink-0 rounded px-2 py-1 text-xs underline"
+            >
+              Fermer
+            </button>
+          </div>
+        ) : null}
         <CommandeAlert />
         {children}
       </main>

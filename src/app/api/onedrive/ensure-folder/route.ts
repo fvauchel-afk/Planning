@@ -17,7 +17,11 @@ export async function POST(request: NextRequest) {
     }
     const tokens = await loadOnedriveTokens();
     if (!tokens?.refresh_token) {
-      return NextResponse.json({ skipped: true, error: "OneDrive n’est pas connecté." });
+      return NextResponse.json({
+        skipped: true,
+        error:
+          "OneDrive n’est pas connecté. Ouvrez l’onglet OneDrive et cliquez sur « Connecter OneDrive ».",
+      });
     }
     const shareUrl = await createClientFolder(body.nomClient.trim());
     try {
@@ -29,6 +33,6 @@ export async function POST(request: NextRequest) {
   } catch (err) {
     const message =
       err instanceof Error ? err.message : "Création du dossier OneDrive impossible.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ skipped: true, error: message });
   }
 }

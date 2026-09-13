@@ -4,6 +4,7 @@ import { useState } from "react";
 import { formatLongDate } from "@/lib/dates";
 import { compareEmployeesByOrdre } from "@/lib/display-order";
 import { usePlanning } from "@/lib/planning-context";
+import { formatSaveError } from "@/lib/supabase/errors";
 import {
   ABSENCE_LABELS,
   TYPES_ABSENCE,
@@ -74,12 +75,16 @@ export function AbsencesPage() {
       date_fin: dateFin,
       motif_precision: type === "autre" ? motifPrecision.trim() : null,
     };
-    if (editingId) {
-      await updateAbsence({ id: editingId, ...payload });
-    } else {
-      await createAbsence(payload);
+    try {
+      if (editingId) {
+        await updateAbsence({ id: editingId, ...payload });
+      } else {
+        await createAbsence(payload);
+      }
+      resetForm();
+    } catch (err) {
+      setError(formatSaveError(err, "l’absence n’a pas été enregistrée"));
     }
-    resetForm();
   }
 
   return (
@@ -137,7 +142,11 @@ export function AbsencesPage() {
                       className="text-red-700"
                       onClick={() => {
                         if (editingId === absence.id) resetForm();
-                        void deleteAbsence(absence.id);
+                        void deleteAbsence(absence.id).catch((err) => {
+                          setError(
+                            formatSaveError(err, "l’absence n’a pas été supprimée"),
+                          );
+                        });
                       }}
                     >
                       Supprimer

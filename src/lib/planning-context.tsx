@@ -41,7 +41,7 @@ import {
 } from "@/lib/store/local";
 import { fetchPlanningSnapshot, planningMutate } from "@/lib/planning/api";
 import { shouldUseSharedDatabase } from "@/lib/supabase/client";
-import { DATABASE_UNAVAILABLE_MESSAGE } from "@/lib/supabase/errors";
+import { DATABASE_UNAVAILABLE_MESSAGE, formatSaveError } from "@/lib/supabase/errors";
 import type {
   NewAbsenceInput,
   AbsenceUpdateInput,
@@ -60,10 +60,14 @@ import type {
   StatutSignalement,
 } from "@/lib/types";
 
+type SaveNotice = { kind: "error" | "warning"; message: string };
+
 type PlanningContextValue = {
   snapshot: PlanningSnapshot;
   loading: boolean;
   error: string | null;
+  saveNotice: SaveNotice | null;
+  clearSaveNotice: () => void;
   usingSupabase: boolean;
   databaseUnavailable: boolean;
   refresh: () => Promise<void>;
@@ -100,18 +104,18 @@ type PlanningContextValue = {
   sendDemandeMail: (id: string, templateId: string) => Promise<void>;
   confirmPhaseDates: (ids: string[]) => Promise<void>;
   saveHoraires: (rows: HoraireSaison[]) => Promise<void>;
+  ensureChantierOnedriveFolder: (chantierId: string) => Promise<void>;
 };
 
 async function attachOnedriveFolder(
-  input: NewChantierInput,
+  input: { nom_client: string; lien_dossier_onedrive?: string | null },
   chantierId: string,
-): Promise<string | null> {
-  if (input.lien_dossier_onedrive?.trim()) return null;
-  const result = await requestEnsureOnedriveFolder({
+): Promise<{ shareUrl?: string; error?: string; skipped?: boolean }> {
+  if (input.lien_dossier_onedrive?.trim()) return { skipped: true };
+  return requestEnsureOnedriveFolder({
     chantierId,
     nomClient: input.nom_client,
   });
-  return result.shareUrl ?? null;
 }
 
 async function uploadReceptionPng(input: NewReceptionInput, snap: PlanningSnapshot) {
@@ -162,6 +166,7 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
   );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [saveNotice, setSaveNotice] = useState<SaveNotice | null>(null);
   const [liveSupabase, setLiveSupabase] = useState(false);
   const liveSupabaseRef = useRef(false);
   liveSupabaseRef.current = liveSupabase;
@@ -172,7 +177,7 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
     }
   }, [useShared]);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (options?: { throwOnError?: boolean }) => {
     try {
       if (!useShared) {
         setLiveSupabase(false);
@@ -195,8 +200,10 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
     } catch (err) {
       console.error("[planning] refresh", err);
       setLiveSupabase(false);
-      setSnapshot(createEmptySnapshot());
-      setError(DATABASE_UNAVAILABLE_MESSAGE);
+      setError(
+        err instanceof Error ? err.message : DATABASE_UNAVAILABLE_MESSAGE,
+      );
+      if (options?.throwOnError) throw err;
     } finally {
       setLoading(false);
     }
@@ -206,17 +213,62 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
     void refresh();
   }, [refresh]);
 
+  const clearSaveNotice = useCallback(() => setSaveNotice(null), []);
+
+  const mutate = useCallback(async <T,>(body: Record<string, unknown>) => {
+    try {
+      setSaveNotice(null);
+      return await planningMutate<T>(body);
+    } catch (err) {
+      setSaveNotice({ kind: "error", message: formatSaveError(err) });
+      throw err;
+    }
+  }, []);
+
+  const queueOnedriveFolder = useCallback(
+    (input: { nom_client: string; lien_dossier_onedrive?: string | null }, chantierId: string) => {
+      void attachOnedriveFolder(input, chantierId)
+        .then(async (result) => {
+          if (result.shareUrl) {
+            if (!useShared) {
+              setSnapshot((current) =>
+                localSetChantierOnedriveLink(current, chantierId, result.shareUrl!),
+              );
+            } else {
+              await refresh();
+            }
+            return;
+          }
+          if (result.error) {
+            setSaveNotice({
+              kind: "warning",
+              message: `Le chantier est enregistré. Dossier OneDrive non créé : ${result.error}`,
+            });
+          }
+        })
+        .catch((err) => {
+          setSaveNotice({
+            kind: "warning",
+            message: `Le chantier est enregistré. Dossier OneDrive non créé : ${
+              err instanceof Error ? err.message : "erreur inconnue"
+            }`,
+          });
+        });
+    },
+    [useShared, refresh],
+  );
+
   const createChantier = useCallback(
     async (input: NewChantierInput) => {
       assertWritable();
       if (useShared) {
-        const created = await planningMutate<{ chantierId?: string }>({
+        const created = await mutate<{ chantierId?: string }>({
           action: "createChantier",
           input,
         });
         const chantierId = created.chantierId ?? "";
-        if (chantierId) await attachOnedriveFolder(input, chantierId);
-        await refresh();
+        await refresh({ throwOnError: true });
+        if (chantierId) queueOnedriveFolder(input, chantierId);
         return;
       }
       let chantierId = "";
@@ -225,66 +277,61 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
         chantierId = created.chantierId;
         return created.snapshot;
       });
-      const shareUrl = await attachOnedriveFolder(input, chantierId);
-      if (shareUrl) {
-        setSnapshot((current) =>
-          localSetChantierOnedriveLink(current, chantierId, shareUrl),
-        );
-      }
+      if (chantierId) queueOnedriveFolder(input, chantierId);
     },
-    [useShared, refresh, assertWritable],
+    [useShared, refresh, assertWritable, mutate, queueOnedriveFolder],
   );
 
   const updateChantier = useCallback(
     async (input: ChantierUpdateInput) => {
       assertWritable();
       if (useShared) {
-        await planningMutate({ action: "updateChantier", input });
-        await refresh();
+        await mutate({ action: "updateChantier", input });
+        await refresh({ throwOnError: true });
         return;
       }
       setSnapshot((current) => localUpdateChantier(current, input));
     },
-    [useShared, refresh, assertWritable],
+    [useShared, refresh, assertWritable, mutate],
   );
 
   const deleteChantier = useCallback(
     async (chantierId: string) => {
       assertWritable();
       if (useShared) {
-        await planningMutate({ action: "deleteChantier", chantierId });
-        await refresh();
+        await mutate({ action: "deleteChantier", chantierId });
+        await refresh({ throwOnError: true });
         return;
       }
       setSnapshot((current) => localDeleteChantier(current, chantierId));
     },
-    [useShared, refresh, assertWritable],
+    [useShared, refresh, assertWritable, mutate],
   );
 
   const scheduleChantierDay = useCallback(
     async (input: ScheduleChantierDayInput) => {
       assertWritable();
       if (useShared) {
-        await planningMutate({ action: "scheduleChantierDay", input });
-        await refresh();
+        await mutate({ action: "scheduleChantierDay", input });
+        await refresh({ throwOnError: true });
         return;
       }
       setSnapshot((current) => localScheduleChantierDay(current, input));
     },
-    [useShared, refresh, assertWritable],
+    [useShared, refresh, assertWritable, mutate],
   );
 
   const upsertEmployee = useCallback(
     async (input: NewEmployeeInput & { id?: string }) => {
       assertWritable();
       if (useShared) {
-        await planningMutate({ action: "upsertEmployee", input });
-        await refresh();
+        await mutate({ action: "upsertEmployee", input });
+        await refresh({ throwOnError: true });
         return;
       }
       setSnapshot((current) => localUpsertEmployee(current, input));
     },
-    [useShared, refresh, assertWritable],
+    [useShared, refresh, assertWritable, mutate],
   );
 
   const reorderEmployees = useCallback(
@@ -303,8 +350,8 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
           }),
         }));
         try {
-          await planningMutate({ action: "reorderEmployees", rows });
-          await refresh();
+          await mutate({ action: "reorderEmployees", rows });
+          await refresh({ throwOnError: true });
         } catch (err) {
           await refresh();
           throw err;
@@ -313,46 +360,46 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
       }
       setSnapshot((current) => localReorderEmployees(current, rows));
     },
-    [useShared, refresh, assertWritable],
+    [useShared, refresh, assertWritable, mutate],
   );
 
   const createAbsence = useCallback(
     async (input: NewAbsenceInput) => {
       assertWritable();
       if (useShared) {
-        await planningMutate({ action: "createAbsence", input });
-        await refresh();
+        await mutate({ action: "createAbsence", input });
+        await refresh({ throwOnError: true });
         return;
       }
       setSnapshot((current) => localCreateAbsence(current, input));
     },
-    [useShared, refresh, assertWritable],
+    [useShared, refresh, assertWritable, mutate],
   );
 
   const updateAbsence = useCallback(
     async (input: AbsenceUpdateInput) => {
       assertWritable();
       if (useShared) {
-        await planningMutate({ action: "updateAbsence", input });
-        await refresh();
+        await mutate({ action: "updateAbsence", input });
+        await refresh({ throwOnError: true });
         return;
       }
       setSnapshot((current) => localUpdateAbsence(current, input));
     },
-    [useShared, refresh, assertWritable],
+    [useShared, refresh, assertWritable, mutate],
   );
 
   const deleteAbsence = useCallback(
     async (id: string) => {
       assertWritable();
       if (useShared) {
-        await planningMutate({ action: "deleteAbsence", id });
-        await refresh();
+        await mutate({ action: "deleteAbsence", id });
+        await refresh({ throwOnError: true });
         return;
       }
       setSnapshot((current) => localDeleteAbsence(current, id));
     },
-    [useShared, refresh, assertWritable],
+    [useShared, refresh, assertWritable, mutate],
   );
 
   const applyPhaseEdits = useCallback(
@@ -366,13 +413,13 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
         return;
       }
       if (useShared) {
-        await planningMutate({ action: "applyPhaseEdits", edits });
-        await refresh();
+        await mutate({ action: "applyPhaseEdits", edits });
+        await refresh({ throwOnError: true });
         return;
       }
       setSnapshot((current) => localApplyPhaseEdits(current, edits));
     },
-    [useShared, refresh, assertWritable],
+    [useShared, refresh, assertWritable, mutate],
   );
 
   const applyPhasePatches = useCallback(
@@ -386,14 +433,14 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
     async (input: NewChantierInput, patches: PhasePatch[]) => {
       assertWritable();
       if (useShared) {
-        const created = await planningMutate<{ chantierId?: string }>(
+        const created = await mutate<{ chantierId?: string }>(
           patches.length > 0
             ? { action: "createChantierWithPatches", input, patches }
             : { action: "createChantier", input },
         );
         const chantierId = created.chantierId ?? "";
-        if (chantierId) await attachOnedriveFolder(input, chantierId);
-        await refresh();
+        await refresh({ throwOnError: true });
+        if (chantierId) queueOnedriveFolder(input, chantierId);
         return;
       }
       let chantierId = "";
@@ -404,40 +451,35 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
         chantierId = created.chantierId;
         return created.snapshot;
       });
-      const shareUrl = await attachOnedriveFolder(input, chantierId);
-      if (shareUrl) {
-        setSnapshot((current) =>
-          localSetChantierOnedriveLink(current, chantierId, shareUrl),
-        );
-      }
+      if (chantierId) queueOnedriveFolder(input, chantierId);
     },
-    [useShared, refresh, assertWritable],
+    [useShared, refresh, assertWritable, mutate, queueOnedriveFolder],
   );
 
   const createSignalement = useCallback(
     async (input: NewSignalementInput) => {
       assertWritable();
       if (useShared) {
-        await planningMutate({ action: "createSignalement", input });
-        await refresh();
+        await mutate({ action: "createSignalement", input });
+        await refresh({ throwOnError: true });
         return;
       }
       setSnapshot((current) => localCreateSignalement(current, input));
     },
-    [useShared, refresh, assertWritable],
+    [useShared, refresh, assertWritable, mutate],
   );
 
   const setSignalementStatut = useCallback(
     async (id: string, statut: StatutSignalement) => {
       assertWritable();
       if (useShared) {
-        await planningMutate({ action: "setSignalementStatut", id, statut });
-        await refresh();
+        await mutate({ action: "setSignalementStatut", id, statut });
+        await refresh({ throwOnError: true });
         return;
       }
       setSnapshot((current) => localSetSignalementStatut(current, id, statut));
     },
-    [useShared, refresh, assertWritable],
+    [useShared, refresh, assertWritable, mutate],
   );
 
   const validateSignalement = useCallback(
@@ -448,20 +490,20 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
     ) => {
       assertWritable();
       if (useShared) {
-        await planningMutate({
+        await mutate({
           action: "validateSignalement",
           id,
           patches,
           createChantier,
         });
-        await refresh();
+        await refresh({ throwOnError: true });
         return;
       }
       setSnapshot((current) =>
         localValidateSignalement(current, id, patches, createChantier),
       );
     },
-    [useShared, refresh, assertWritable],
+    [useShared, refresh, assertWritable, mutate],
   );
 
   const createReception = useCallback(
@@ -469,8 +511,8 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
       assertWritable();
       const snapForUpload = snapshot;
       if (useShared) {
-        await planningMutate({ action: "createReception", input });
-        await refresh();
+        await mutate({ action: "createReception", input });
+        await refresh({ throwOnError: true });
       } else {
         setSnapshot((current) => localCreateReception(current, input));
       }
@@ -492,10 +534,10 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
           );
         }
       } else if (useShared) {
-        await refresh();
+        await refresh({ throwOnError: true });
       }
     },
-    [useShared, refresh, snapshot, assertWritable],
+    [useShared, refresh, snapshot, assertWritable, mutate],
   );
 
   const createDemande = useCallback(
@@ -506,11 +548,11 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
         throw new Error("Écrivez un message avant d’envoyer.");
       }
       if (useShared) {
-        await planningMutate({
+        await mutate({
           action: "createDemande",
           input: { ...input, message },
         });
-        await refresh();
+        await refresh({ throwOnError: true });
         return;
       }
       const employeId = input.employe_id;
@@ -525,34 +567,34 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
         }),
       );
     },
-    [useShared, refresh, assertWritable],
+    [useShared, refresh, assertWritable, mutate],
   );
 
   const updateDemande = useCallback(
     async (input: DemandeUpdateInput) => {
       assertWritable();
       if (useShared) {
-        await planningMutate({ action: "updateDemande", input });
-        await refresh();
+        await mutate({ action: "updateDemande", input });
+        await refresh({ throwOnError: true });
         return;
       }
       setSnapshot((current) => localUpdateDemande(current, input));
     },
-    [useShared, refresh, assertWritable],
+    [useShared, refresh, assertWritable, mutate],
   );
 
   const sendDemandeMail = useCallback(
     async (id: string, templateId: string) => {
       assertWritable();
       if (useShared) {
-        await planningMutate({ action: "sendDemandeMail", id, templateId });
+        await mutate({ action: "sendDemandeMail", id, templateId });
         return;
       }
       throw new Error(
         "L’envoi d’e-mail n’est disponible qu’avec la base et OneDrive connectés.",
       );
     },
-    [useShared, assertWritable],
+    [useShared, assertWritable, mutate],
   );
 
   const confirmPhaseDates = useCallback(
@@ -560,26 +602,58 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
       assertWritable();
       if (!ids.length) return;
       if (useShared) {
-        await planningMutate({ action: "confirmPhaseDates", ids });
-        await refresh();
+        await mutate({ action: "confirmPhaseDates", ids });
+        await refresh({ throwOnError: true });
         return;
       }
       setSnapshot((current) => localConfirmPhaseDates(current, ids));
     },
-    [useShared, refresh, assertWritable],
+    [useShared, refresh, assertWritable, mutate],
   );
 
   const saveHoraires = useCallback(
     async (rows: HoraireSaison[]) => {
       assertWritable();
       if (useShared) {
-        await planningMutate({ action: "saveHoraires", rows });
-        await refresh();
+        await mutate({ action: "saveHoraires", rows });
+        await refresh({ throwOnError: true });
         return;
       }
       setSnapshot((current) => localReplaceHoraires(current, rows));
     },
-    [useShared, refresh, assertWritable],
+    [useShared, refresh, assertWritable, mutate],
+  );
+
+  const ensureChantierOnedriveFolder = useCallback(
+    async (chantierId: string) => {
+      const chantier = snapshot.chantiers.find((row) => row.id === chantierId);
+      if (!chantier) {
+        throw new Error("Chantier introuvable.");
+      }
+      if (chantier.lien_dossier_onedrive?.trim()) return;
+      const result = await attachOnedriveFolder(
+        { nom_client: chantier.nom_client },
+        chantierId,
+      );
+      if (result.shareUrl) {
+        if (!useShared) {
+          setSnapshot((current) =>
+            localSetChantierOnedriveLink(current, chantierId, result.shareUrl!),
+          );
+        } else {
+          await refresh();
+        }
+        return;
+      }
+      const message =
+        result.error || "Création du dossier OneDrive impossible.";
+      setSaveNotice({
+        kind: "warning",
+        message: `Dossier OneDrive non créé : ${message}`,
+      });
+      throw new Error(message);
+    },
+    [snapshot.chantiers, useShared, refresh],
   );
 
   const value = useMemo(
@@ -587,6 +661,8 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
       snapshot,
       loading,
       error,
+      saveNotice,
+      clearSaveNotice,
       usingSupabase: liveSupabase,
       databaseUnavailable: useShared && !loading && !liveSupabase,
       refresh,
@@ -611,11 +687,14 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
       sendDemandeMail,
       confirmPhaseDates,
       saveHoraires,
+      ensureChantierOnedriveFolder,
     }),
     [
       snapshot,
       loading,
       error,
+      saveNotice,
+      clearSaveNotice,
       liveSupabase,
       useShared,
       refresh,
@@ -640,6 +719,7 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
       sendDemandeMail,
       confirmPhaseDates,
       saveHoraires,
+      ensureChantierOnedriveFolder,
     ],
   );
 
