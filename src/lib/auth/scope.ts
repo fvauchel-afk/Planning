@@ -1,14 +1,23 @@
 import type { SessionUser } from "@/lib/auth/session";
+import { canReceiveCommandes } from "@/lib/auth/commande-access";
 import { idsEqual } from "@/lib/auth/ids";
 import type { PlanningSnapshot } from "@/lib/types";
 
-type SessionLike = Pick<SessionUser, "employeeId" | "isAdmin">;
+type SessionLike = Pick<SessionUser, "employeeId" | "isAdmin" | "nom">;
 
 export function filterSnapshotForSession(
   snapshot: PlanningSnapshot,
   session: SessionLike,
 ): PlanningSnapshot {
-  if (session.isAdmin) return snapshot;
+  if (session.isAdmin) {
+    if (canReceiveCommandes(session.nom)) return snapshot;
+    return {
+      ...snapshot,
+      demandes: (snapshot.demandes ?? []).filter(
+        (row) => row.categorie !== "commande",
+      ),
+    };
+  }
   const employeeId = session.employeeId;
   const self = snapshot.employees.find((employee) =>
     idsEqual(employee.id, employeeId),

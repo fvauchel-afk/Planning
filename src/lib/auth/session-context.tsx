@@ -7,6 +7,7 @@ export type ClientSession = {
   nom: string;
   isAdmin: boolean;
   canRestore?: boolean;
+  canReceiveCommandes?: boolean;
 };
 
 type SessionContextValue = {

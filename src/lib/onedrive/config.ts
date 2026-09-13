@@ -54,4 +54,5 @@ export const ONEDRIVE_SCOPES = [
   "offline_access",
   "Files.ReadWrite.All",
   "User.Read",
+  "Mail.Send",
 ].join(" ");

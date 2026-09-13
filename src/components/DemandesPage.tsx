@@ -1,7 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { usePlanning } from "@/lib/planning-context";
+import { useSession } from "@/lib/auth/session-context";
+import { markCommandesSeen } from "@/components/CommandeAlert";
+import { COMMANDE_MAIL_TEMPLATE_CHOICES } from "@/lib/mail/commande-templates";
 import {
   CATEGORIES_DEMANDE,
   CATEGORIE_DEMANDE_LABELS,
@@ -20,11 +23,14 @@ function formatDemandeWhen(iso: string) {
 }
 
 export function DemandesPage() {
-  const { snapshot, loading, updateDemande } = usePlanning();
+  const { snapshot, loading, updateDemande, sendDemandeMail } = usePlanning();
+  const { session } = useSession();
+  const canMail = Boolean(session?.canReceiveCommandes);
   const [filtre, setFiltre] = useState<"tout" | CategorieDemande>("tout");
   const [archives, setArchives] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [mailNote, setMailNote] = useState<string | null>(null);
 
   const rows = useMemo(() => {
     const list = [...(snapshot.demandes ?? [])]
@@ -36,6 +42,27 @@ export function DemandesPage() {
     if (filtre === "tout") return list;
     return list.filter((row) => row.categorie === filtre);
   }, [snapshot.demandes, filtre, archives]);
+
+  useEffect(() => {
+    const ids = (snapshot.demandes ?? [])
+      .filter((row) => row.categorie === "commande")
+      .map((row) => row.id);
+    if (ids.length) markCommandesSeen(ids);
+  }, [snapshot.demandes]);
+
+  async function sendMail(demande: Demande, templateId: string) {
+    setBusyId(demande.id);
+    setError(null);
+    setMailNote(null);
+    try {
+      await sendDemandeMail(demande.id, templateId);
+      setMailNote("Message envoyé depuis la boîte f.vauchel.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "E-mail impossible.");
+    } finally {
+      setBusyId(null);
+    }
+  }
 
   async function patch(demande: Demande, input: Parameters<typeof updateDemande>[0]) {
     setBusyId(demande.id);
@@ -61,7 +88,9 @@ export function DemandesPage() {
           <p className="mt-1 text-sm text-stone-600">
             {archives
               ? "Anciennes demandes mises de côté, sans les supprimer."
-              : "Messages envoyés par l’équipe depuis la bulle : commandes (matériel, outillage…) et suggestions pour le site. Les demandes traitées restent ici jusqu’à archivage."}
+              : canMail
+                ? "Les commandes (matériel, outillage…) arrivent ici pour Alexis et Mika. Un e-mail est aussi envoyé sur la boîte f.vauchel. Les suggestions restent visibles par tous les admins."
+                : "Suggestions de l’équipe. Les commandes matériel sont réservées à Alexis et Mika."}
           </p>
         </div>
         <button
@@ -84,7 +113,9 @@ export function DemandesPage() {
         >
           Tout
         </button>
-        {CATEGORIES_DEMANDE.map((id) => (
+        {CATEGORIES_DEMANDE.filter(
+          (id) => canMail || id !== "commande",
+        ).map((id) => (
           <button
             key={id}
             type="button"
@@ -102,6 +133,11 @@ export function DemandesPage() {
       {error ? (
         <p className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
           {error}
+        </p>
+      ) : null}
+      {mailNote ? (
+        <p className="rounded border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+          {mailNote}
         </p>
       ) : null}
       {loading ? (
@@ -194,6 +230,19 @@ export function DemandesPage() {
                       Archiver
                     </button>
                   )}
+                  {canMail && demande.categorie === "commande"
+                    ? COMMANDE_MAIL_TEMPLATE_CHOICES.map((template) => (
+                        <button
+                          key={template.id}
+                          type="button"
+                          disabled={busy}
+                          onClick={() => void sendMail(demande, template.id)}
+                          className="rounded border border-amber-300 bg-amber-50 px-3 py-1.5 text-sm text-amber-950 disabled:opacity-60"
+                        >
+                          {template.label}
+                        </button>
+                      ))
+                    : null}
                 </div>
               </li>
             );

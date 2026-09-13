@@ -36,7 +36,9 @@ export function OnedriveAdminPage() {
       <h2 className="font-serif text-3xl text-stone-900">OneDrive</h2>
       <p className="text-sm text-stone-600">
         Connexion au compte Microsoft personnel de l’atelier (f.vauchel@hotmail.com).
-        Les jetons restent côté serveur, jamais dans le navigateur.
+        Les jetons restent côté serveur, jamais dans le navigateur. Ce même compte
+        envoie les e-mails de commandes : reconnectez-le une fois pour accepter
+        l’autorisation « envoyer un e-mail ».
       </p>
 
       {status === null ? (
