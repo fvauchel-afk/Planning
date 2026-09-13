@@ -1,5 +1,7 @@
+import { employeeCanTakePhase } from "@/lib/chantier-status";
 import { addDays, addWorkingDays, isSunday, isoWeekday, workingDaysBetween } from "@/lib/dates";
-import { employeeWorksOnDate, hoursForSlot } from "@/lib/engine/hours";
+import { compareEmployeesByOrdre } from "@/lib/display-order";
+import { employeeAvailableOnRange, employeeWorksOnDate, hoursForSlot } from "@/lib/engine/hours";
 import {
   SEARCH_DAYS,
   buildOccupancy,
@@ -8,13 +10,14 @@ import {
   isEmployeeAbsent,
   todayIso,
 } from "@/lib/engine/slots";
-import type {
-  NewChantierInput,
-  NewElementInput,
-  PhaseInsert,
-  PhasePatch,
-  PlanningSnapshot,
-  TypePhase,
+import {
+  PHASE_LABELS,
+  type NewChantierInput,
+  type NewElementInput,
+  type PhaseInsert,
+  type PhasePatch,
+  type PlanningSnapshot,
+  type TypePhase,
 } from "@/lib/types";
 
 export const DEFAULT_LAQUAGE_WORKING_DAYS = 5;
@@ -100,6 +103,74 @@ function phaseOf(phases: PhaseInput[], type: PhaseInput["type_phase"]): PhaseInp
   return phases.find((phase) => phase.type_phase === type);
 }
 
+const ASSIGN_REQUIRED: TypePhase[] = ["fabrication", "pose", "livraison"];
+
+export function pickEmployeeForPhase(
+  snapshot: PlanningSnapshot,
+  type: TypePhase,
+  debut: string | null,
+  fin: string | null,
+  preferredId?: string | null,
+): string | null {
+  if (type === "logistique") return null;
+  const preferred = snapshot.employees.find((item) => item.id === preferredId);
+  if (
+    preferred &&
+    employeeCanTakePhase(preferred, type) &&
+    employeeAvailableOnRange(snapshot, preferred, debut, fin)
+  ) {
+    return preferred.id;
+  }
+  const available = snapshot.employees
+    .filter(
+      (employee) =>
+        employeeCanTakePhase(employee, type) &&
+        employeeAvailableOnRange(snapshot, employee, debut, fin),
+    )
+    .sort(compareEmployeesByOrdre);
+  if (available[0]) return available[0].id;
+  if (preferred && employeeCanTakePhase(preferred, type)) return preferred.id;
+  const withRole = snapshot.employees
+    .filter((employee) => employeeCanTakePhase(employee, type))
+    .sort(compareEmployeesByOrdre);
+  return withRole[0]?.id ?? null;
+}
+
+export function missingRequiredAssignee(
+  input: NewChantierInput,
+): string | null {
+  for (const element of input.elements) {
+    for (const phase of element.phases) {
+      if (!ASSIGN_REQUIRED.includes(phase.type_phase)) continue;
+      if (!phase.date_debut) continue;
+      if (phase.type_phase === "pose" && !input.avec_pose) continue;
+      if (phase.type_phase === "livraison" && !input.avec_livraison) continue;
+      if (phase.employe_id) continue;
+      return `Aucun salarié n’a pu être assigné à ${PHASE_LABELS[phase.type_phase]} (${element.nom_element}). Donnez le rôle ${PHASE_LABELS[phase.type_phase]} à quelqu’un dans Employés, ou choisissez une personne dans le formulaire.`;
+    }
+  }
+  return null;
+}
+
+export function missingGridAssignee(
+  snapshot: PlanningSnapshot,
+  chantierId: string,
+): string | null {
+  const elementIds = new Set(
+    snapshot.elements
+      .filter((element) => element.chantier_id === chantierId)
+      .map((element) => element.id),
+  );
+  for (const phase of snapshot.phases) {
+    if (!elementIds.has(phase.element_id)) continue;
+    if (!ASSIGN_REQUIRED.includes(phase.type_phase)) continue;
+    if (!phase.date_debut) continue;
+    if (phase.employe_id) continue;
+    return `Aucun salarié n’a pu être assigné à ${PHASE_LABELS[phase.type_phase]}. Choisissez un salarié dans Modifier le chantier, ou donnez ce rôle à quelqu’un dans Employés.`;
+  }
+  return null;
+}
+
 function laterDate(left: string, right: string): string {
   return left >= right ? left : right;
 }
@@ -134,9 +205,17 @@ export function applyPhaseChainOnCreate(
         const skipThermo = type === "logistique" && !thermo;
         const skipLivraison = type === "livraison" && !livraison;
         const hours = Number(current.duree_estimee_heures) || 0;
+        if (type === "fabrication" && hours <= 0) {
+          current.duree_estimee_heures = 8;
+        }
+        if (type === "pose" && pose && hours <= 0) {
+          current.duree_estimee_heures = 8;
+        }
+        const plannedHours = Number(current.duree_estimee_heures) || 0;
         const skipEmpty =
           type !== "logistique" &&
-          hours <= 0 &&
+          type !== "fabrication" &&
+          plannedHours <= 0 &&
           !(type === "pose" && pose) &&
           !(type === "livraison" && livraison);
         const waitingOnBonCommande = Boolean(thermo);
@@ -169,9 +248,9 @@ export function applyPhaseChainOnCreate(
           type === "logistique"
             ? delayDays
             : workingDaysFromHours(
-                type === "livraison" && hours <= 0 ? 2 : hours,
+                type === "livraison" && plannedHours <= 0 ? 2 : plannedHours,
               );
-        if (type === "livraison" && hours <= 0) {
+        if (type === "livraison" && plannedHours <= 0) {
           current.duree_estimee_heures = 2;
         }
         let end = rangeEnd(start, workingDays);
@@ -190,6 +269,15 @@ export function applyPhaseChainOnCreate(
 
         current.date_debut = start;
         current.date_fin = end < start ? start : end;
+        if (type !== "logistique") {
+          current.employe_id = pickEmployeeForPhase(
+            snapshot,
+            type,
+            current.date_debut,
+            current.date_fin,
+            current.employe_id,
+          );
+        }
         if (
           waitingOnBonCommande &&
           (type === "logistique" || type === "livraison" || type === "pose")
@@ -347,6 +435,146 @@ function lastDatedEnd(
   return end;
 }
 
+type OptionEditOptions = {
+  avecPose: boolean;
+  avecThermolaquage: boolean;
+  avecLivraison?: boolean;
+  dureeLivraisonHeures?: number | null;
+  employeLivraisonId?: string | null;
+  employeFabricationId?: string | null;
+  employePoseId?: string | null;
+  delayDays?: number | null;
+  datesEstimatives?: boolean;
+};
+
+function mergePhasePatch(
+  patches: PhasePatch[],
+  phase: {
+    id: string;
+    date_debut: string | null;
+    date_fin: string | null;
+    employe_id: string | null;
+    heure_debut?: string | null;
+    duree_estimee_heures: number;
+  },
+  extra: Partial<PhasePatch>,
+) {
+  const index = patches.findIndex((item) => item.id === phase.id);
+  const current =
+    index >= 0
+      ? patches[index]!
+      : {
+          id: phase.id,
+          date_debut: phase.date_debut,
+          date_fin: phase.date_fin,
+          employe_id: phase.employe_id,
+          heure_debut: phase.heure_debut ?? null,
+          duree_estimee_heures: phase.duree_estimee_heures,
+        };
+  const next = { ...current, ...extra };
+  if (index >= 0) patches[index] = next;
+  else patches.push(next);
+}
+
+function applyAssigneeEdits(
+  snapshot: PlanningSnapshot,
+  chantierId: string,
+  options: OptionEditOptions,
+  wantLivraison: boolean,
+  patches: PhasePatch[],
+  inserts: PhaseInsert[],
+  deleteIds: string[],
+) {
+  const deleted = new Set(deleteIds);
+  const elements = snapshot.elements.filter(
+    (element) => element.chantier_id === chantierId,
+  );
+
+  for (const element of elements) {
+    const siblings = snapshot.phases.filter(
+      (phase) => phase.element_id === element.id && !deleted.has(phase.id),
+    );
+    let earliest: string | null = null;
+    for (const phase of siblings) {
+      const patched = patches.find((item) => item.id === phase.id);
+      const start = patched?.date_debut ?? phase.date_debut;
+      if (start && (!earliest || start < earliest)) earliest = start;
+    }
+    for (const insert of inserts) {
+      if (insert.element_id !== element.id || !insert.date_debut) continue;
+      if (!earliest || insert.date_debut < earliest) earliest = insert.date_debut;
+    }
+    const fallbackStart = earliest
+      ? firstWorkingOnOrAfter(earliest)
+      : earliestAvailableWorkDate(snapshot);
+
+    const assignExisting = (
+      type: "fabrication" | "pose" | "livraison",
+      preferred: string | null | undefined,
+      dateIfMissing: boolean,
+    ) => {
+      const phase = siblings.find((item) => item.type_phase === type);
+      if (!phase) return;
+      const patched = patches.find((item) => item.id === phase.id);
+      let debut = patched?.date_debut ?? phase.date_debut;
+      let fin = patched?.date_fin ?? phase.date_fin ?? debut;
+      let hours = patched?.duree_estimee_heures ?? phase.duree_estimee_heures;
+      const extra: Partial<PhasePatch> = {};
+      if (!debut && dateIfMissing) {
+        debut = fallbackStart;
+        fin = fallbackStart;
+        hours = Math.max(8, Number(hours) || 0);
+        extra.date_debut = debut;
+        extra.date_fin = fin;
+        extra.duree_estimee_heures = hours;
+        extra.heure_debut = phase.heure_debut ?? "07:30";
+      }
+      if (!debut) return;
+      const currentId = patched?.employe_id ?? phase.employe_id;
+      const employeId = pickEmployeeForPhase(
+        snapshot,
+        type,
+        debut,
+        fin || debut,
+        preferred ?? currentId,
+      );
+      if (
+        extra.date_debut ||
+        (employeId && employeId !== currentId) ||
+        (preferred && preferred !== currentId)
+      ) {
+        extra.employe_id = employeId ?? preferred ?? currentId;
+        mergePhasePatch(patches, { ...phase, ...patched }, extra);
+      }
+    };
+
+    assignExisting("fabrication", options.employeFabricationId, true);
+    if (options.avecPose) {
+      assignExisting("pose", options.employePoseId, true);
+    }
+    if (wantLivraison) {
+      assignExisting("livraison", options.employeLivraisonId, false);
+    }
+  }
+
+  for (const insert of inserts) {
+    if (!ASSIGN_REQUIRED.includes(insert.type_phase)) continue;
+    const preferred =
+      insert.type_phase === "fabrication"
+        ? options.employeFabricationId
+        : insert.type_phase === "pose"
+          ? options.employePoseId
+          : options.employeLivraisonId;
+    insert.employe_id = pickEmployeeForPhase(
+      snapshot,
+      insert.type_phase,
+      insert.date_debut,
+      insert.date_fin,
+      preferred ?? insert.employe_id,
+    );
+  }
+}
+
 /**
  * Ajoute ou retire Thermolaquage / Pose sur un chantier déjà créé.
  * Non → Oui cale la nouvelle phase après la précédente (fab, puis thermo, puis pose).
@@ -360,6 +588,8 @@ export function planChantierOptionEdits(
     avecLivraison?: boolean;
     dureeLivraisonHeures?: number | null;
     employeLivraisonId?: string | null;
+    employeFabricationId?: string | null;
+    employePoseId?: string | null;
     delayDays?: number | null;
     datesEstimatives?: boolean;
   },
@@ -373,13 +603,10 @@ export function planChantierOptionEdits(
   );
   const wantLivraison = Boolean(options.avecLivraison);
   const current = chantierPhaseOptions(snapshot, chantierId);
-  if (
-    current.avecPose === options.avecPose &&
-    current.avecThermolaquage === options.avecThermolaquage &&
-    current.avecLivraison === wantLivraison
-  ) {
-    return { patches: [], inserts: [], deleteIds: [] };
-  }
+  const flagsChanged =
+    current.avecPose !== options.avecPose ||
+    current.avecThermolaquage !== options.avecThermolaquage ||
+    current.avecLivraison !== wantLivraison;
 
   const patches: PhasePatch[] = [];
   const inserts: PhaseInsert[] = [];
@@ -387,6 +614,19 @@ export function planChantierOptionEdits(
   const elements = snapshot.elements.filter(
     (element) => element.chantier_id === chantierId,
   );
+
+  if (!flagsChanged) {
+    applyAssigneeEdits(
+      snapshot,
+      chantierId,
+      options,
+      wantLivraison,
+      patches,
+      inserts,
+      deleteIds,
+    );
+    return { patches, inserts, deleteIds };
+  }
 
   for (const element of elements) {
     const siblings = snapshot.phases.filter(
@@ -471,8 +711,13 @@ export function planChantierOptionEdits(
         workingDaysFromHours(livHours),
       );
       livraisonEnd = range.end;
-      const employeId =
-        options.employeLivraisonId || liv?.employe_id || fab?.employe_id || null;
+      const employeId = pickEmployeeForPhase(
+        snapshot,
+        "livraison",
+        range.start,
+        range.end,
+        options.employeLivraisonId || liv?.employe_id || fab?.employe_id,
+      );
       if (liv && !deleteIds.includes(liv.id)) {
         patches.push({
           id: liv.id,
@@ -524,7 +769,13 @@ export function planChantierOptionEdits(
             id: pose.id,
             date_debut: range.start,
             date_fin: range.end,
-            employe_id: pose.employe_id,
+            employe_id: pickEmployeeForPhase(
+              snapshot,
+              "pose",
+              range.start,
+              range.end,
+              options.employePoseId || pose.employe_id || fab?.employe_id,
+            ),
             heure_debut: pose.heure_debut ?? null,
             duree_estimee_heures: poseHours,
           });
@@ -537,7 +788,13 @@ export function planChantierOptionEdits(
           date_debut: range.start,
           date_fin: range.end,
           heure_debut: "07:30",
-          employe_id: fab?.employe_id ?? null,
+          employe_id: pickEmployeeForPhase(
+            snapshot,
+            "pose",
+            range.start,
+            range.end,
+            options.employePoseId || fab?.employe_id,
+          ),
           statut: "a_faire",
           urgent: Boolean(fab?.urgent),
           heures_supplementaires_par_jour: 0,
@@ -547,6 +804,15 @@ export function planChantierOptionEdits(
     }
   }
 
+  applyAssigneeEdits(
+    snapshot,
+    chantierId,
+    options,
+    wantLivraison,
+    patches,
+    inserts,
+    deleteIds,
+  );
   return { patches, inserts, deleteIds };
 }
 
@@ -949,6 +1215,97 @@ function runPhaseChainSelfCheck() {
     throw new Error(
       `phase-chain: pose après la livraison ajoutée, reçu ${poseAfterNewLiv?.date_debut}`,
     );
+  }
+  if (poseAfterNewLiv?.employe_id !== "emp-a" || addedPose?.employe_id !== "emp-a") {
+    throw new Error("phase-chain: la pose ajoutée doit recevoir un salarié");
+  }
+
+  const zeroHours = applyPhaseChainOnCreate(snapshot, {
+    nom_client: "Zero fab",
+    adresse: "",
+    lien_dossier_onedrive: null,
+    priorite: "normal",
+    date_debut: "2026-09-14",
+    date_fin: "2026-09-22",
+    avec_pose: true,
+    avec_thermolaquage: true,
+    avec_livraison: true,
+    elements: [
+      {
+        nom_element: "Portail",
+        phases: [
+          { ...basePhase, type_phase: "administratif", duree_estimee_heures: 0 },
+          { ...basePhase, type_phase: "fabrication", duree_estimee_heures: 0 },
+          { ...basePhase, type_phase: "logistique", duree_estimee_heures: 0 },
+          {
+            ...basePhase,
+            type_phase: "livraison",
+            duree_estimee_heures: 2,
+            employe_id: "emp-a",
+          },
+          { ...basePhase, type_phase: "pose", duree_estimee_heures: 0 },
+        ],
+      },
+    ],
+  });
+  const zFab = zeroHours.elements[0]?.phases.find(
+    (item) => item.type_phase === "fabrication",
+  );
+  const zPose = zeroHours.elements[0]?.phases.find(
+    (item) => item.type_phase === "pose",
+  );
+  if (!zFab?.date_debut || zFab.duree_estimee_heures !== 8 || zFab.employe_id !== "emp-a") {
+    throw new Error(
+      `phase-chain: fab 0 h doit être datée et assignée, reçu ${zFab?.date_debut} / ${zFab?.duree_estimee_heures}h / ${zFab?.employe_id}`,
+    );
+  }
+  if (!zPose?.date_debut || zPose.employe_id !== "emp-a") {
+    throw new Error(
+      `phase-chain: pose 0 h doit être assignée, reçu ${zPose?.date_debut} / ${zPose?.employe_id}`,
+    );
+  }
+  if (missingRequiredAssignee(zeroHours)) {
+    throw new Error(missingRequiredAssignee(zeroHours) ?? "phase-chain");
+  }
+
+  const unassignedFab: PlanningSnapshot = {
+    ...editBase,
+    phases: editBase.phases.map((phase) => ({ ...phase, employe_id: null })),
+  };
+  const repaired = planChantierOptionEdits(unassignedFab, "ch-edit", {
+    avecPose: false,
+    avecThermolaquage: false,
+  });
+  const fabFix = repaired.patches.find((item) => item.id === "fab-edit");
+  if (fabFix?.employe_id !== "emp-a") {
+    throw new Error(
+      `phase-chain: fabrication existante sans salarié doit être réparée, reçu ${fabFix?.employe_id}`,
+    );
+  }
+
+  const nobody = applyPhaseChainOnCreate(
+    { ...snapshot, employees: [] },
+    {
+      nom_client: "Sans équipe",
+      adresse: "",
+      lien_dossier_onedrive: null,
+      priorite: "normal",
+      date_debut: "2026-09-14",
+      avec_pose: true,
+      avec_thermolaquage: false,
+      elements: [
+        {
+          nom_element: "Portail",
+          phases: [
+            { ...basePhase, type_phase: "fabrication", duree_estimee_heures: 8 },
+            { ...basePhase, type_phase: "pose", duree_estimee_heures: 8 },
+          ],
+        },
+      ],
+    },
+  );
+  if (!missingRequiredAssignee(nobody)) {
+    throw new Error("phase-chain: sans salarié, un message d’erreur est attendu");
   }
 }
 

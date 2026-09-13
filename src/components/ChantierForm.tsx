@@ -18,7 +18,7 @@ import {
   inputHasExplicitDates,
 } from "@/lib/engine/earliest-date";
 import { generatePlanSolutions, propositionFromSolutions } from "@/lib/engine/plan-solutions";
-import { applyPhaseChainOnCreate } from "@/lib/engine/phase-chain";
+import { applyPhaseChainOnCreate, missingRequiredAssignee } from "@/lib/engine/phase-chain";
 import { moisToToleranceJours } from "@/lib/priorite";
 import { employeeCanTakePhase } from "@/lib/chantier-status";
 import { usePlanning } from "@/lib/planning-context";
@@ -89,6 +89,8 @@ export function ChantierForm() {
   const [telephoneLivraison, setTelephoneLivraison] = useState("");
   const [dureeLivraison, setDureeLivraison] = useState("2");
   const [employeLivraison, setEmployeLivraison] = useState("");
+  const [employeFabrication, setEmployeFabrication] = useState("");
+  const [employePose, setEmployePose] = useState("");
   const [delaiLaquage, setDelaiLaquage] = useState("5");
   const [dateLaquageDebut, setDateLaquageDebut] = useState("");
   const [dateLaquageFin, setDateLaquageFin] = useState("");
@@ -215,7 +217,11 @@ export function ChantierForm() {
               ? null
               : phase.type_phase === "livraison" && avecLivraison
                 ? employeLivraison
-                : phase.employe_id || null,
+                : phase.type_phase === "fabrication" && employeFabrication
+                  ? employeFabrication
+                  : phase.type_phase === "pose" && avecPose && employePose
+                    ? employePose
+                    : phase.employe_id || null,
           urgent: urgent || phase.urgent,
           heures_supplementaires_par_jour:
             phase.heures_supplementaires_par_jour || 0,
@@ -245,6 +251,11 @@ export function ChantierForm() {
       return;
     }
     setSlotConflict(null);
+    const missing = missingRequiredAssignee(input);
+    if (missing) {
+      setError(missing);
+      return;
+    }
     setSaving(true);
     try {
       await createChantier(input);
@@ -682,6 +693,53 @@ export function ChantierForm() {
               Non
             </label>
           </div>
+          {avecPose ? (
+            <label className="mt-3 block">
+              <span className="mb-1 block font-medium">
+                Salarié responsable de la pose
+              </span>
+              <select
+                value={employePose}
+                onChange={(event) => setEmployePose(event.target.value)}
+                className="w-full rounded border border-stone-300 bg-white px-3 py-2"
+              >
+                <option value="">Auto (premier disponible)</option>
+                {employeesByRole
+                  .filter((employee) => employeeCanTakePhase(employee, "pose"))
+                  .map((employee) => (
+                    <option key={employee.id} value={employee.id}>
+                      {employee.nom}
+                    </option>
+                  ))}
+              </select>
+            </label>
+          ) : null}
+        </fieldset>
+        <fieldset className="rounded-lg border border-stone-300 bg-stone-50/60 p-3 text-sm md:col-span-2">
+          <legend className="px-1 font-medium text-stone-800">
+            Fabrication
+          </legend>
+          <label className="mt-1 block">
+            <span className="mb-1 block font-medium">
+              Salarié responsable de la fabrication
+            </span>
+            <select
+              value={employeFabrication}
+              onChange={(event) => setEmployeFabrication(event.target.value)}
+              className="w-full rounded border border-stone-300 bg-white px-3 py-2"
+            >
+              <option value="">Auto (premier disponible)</option>
+              {employeesByRole
+                .filter((employee) =>
+                  employeeCanTakePhase(employee, "fabrication"),
+                )
+                .map((employee) => (
+                  <option key={employee.id} value={employee.id}>
+                    {employee.nom}
+                  </option>
+                ))}
+            </select>
+          </label>
         </fieldset>
         <fieldset className="rounded-lg border border-stone-300 bg-stone-50/60 p-3 text-sm md:col-span-2">
           <legend className="px-1 font-medium text-stone-800">
