@@ -64,7 +64,6 @@ export function loadLocalSnapshot(): PlanningSnapshot {
             phase.heures_supplementaires_par_jour ?? 0,
           heure_debut: phase.heure_debut ?? null,
         })),
-        parsed.elements ?? [],
       ),
       employees: (parsed.employees ?? []).map((employee) => ({
         ...employee,
@@ -141,7 +140,11 @@ export function localCreateChantier(
             urgent: false,
             heures_supplementaires_par_jour: 0,
           }));
+    const uniqueByType = new Map<(typeof phases)[number]["type_phase"], (typeof phases)[number]>();
     for (const phase of phases) {
+      uniqueByType.set(phase.type_phase, phase);
+    }
+    for (const phase of Array.from(uniqueByType.values())) {
       next.phases.push({
         id: newId(),
         element_id: elementId,

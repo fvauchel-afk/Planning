@@ -1,4 +1,4 @@
-import { addDays, addWorkingDays, isSunday, isoWeekday } from "@/lib/dates";
+import { addDays, isSunday, isoWeekday } from "@/lib/dates";
 import {
   employeeWorksOnDate,
   hoursForSlot,
@@ -52,63 +52,23 @@ export function earliestAvailableWorkDate(
   return fromDate;
 }
 
-function stampMissingPhaseDates(
-  input: NewChantierInput,
-  start: string,
-  end: string,
-): NewChantierInput {
-  return {
-    ...input,
-    elements: input.elements.map((element) => ({
-      ...element,
-      phases: element.phases.map((phase) => ({
-        ...phase,
-        date_debut: phase.date_debut || start,
-        date_fin: phase.date_fin || phase.date_debut || end,
-      })),
-    })),
-  };
-}
-
-function totalPhaseHours(input: NewChantierInput): number {
-  return input.elements.reduce(
-    (sum, element) =>
-      sum +
-      element.phases.reduce(
-        (phaseSum, phase) => phaseSum + (Number(phase.duree_estimee_heures) || 0),
-        0,
-      ),
-    0,
-  );
-}
-
 export function ensureChantierDatesOnCreate(
   snapshot: PlanningSnapshot,
   input: NewChantierInput,
 ): NewChantierInput {
-  const windowStart = input.date_debut || null;
-  const windowEnd = input.date_fin || windowStart;
   const explicit = inputHasExplicitDates(input);
   const datesEstimatives = explicit
     ? Boolean(input.dates_estimatives ?? true)
     : true;
-
-  if (windowStart) {
-    return {
-      ...stampMissingPhaseDates(input, windowStart, windowEnd || windowStart),
-      dates_estimatives: datesEstimatives,
-    };
+  if (input.date_debut) {
+    return { ...input, dates_estimatives: datesEstimatives };
   }
   if (explicit) {
     return { ...input, dates_estimatives: datesEstimatives };
   }
-
-  const start = earliestAvailableWorkDate(snapshot);
-  const hours = totalPhaseHours(input);
-  const extraDays = hours > 0 ? Math.max(0, Math.ceil(hours / 8) - 1) : 0;
-  const end = extraDays > 0 ? addWorkingDays(start, extraDays) : start;
   return {
-    ...stampMissingPhaseDates(input, start, end),
+    ...input,
+    date_debut: earliestAvailableWorkDate(snapshot),
     dates_estimatives: true,
   };
 }
@@ -178,10 +138,13 @@ function runEarliestDateSelfCheck() {
     ],
   });
   const phase = created.elements[0]?.phases[0];
-  if (!phase?.date_debut || created.dates_estimatives !== true) {
-    throw new Error("earliest-date: sans date saisie, caler au plus tôt en estimatif");
+  if (!created.date_debut || created.dates_estimatives !== true) {
+    throw new Error("earliest-date: sans date saisie, caler le début du chantier au plus tôt");
   }
-  if (phase.employe_id) {
+  if (phase?.date_debut) {
+    throw new Error("earliest-date: ne pas recopier la date sur toutes les phases en parallèle");
+  }
+  if (phase?.employe_id) {
     throw new Error("earliest-date: le calage auto ne doit pas assigner de salarié");
   }
   const kept = ensureChantierDatesOnCreate(snapshot, {
@@ -208,7 +171,7 @@ function runEarliestDateSelfCheck() {
       },
     ],
   });
-  if (kept.elements[0]?.phases[0]?.date_debut !== "2026-10-01") {
+  if (kept.date_debut !== "2026-10-01") {
     throw new Error("earliest-date: une date saisie ne doit pas être écrasée");
   }
   if (kept.dates_estimatives !== true) {

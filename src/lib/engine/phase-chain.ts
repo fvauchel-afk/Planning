@@ -8,9 +8,16 @@ import {
   isEmployeeAbsent,
   todayIso,
 } from "@/lib/engine/slots";
-import type { NewChantierInput, NewElementInput, PlanningSnapshot } from "@/lib/types";
+import type { NewChantierInput, NewElementInput, PlanningSnapshot, TypePhase } from "@/lib/types";
 
 export const DEFAULT_LAQUAGE_WORKING_DAYS = 5;
+
+const PHASE_ORDER: TypePhase[] = [
+  "administratif",
+  "fabrication",
+  "logistique",
+  "pose",
+];
 
 export function earliestAvailableWorkDate(
   snapshot: PlanningSnapshot,
@@ -59,6 +66,12 @@ function rangeEnd(start: string, workingDays: number): string {
   return addWorkingDays(start, workingDays - 1);
 }
 
+function workingDaysFromHours(hours: number): number {
+  const value = Number(hours) || 0;
+  if (value <= 0) return 1;
+  return Math.max(1, Math.ceil(value / 8));
+}
+
 function inclusiveWorkingDays(start: string, end: string): number {
   if (end <= start) return 1;
   return 1 + workingDaysBetween(start, end);
@@ -70,6 +83,14 @@ function phaseOf(phases: PhaseInput[], type: PhaseInput["type_phase"]): PhaseInp
   return phases.find((phase) => phase.type_phase === type);
 }
 
+function laterDate(left: string, right: string): string {
+  return left >= right ? left : right;
+}
+
+/**
+ * Cale les phases dans l’ordre Administratif → Fabrication → Thermolaquage → Pose.
+ * Chaque phase commence au jour ouvré suivant la fin de la précédente (pas de chevauchement).
+ */
 export function applyPhaseChainOnCreate(
   snapshot: PlanningSnapshot,
   input: NewChantierInput,
@@ -79,59 +100,68 @@ export function applyPhaseChainOnCreate(
   const delayDays = clampDelay(input.delai_laquage_jours);
   const laquageDebut = input.date_laquage_debut || null;
   const laquageFin = input.date_laquage_fin || null;
+  const chainStart =
+    input.date_debut || earliestAvailableWorkDate(snapshot);
 
   return {
     ...input,
     elements: input.elements.map((element) => {
       const phases = element.phases.map((phase) => ({ ...phase }));
-      const fab = phaseOf(phases, "fabrication");
-      const log = phaseOf(phases, "logistique");
-      const posePhase = phaseOf(phases, "pose");
+      let prevEnd: string | null = null;
 
-      if (log) {
-        if (!thermo) {
-          log.date_debut = null;
-          log.date_fin = null;
-          log.duree_estimee_heures = 0;
-          log.employe_id = null;
-        } else {
-          const start =
-            log.date_debut ||
-            laquageDebut ||
-            (fab?.date_fin || fab?.date_debut
-              ? nextWorkingDayAfter((fab.date_fin || fab.date_debut) as string)
-              : earliestAvailableWorkDate(snapshot));
-          const end =
-            log.date_fin ||
-            laquageFin ||
-            rangeEnd(start, delayDays);
-          log.date_debut = start;
-          log.date_fin = end < start ? start : end;
-          log.employe_id = null;
-          if (!log.duree_estimee_heures) {
-            log.duree_estimee_heures = inclusiveWorkingDays(log.date_debut, log.date_fin) * 8;
+      for (const type of PHASE_ORDER) {
+        const current = phaseOf(phases, type);
+        if (!current) continue;
+
+        const skipPose = type === "pose" && !pose;
+        const skipThermo = type === "logistique" && !thermo;
+        const hours = Number(current.duree_estimee_heures) || 0;
+        const skipEmpty =
+          type !== "logistique" && hours <= 0 && !(type === "pose" && pose);
+
+        if (skipPose || skipThermo || skipEmpty) {
+          if (skipPose || skipThermo) {
+            current.date_debut = null;
+            current.date_fin = null;
+            if (skipThermo || skipPose) {
+              current.duree_estimee_heures = 0;
+            }
+            if (skipThermo) current.employe_id = null;
           }
+          continue;
         }
-      }
 
-      if (posePhase) {
-        if (!pose) {
-          posePhase.date_debut = null;
-          posePhase.date_fin = null;
-          posePhase.duree_estimee_heures = 0;
-        } else if (!posePhase.date_debut) {
-          const after = thermo
-            ? log?.date_fin || log?.date_debut
-            : fab?.date_fin || fab?.date_debut;
-          const rawStart = after
-            ? nextWorkingDayAfter(after)
-            : earliestAvailableWorkDate(snapshot);
-          const start = earliestAvailableWorkDate(snapshot, rawStart);
-          const hours = Number(posePhase.duree_estimee_heures) || 0;
-          const extra = hours > 0 ? Math.max(0, Math.ceil(hours / 8) - 1) : 0;
-          posePhase.date_debut = start;
-          posePhase.date_fin = extra > 0 ? addWorkingDays(start, extra) : start;
+        const minStart: string = prevEnd
+          ? nextWorkingDayAfter(prevEnd)
+          : chainStart;
+
+        let start = minStart;
+        if (type === "logistique") {
+          const requested = current.date_debut || laquageDebut;
+          if (requested) start = laterDate(minStart, requested);
+        } else if (current.date_debut) {
+          start = laterDate(minStart, current.date_debut);
         }
+
+        const workingDays =
+          type === "logistique" ? delayDays : workingDaysFromHours(hours);
+        let end = rangeEnd(start, workingDays);
+        if (type === "logistique") {
+          if (laquageFin && laquageFin >= start) {
+            end = laterDate(end, laquageFin);
+          }
+          current.employe_id = null;
+          if (!hours) {
+            current.duree_estimee_heures =
+              inclusiveWorkingDays(start, end) * 8;
+          }
+        } else if (current.date_fin && current.date_fin >= start) {
+          end = laterDate(end, current.date_fin);
+        }
+
+        current.date_debut = start;
+        current.date_fin = end < start ? start : end;
+        prevEnd = current.date_fin;
       }
 
       return { ...element, phases };
@@ -165,6 +195,7 @@ function runPhaseChainSelfCheck() {
     adresse: "",
     lien_dossier_onedrive: null,
     priorite: "normal",
+    date_debut: "2026-09-14",
     avec_pose: true,
     avec_thermolaquage: true,
     elements: [
@@ -185,17 +216,70 @@ function runPhaseChainSelfCheck() {
     ],
   });
   const log = chained.elements[0]?.phases.find((item) => item.type_phase === "logistique");
-  const pose = chained.elements[0]?.phases.find((item) => item.type_phase === "pose");
+  const posePhase = chained.elements[0]?.phases.find((item) => item.type_phase === "pose");
   if (log?.date_debut !== "2026-09-15" || log.date_fin !== "2026-09-21") {
     throw new Error(
       `phase-chain: laquage 5 j. après fab du 14 doit aller du 15 au 21, reçu ${log?.date_debut} → ${log?.date_fin}`,
     );
   }
-  if (pose?.date_debut !== "2026-09-22") {
+  if (posePhase?.date_debut !== "2026-09-22") {
     throw new Error(
-      `phase-chain: pose juste après laquage, reçu ${pose?.date_debut}`,
+      `phase-chain: pose juste après laquage, reçu ${posePhase?.date_debut}`,
     );
   }
+
+  const parallel = applyPhaseChainOnCreate(snapshot, {
+    nom_client: "Dossier 1",
+    adresse: "",
+    lien_dossier_onedrive: null,
+    priorite: "normal",
+    date_debut: "2026-09-14",
+    avec_pose: true,
+    avec_thermolaquage: true,
+    elements: [
+      {
+        nom_element: "Travaux",
+        phases: [
+          { ...basePhase, type_phase: "administratif", duree_estimee_heures: 14 },
+          { ...basePhase, type_phase: "fabrication", duree_estimee_heures: 14 },
+          { ...basePhase, type_phase: "logistique", duree_estimee_heures: 0 },
+          { ...basePhase, type_phase: "pose", duree_estimee_heures: 14 },
+        ],
+      },
+    ],
+  });
+  const admin = parallel.elements[0]?.phases.find((item) => item.type_phase === "administratif");
+  const fab = parallel.elements[0]?.phases.find((item) => item.type_phase === "fabrication");
+  const thermo = parallel.elements[0]?.phases.find((item) => item.type_phase === "logistique");
+  const pose14 = parallel.elements[0]?.phases.find((item) => item.type_phase === "pose");
+  if (admin?.date_debut !== "2026-09-14" || admin.date_fin !== "2026-09-15") {
+    throw new Error(
+      `phase-chain: 14 h admin dès le 14 doit finir le 15, reçu ${admin?.date_debut} → ${admin?.date_fin}`,
+    );
+  }
+  if (fab?.date_debut !== "2026-09-16") {
+    throw new Error(
+      `phase-chain: fabrication après admin, reçu ${fab?.date_debut}`,
+    );
+  }
+  if (thermo?.date_debut !== "2026-09-18") {
+    throw new Error(
+      `phase-chain: thermolaquage après fabrication, reçu ${thermo?.date_debut}`,
+    );
+  }
+  if (!pose14?.date_debut || pose14.date_debut <= (thermo?.date_fin ?? "")) {
+    throw new Error(
+      `phase-chain: pose après thermolaquage, reçu ${pose14?.date_debut} (thermo fin ${thermo?.date_fin})`,
+    );
+  }
+  if (
+    (admin.date_fin ?? "") >= (fab.date_debut ?? "") ||
+    (fab.date_fin ?? "") >= (thermo.date_debut ?? "") ||
+    (thermo.date_fin ?? "") >= (pose14.date_debut ?? "")
+  ) {
+    throw new Error("phase-chain: les phases ne doivent pas se chevaucher");
+  }
+
   const noThermo = applyPhaseChainOnCreate(snapshot, {
     ...chained,
     avec_thermolaquage: false,
@@ -203,8 +287,8 @@ function runPhaseChainSelfCheck() {
     elements: chained.elements.map((element) => ({
       ...element,
       phases: element.phases.map((phase) =>
-        phase.type_phase === "pose"
-          ? { ...phase, date_debut: null, date_fin: null }
+        phase.type_phase === "pose" || phase.type_phase === "logistique"
+          ? { ...phase, date_debut: null, date_fin: null, duree_estimee_heures: phase.type_phase === "pose" ? 8 : 0 }
           : phase,
       ),
     })),
@@ -224,6 +308,7 @@ function runPhaseChainSelfCheck() {
     adresse: "",
     lien_dossier_onedrive: null,
     priorite: "normal",
+    date_debut: "2026-09-14",
     avec_pose: false,
     avec_thermolaquage: true,
     delai_laquage_jours: 3,

@@ -1,21 +1,9 @@
-import type { ElementChantier, PhasePlanning } from "@/lib/types";
+import type { PhasePlanning } from "@/lib/types";
 
 /** Aligne les phases héritées (import SQL, champs manquants) sur le modèle actuel. */
 export function normalizePhasesForPlanning(
   phases: PhasePlanning[],
-  elements: ElementChantier[],
 ): PhasePlanning[] {
-  const chantierByElement = new Map(
-    elements.map((element) => [element.id, element.chantier_id]),
-  );
-  const employeeByChantier = new Map<string, string>();
-  for (const phase of phases) {
-    if (!phase.employe_id) continue;
-    const chantierId = chantierByElement.get(phase.element_id);
-    if (!chantierId || employeeByChantier.has(chantierId)) continue;
-    employeeByChantier.set(chantierId, phase.employe_id);
-  }
-
   return phases.map((phase) => {
     const dateDebut = phase.date_debut?.slice(0, 10) || null;
     let dateFin = phase.date_fin?.slice(0, 10) || null;
@@ -31,23 +19,13 @@ export function normalizePhasesForPlanning(
     if (dateDebut && duree <= 0) {
       duree = heure && heure >= "12:00" ? 3 : 4;
     }
-    let employeId = phase.employe_id;
-    const chantierId = chantierByElement.get(phase.element_id);
-    if (
-      dateDebut &&
-      phase.type_phase !== "logistique" &&
-      !employeId &&
-      chantierId
-    ) {
-      employeId = employeeByChantier.get(chantierId) ?? null;
-    }
     return {
       ...phase,
       date_debut: dateDebut,
       date_fin: dateFin,
       heure_debut: heure,
       duree_estimee_heures: duree,
-      employe_id: employeId,
+      employe_id: phase.employe_id,
     };
   });
 }

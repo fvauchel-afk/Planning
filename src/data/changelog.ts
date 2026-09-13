@@ -11,6 +11,15 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-13-phases-sequentielles-demandes",
+    title: "Planning et demandes",
+    items: [
+      "Un nouveau chantier enchaîne bien Administratif, puis Fabrication, puis Thermolaquage, puis Pose : chaque étape commence seulement après la fin de la précédente.",
+      "Un même chantier n’apparaît plus en double sur une case du planning.",
+      "Dans les demandes, vous pouvez aussi envoyer une suggestion d’amélioration pour l’entreprise (organisation, matériel, atelier…), en plus des commandes et des idées pour le site.",
+    ],
+  },
+  {
     id: "2026-09-13-redeploiement",
     title: "Mise à jour",
     items: [

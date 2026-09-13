@@ -8,6 +8,7 @@ import {
   assignmentIndex,
   assignmentsForCell,
   assignmentsForDay,
+  uniqueAssignmentsByChantier,
   firstChantierOccurrence,
   planningRows,
   slotsForPhase,
@@ -548,11 +549,13 @@ export function CalendarBoard() {
                       const half = halfFromLabel(slot);
                       const slotOff =
                         hoursForSlot(snapshot, row.id, iso, half) <= 0;
-                      const assignments = assignmentsForCell(
-                        snapshot,
-                        row.id,
-                        iso,
-                        slot,
+                      const assignments = uniqueAssignmentsByChantier(
+                        assignmentsForCell(
+                          snapshot,
+                          row.id,
+                          iso,
+                          slot,
+                        ),
                       );
                       const cellKey = `${row.id}|${iso}|${half}`;
                       const dropTarget = dragPreview?.cells.has(cellKey);
@@ -733,7 +736,9 @@ function DayDetail({
             iso,
           );
           const windows = workWindowsForRow(snapshot, row.id, iso);
-          const assignments = assignmentsForDay(snapshot, row.id, iso);
+          const assignments = uniqueAssignmentsByChantier(
+            assignmentsForDay(snapshot, row.id, iso),
+          );
           const dayStart = windows[0]?.start ?? 7 * 60;
           const dayEnd = windows[windows.length - 1]?.end ?? 17 * 60;
           const span = Math.max(1, dayEnd - dayStart);

@@ -160,6 +160,19 @@ export function assignmentsForCell(
   return assignmentIndex(snapshot).byCell.get(cellKey(rowId, iso, wantedHalf)) ?? [];
 }
 
+export function uniqueAssignmentsByChantier(
+  assignments: CalendarAssignment[],
+): CalendarAssignment[] {
+  const seen = new Set<string>();
+  const unique: CalendarAssignment[] = [];
+  for (const assignment of assignments) {
+    if (seen.has(assignment.chantier.id)) continue;
+    seen.add(assignment.chantier.id);
+    unique.push(assignment);
+  }
+  return unique;
+}
+
 export function assignmentsForDay(
   snapshot: PlanningSnapshot,
   rowId: string,
