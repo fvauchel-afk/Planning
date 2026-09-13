@@ -1,4 +1,5 @@
 import "server-only";
+import { isRetryableFetchError, isTransientHttpStatus, sleep } from "@/lib/supabase/retry";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 function getSupabaseUrl(): string | undefined {
@@ -87,6 +88,51 @@ function abortWhenAny(left: AbortSignal, right: AbortSignal): AbortSignal {
   return controller.signal;
 }
 
+async function fetchWithTransientRetry(
+  input: RequestInfo | URL,
+  init: RequestInit | undefined,
+  extraHeaders: Headers,
+): Promise<Response> {
+  const method = (
+    init?.method ||
+    (input instanceof Request ? input.method : "GET")
+  ).toUpperCase();
+  const mutating = method !== "GET" && method !== "HEAD";
+  const attempts = mutating ? 2 : 3;
+  let lastError: unknown;
+  let lastResponse: Response | undefined;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    if (init?.signal?.aborted) {
+      throw lastError instanceof Error
+        ? lastError
+        : new Error("La requête a été interrompue.");
+    }
+    try {
+      const response = await timedFetch(input, init, extraHeaders);
+      if (!isTransientHttpStatus(response.status) || attempt === attempts) {
+        return response;
+      }
+      lastResponse = response;
+      try {
+        await response.body?.cancel();
+      } catch {
+        // Corps déjà consommé ou indisponible.
+      }
+    } catch (err) {
+      lastError = err;
+      const callerAborted = Boolean(init?.signal?.aborted);
+      if (callerAborted || !isRetryableFetchError(err) || attempt === attempts) {
+        throw err;
+      }
+    }
+    if (attempt < attempts) await sleep(300 * attempt);
+  }
+  if (lastResponse) return lastResponse;
+  throw lastError instanceof Error
+    ? lastError
+    : new Error("Connexion à la base interrompue.");
+}
+
 function createAnonClientWithKey(url: string, key: string): SupabaseClient {
   return createClient(url, key, {
     auth: {
@@ -105,7 +151,7 @@ function createAnonClientWithKey(url: string, key: string): SupabaseClient {
         ) {
           headers.delete("Authorization");
         }
-        return timedFetch(input, init, headers);
+        return fetchWithTransientRetry(input, init, headers);
       },
     },
   });
@@ -127,7 +173,7 @@ function createServiceClientWithKey(url: string, key: string): SupabaseClient {
         const headers = new Headers(init?.headers);
         headers.set("apikey", key);
         headers.set("Authorization", `Bearer ${key}`);
-        return timedFetch(input, init, headers);
+        return fetchWithTransientRetry(input, init, headers);
       },
     },
   });

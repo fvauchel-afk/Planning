@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-13-supabase-retry",
+    title: "Connexion à la base",
+    items: [
+      "En cas de coupure brève, le planning et l’envoi d’un bon de commande réessayent tout seuls une ou deux fois, sans message d’erreur.",
+      "Si la base reste injoignable, le blocage actuel est inchangé : aucune donnée affichée, aucune modification possible, bouton Réessayer.",
+    ],
+  },
+  {
     id: "2026-09-13-bon-commande-thermo",
     title: "Bon de commande",
     items: [

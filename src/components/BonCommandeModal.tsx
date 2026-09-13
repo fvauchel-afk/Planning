@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { usePlanning } from "@/lib/planning-context";
+import { planningApiPost } from "@/lib/planning/api";
 import type { SousTraitant } from "@/lib/types";
 
 type Preview = {
@@ -56,17 +57,11 @@ export function BonCommandeModal({
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch("/api/planning/bon-commande", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          chantierId,
-          sousTraitantId,
-          confirm: false,
-        }),
+      const data = await planningApiPost<Preview>("/api/planning/bon-commande", {
+        chantierId,
+        sousTraitantId,
+        confirm: false,
       });
-      const data = (await res.json()) as Preview & { error?: string };
-      if (!res.ok) throw new Error(data.error || "Aperçu impossible.");
       setPreview(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Aperçu impossible.");
@@ -80,20 +75,14 @@ export function BonCommandeModal({
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch("/api/planning/bon-commande", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          chantierId,
-          sousTraitantId,
-          confirm: true,
-        }),
-      });
-      const data = (await res.json()) as {
+      const data = await planningApiPost<{
         error?: string;
         onedriveWarning?: string;
-      };
-      if (!res.ok) throw new Error(data.error || "Envoi impossible.");
+      }>("/api/planning/bon-commande", {
+        chantierId,
+        sousTraitantId,
+        confirm: true,
+      });
       await refresh();
       setDone(
         data.onedriveWarning

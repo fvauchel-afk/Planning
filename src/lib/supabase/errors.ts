@@ -66,9 +66,9 @@ export const DATABASE_UNAVAILABLE_MESSAGE =
 export const SCHEMA_HELP =
   "Tables Supabase introuvables. Exécutez les scripts SQL du dossier supabase/migrations dans le SQL Editor du projet.";
 
-function looksLikeConnectivityError(err: unknown): boolean {
+export function isConnectivityError(err: unknown): boolean {
   const message = `${errorMessage(err)} ${formatSupabaseErrorDetail(err)}`;
-  return /gateway timeout|504|503|502|chargement trop long|failed to fetch|fetch failed|econnreset|etimedout|timeout|abort/i.test(
+  return /gateway timeout|504|503|502|chargement trop long|failed to fetch|fetch failed|econnreset|etimedout|timeout|abort|network|socket|eai_again|enotfound/i.test(
     message,
   );
 }
@@ -90,7 +90,7 @@ export function isMissingColumnError(err: unknown, column: string): boolean {
 }
 export function wrapSupabaseError(err: unknown): Error {
   logSupabaseError("wrap", err);
-  if (looksLikeConnectivityError(err)) {
+  if (isConnectivityError(err)) {
     return new Error(DATABASE_UNAVAILABLE_MESSAGE);
   }
   const detail = formatSupabaseErrorDetail(err);

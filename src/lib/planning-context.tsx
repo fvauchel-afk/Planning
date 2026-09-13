@@ -188,7 +188,7 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
       const remote = await Promise.race([
         fetchPlanningSnapshot(),
         new Promise<never>((_, reject) => {
-          setTimeout(() => reject(new Error(DATABASE_UNAVAILABLE_MESSAGE)), 20000);
+          setTimeout(() => reject(new Error(DATABASE_UNAVAILABLE_MESSAGE)), 45000);
         }),
       ]);
       if (!remote.usingSupabase || !remote.snapshot) {
