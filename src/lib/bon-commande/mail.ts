@@ -10,7 +10,7 @@ export function resendConfigured(): boolean {
 export function resendFromAddress(): string {
   return (
     process.env.RESEND_FROM?.trim() ||
-    "Ferronnerie Vauchel <beth.t@example.com>"
+    "Ferronnerie Vauchel <commandes@lametalleriedusud.com>"
   );
 }
 
