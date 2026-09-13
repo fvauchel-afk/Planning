@@ -438,16 +438,43 @@ export async function supabaseUpdateChantier(
   input: ChantierUpdateInput,
 ): Promise<void> {
   const supabase = createSupabaseServerClient();
+  const payload: Record<string, unknown> = {
+    nom_client: input.nom_client,
+    adresse: input.adresse,
+    priorite: input.priorite,
+    lien_dossier_onedrive: input.lien_dossier_onedrive,
+    dates_estimatives: Boolean(input.dates_estimatives),
+  };
+  if (input.delai_sous_traitance_jours !== undefined) {
+    payload.delai_sous_traitance_jours = input.delai_sous_traitance_jours;
+  }
   const { error } = await supabase
     .from("chantiers")
-    .update({
-      nom_client: input.nom_client,
-      adresse: input.adresse,
-      priorite: input.priorite,
-      lien_dossier_onedrive: input.lien_dossier_onedrive,
-      dates_estimatives: Boolean(input.dates_estimatives),
-    })
+    .update(payload)
     .eq("id", input.id);
+  if (error && isMissingColumnError(error, "delai_sous_traitance_jours")) {
+    const withoutDelay = { ...payload };
+    delete withoutDelay.delai_sous_traitance_jours;
+    const retry = await supabase
+      .from("chantiers")
+      .update(withoutDelay)
+      .eq("id", input.id);
+    if (retry.error && isMissingColumnError(retry.error, "dates_estimatives")) {
+      const fallback = await supabase
+        .from("chantiers")
+        .update({
+          nom_client: input.nom_client,
+          adresse: input.adresse,
+          priorite: input.priorite,
+          lien_dossier_onedrive: input.lien_dossier_onedrive,
+        })
+        .eq("id", input.id);
+      if (fallback.error) throw wrapSupabaseError(fallback.error);
+      return;
+    }
+    if (retry.error) throw wrapSupabaseError(retry.error);
+    return;
+  }
   if (error && isMissingColumnError(error, "dates_estimatives")) {
     const retry = await supabase
       .from("chantiers")
@@ -772,16 +799,18 @@ export async function supabaseApplyPhasePatches(
 ): Promise<void> {
   const supabase = createSupabaseServerClient();
   for (const patch of patches) {
+    const payload: Record<string, unknown> = {
+      date_debut: patch.date_debut,
+      date_fin: patch.date_fin,
+      employe_id: patch.employe_id,
+    };
+    if (patch.heure_debut !== undefined) payload.heure_debut = patch.heure_debut;
+    if (patch.duree_estimee_heures !== undefined) {
+      payload.duree_estimee_heures = patch.duree_estimee_heures;
+    }
     const { error } = await supabase
       .from("phases_planning")
-      .update({
-        date_debut: patch.date_debut,
-        date_fin: patch.date_fin,
-        employe_id: patch.employe_id,
-        ...(patch.heure_debut !== undefined
-          ? { heure_debut: patch.heure_debut }
-          : {}),
-      })
+      .update(payload)
       .eq("id", patch.id);
     if (error) {
       if (

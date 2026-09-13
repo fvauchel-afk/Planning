@@ -287,6 +287,7 @@ export type ChantierUpdateInput = {
   priorite: Priorite;
   lien_dossier_onedrive: string | null;
   dates_estimatives?: boolean;
+  delai_sous_traitance_jours?: number | null;
 };
 
 export type ScheduleChantierDayInput = {
@@ -322,6 +323,7 @@ export type PhasePatch = {
   date_fin: string | null;
   employe_id: string | null;
   heure_debut?: string | null;
+  duree_estimee_heures?: number;
 };
 
 export type PhaseInsert = {

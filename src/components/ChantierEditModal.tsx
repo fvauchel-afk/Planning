@@ -13,8 +13,14 @@ import {
 import { addDays, calendarDaysBetween, toISODate } from "@/lib/dates";
 import {
   isEmptyPhaseEdits,
+  mergePhaseEdits,
   planChantierDateEdits,
+  previewPhaseEdits,
 } from "@/lib/engine/resize-chantier";
+import {
+  chantierPhaseOptions,
+  planChantierOptionEdits,
+} from "@/lib/engine/phase-chain";
 import { compareEmployeesByOrdre } from "@/lib/display-order";
 import { usePlanning } from "@/lib/planning-context";
 import {
@@ -66,6 +72,17 @@ export function ChantierEditModal({
     Boolean(chantier.dates_estimatives),
   );
   const [error, setError] = useState<string | null>(null);
+  const currentOptions = useMemo(
+    () => chantierPhaseOptions(snapshot, chantier.id),
+    [snapshot, chantier.id],
+  );
+  const [avecPose, setAvecPose] = useState(currentOptions.avecPose);
+  const [avecThermolaquage, setAvecThermolaquage] = useState(
+    currentOptions.avecThermolaquage,
+  );
+  const [delaiLaquage, setDelaiLaquage] = useState(
+    String(chantier.delai_sous_traitance_jours || 5),
+  );
   const [bonCommande, setBonCommande] = useState(false);
 
   const info = useMemo(
@@ -92,8 +109,11 @@ export function ChantierEditModal({
     setLien(chantier.lien_dossier_onedrive ?? "");
     setPriorite(chantier.priorite);
     setDatesEstimatives(Boolean(info.estimatif));
+    setAvecPose(currentOptions.avecPose);
+    setAvecThermolaquage(currentOptions.avecThermolaquage);
+    setDelaiLaquage(String(chantier.delai_sous_traitance_jours || 5));
     setError(null);
-  }, [chantier, info.estimatif]);
+  }, [chantier, info.estimatif, currentOptions]);
 
   useEffect(() => {
     setPlanDate(info.firstDate ?? toISODate(new Date()));
@@ -120,26 +140,35 @@ export function ChantierEditModal({
     if (!planDate) {
       throw new Error("Choisissez une date de début.");
     }
-    if (visibleOnGrid) {
-      const edits = planChantierDateEdits(
-        snapshot,
-        chantier.id,
-        planDate,
-        planEnd || planDate,
-      );
-      if (!isEmptyPhaseEdits(edits)) await applyPhaseEdits(edits);
-      return;
+    if (!visibleOnGrid && (forceCreate || isPlanned)) {
+      if (!planEmployeeId) {
+        throw new Error("Choisissez un salarié.");
+      }
+      await scheduleChantierDay({
+        chantierId: chantier.id,
+        date: planDate,
+        dateFin: planEnd || planDate,
+        employeeId: planEmployeeId,
+      });
+      if (forceCreate) return;
     }
-    if (!forceCreate && !isPlanned) return;
-    if (!planEmployeeId) {
-      throw new Error("Choisissez un salarié.");
-    }
-    await scheduleChantierDay({
-      chantierId: chantier.id,
-      date: planDate,
-      dateFin: planEnd || planDate,
-      employeeId: planEmployeeId,
+    const dateEdits = visibleOnGrid
+      ? planChantierDateEdits(
+          snapshot,
+          chantier.id,
+          planDate,
+          planEnd || planDate,
+        )
+      : {};
+    const preview = previewPhaseEdits(snapshot, dateEdits);
+    const optionEdits = planChantierOptionEdits(preview, chantier.id, {
+      avecPose,
+      avecThermolaquage,
+      delayDays: Number(delaiLaquage || 5),
+      datesEstimatives,
     });
+    const edits = mergePhaseEdits(dateEdits, optionEdits);
+    if (!isEmptyPhaseEdits(edits)) await applyPhaseEdits(edits);
   }
 
   async function onSubmit(event: React.FormEvent) {
@@ -151,6 +180,24 @@ export function ChantierEditModal({
     setSaving(true);
     setError(null);
     try {
+      const removed: string[] = [];
+      if (currentOptions.avecThermolaquage && !avecThermolaquage) {
+        removed.push("Thermolaquage / galvanisation");
+      }
+      if (currentOptions.avecPose && !avecPose) {
+        removed.push("Installation / Pose");
+      }
+      if (removed.length > 0) {
+        const ok = window.confirm(
+          `Supprimer ${removed.join(" et ")} ? Les dates de ${
+            removed.length > 1 ? "ces phases" : "cette phase"
+          } seront perdues. Cette action est irréversible.`,
+        );
+        if (!ok) {
+          setSaving(false);
+          return;
+        }
+      }
       const startBefore = info.firstDate ?? "";
       const endBefore = info.lastDate ?? info.firstDate ?? "";
       const datesChanged =
@@ -169,6 +216,9 @@ export function ChantierEditModal({
         priorite,
         lien_dossier_onedrive: lien.trim() || null,
         dates_estimatives: confirmNow ? false : datesEstimatives,
+        delai_sous_traitance_jours: avecThermolaquage
+          ? Math.min(60, Math.max(1, Number(delaiLaquage || 5)))
+          : chantier.delai_sous_traitance_jours ?? 5,
       });
       onClose();
     } catch (err) {
@@ -265,6 +315,76 @@ export function ChantierEditModal({
               Ouvrir le dossier OneDrive
             </a>
           ) : null}
+
+          <fieldset className="rounded-lg border border-stone-300 bg-stone-50/60 p-3 text-sm">
+            <legend className="px-1 font-medium text-stone-800">
+              Installation / Pose
+            </legend>
+            <div className="mt-1 flex flex-wrap gap-4">
+              <label className="inline-flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="edit-avec-pose"
+                  checked={avecPose}
+                  onChange={() => setAvecPose(true)}
+                />
+                Oui
+              </label>
+              <label className="inline-flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="edit-avec-pose"
+                  checked={!avecPose}
+                  onChange={() => setAvecPose(false)}
+                />
+                Non
+              </label>
+            </div>
+          </fieldset>
+          <fieldset className="rounded-lg border border-stone-300 bg-stone-50/60 p-3 text-sm">
+            <legend className="px-1 font-medium text-stone-800">
+              Thermolaquage / Galvanisation
+            </legend>
+            <div className="mt-1 flex flex-wrap gap-4">
+              <label className="inline-flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="edit-avec-thermolaquage"
+                  checked={avecThermolaquage}
+                  onChange={() => setAvecThermolaquage(true)}
+                />
+                Oui
+              </label>
+              <label className="inline-flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="edit-avec-thermolaquage"
+                  checked={!avecThermolaquage}
+                  onChange={() => setAvecThermolaquage(false)}
+                />
+                Non
+              </label>
+            </div>
+            {avecThermolaquage ? (
+              <label className="mt-3 block">
+                <span className="mb-1 block font-medium">
+                  Délai de laquage (jours ouvrés)
+                </span>
+                <input
+                  type="number"
+                  min={1}
+                  max={60}
+                  value={delaiLaquage}
+                  onChange={(event) => setDelaiLaquage(event.target.value)}
+                  className="w-full rounded border border-stone-300 bg-white px-3 py-2"
+                />
+                <p className="mt-1 text-xs text-stone-500">
+                  La phase se cale après la fabrication. Si une pose est prévue,
+                  elle commence après ce thermolaquage.
+                </p>
+              </label>
+            ) : null}
+          </fieldset>
 
           <fieldset className="rounded-lg border border-amber-200 bg-amber-50/50 p-3">
             <legend className="px-1 text-sm font-medium text-stone-800">
