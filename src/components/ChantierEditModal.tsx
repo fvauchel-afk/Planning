@@ -9,6 +9,7 @@ import { chantierVisibleOnGrid } from "@/lib/calendar";
 import { estimativePhaseIdsForChantier } from "@/lib/dates-estimatives";
 import {
   STATUT_CHANTIER_LABELS,
+  chantierDateRange,
   chantierPlanningInfo,
 } from "@/lib/chantier-status";
 import { addDays, calendarDaysBetween, toISODate } from "@/lib/dates";
@@ -76,6 +77,7 @@ export function ChantierEditModal({
   const [deleting, setDeleting] = useState(false);
   const [planDate, setPlanDate] = useState(toISODate(new Date()));
   const [planEnd, setPlanEnd] = useState(toISODate(new Date()));
+  const [datesDirty, setDatesDirty] = useState(false);
   const [planEmployeeId, setPlanEmployeeId] = useState("");
   const [datesEstimatives, setDatesEstimatives] = useState(
     Boolean(chantier.dates_estimatives),
@@ -169,9 +171,11 @@ export function ChantierEditModal({
   }, [chantier, info.estimatif, currentOptions, snapshot]);
 
   useEffect(() => {
+    setDatesDirty(false);
     setPlanDate(info.firstDate ?? toISODate(new Date()));
     setPlanEnd(info.lastDate ?? info.firstDate ?? toISODate(new Date()));
-  }, [chantier.id, info.firstDate, info.lastDate]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reset only when switching chantier
+  }, [chantier.id]);
 
   useEffect(() => {
     if (!planEmployeeId && activeEmployees[0]) {
@@ -179,10 +183,65 @@ export function ChantierEditModal({
     }
   }, [activeEmployees, planEmployeeId]);
 
+  const previewRange = useMemo(() => {
+    try {
+      const dateEdits =
+        visibleOnGrid && datesDirty
+          ? planChantierDateEdits(
+              snapshot,
+              chantier.id,
+              planDate,
+              planEnd || planDate,
+            )
+          : {};
+      const preview = previewPhaseEdits(snapshot, dateEdits);
+      const optionEdits = planChantierOptionEdits(preview, chantier.id, {
+        avecPose,
+        avecThermolaquage,
+        avecLivraison,
+        dureeLivraisonHeures: Number(dureeLivraison || 2),
+        employeLivraisonId: employeLivraison || null,
+        employeFabricationId: employeFabrication || null,
+        employePoseId: employePose || null,
+        delayDays: Number(delaiLaquage || 5),
+        datesEstimatives,
+      });
+      return chantierDateRange(
+        previewPhaseEdits(preview, optionEdits),
+        chantier.id,
+      );
+    } catch {
+      return { firstDate: planDate || null, lastDate: planEnd || null };
+    }
+  }, [
+    snapshot,
+    chantier.id,
+    visibleOnGrid,
+    datesDirty,
+    planDate,
+    planEnd,
+    avecPose,
+    avecThermolaquage,
+    avecLivraison,
+    dureeLivraison,
+    employeLivraison,
+    employeFabrication,
+    employePose,
+    delaiLaquage,
+    datesEstimatives,
+  ]);
+
+  useEffect(() => {
+    if (datesDirty) return;
+    if (previewRange.firstDate) setPlanDate(previewRange.firstDate);
+    if (previewRange.lastDate) setPlanEnd(previewRange.lastDate);
+  }, [datesDirty, previewRange.firstDate, previewRange.lastDate]);
+
   const onedriveUrl = onedriveHref(lien || chantier.lien_dossier_onedrive || "");
   const busy = saving || scheduling || deleting;
 
   function onChangeStart(next: string) {
+    setDatesDirty(true);
     if (planDate && planEnd) {
       setPlanEnd(addDays(planEnd, calendarDaysBetween(planDate, next)));
     }
@@ -205,14 +264,15 @@ export function ChantierEditModal({
       });
       if (forceCreate) return;
     }
-    const dateEdits = visibleOnGrid
-      ? planChantierDateEdits(
-          snapshot,
-          chantier.id,
-          planDate,
-          planEnd || planDate,
-        )
-      : {};
+    const dateEdits =
+      visibleOnGrid && datesDirty
+        ? planChantierDateEdits(
+            snapshot,
+            chantier.id,
+            planDate,
+            planEnd || planDate,
+          )
+        : {};
     const preview = previewPhaseEdits(snapshot, dateEdits);
     const optionEdits = planChantierOptionEdits(preview, chantier.id, {
       avecPose,
@@ -286,6 +346,7 @@ export function ChantierEditModal({
       const endBefore = info.lastDate ?? info.firstDate ?? "";
       const datesChanged =
         visibleOnGrid &&
+        datesDirty &&
         (planDate !== startBefore || (planEnd || planDate) !== endBefore);
       await persistPlanning(false);
       const confirmIds = estimativePhaseIdsForChantier(snapshot, chantier.id);
@@ -672,7 +733,10 @@ export function ChantierEditModal({
               <input
                 type="date"
                 value={planEnd}
-                onChange={(event) => setPlanEnd(event.target.value)}
+                onChange={(event) => {
+                  setDatesDirty(true);
+                  setPlanEnd(event.target.value);
+                }}
                 className="w-full rounded border border-stone-300 bg-white px-3 py-2"
                 min={planDate || undefined}
               />

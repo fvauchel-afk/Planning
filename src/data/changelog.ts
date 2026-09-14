@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-14-cascade-employe",
+    title: "Changement de salarié",
+    items: [
+      "Dans Modifier, changer le salarié d’une phase (Fabrication, Livraison ou Pose) recale aussi les phases suivantes du même chantier : Thermolaquage après la fabrication, puis Livraison, puis Pose.",
+      "Les dates planifiées affichées en haut du formulaire suivent ce recalcul, au lieu de garder l’ancienne plage.",
+    ],
+  },
+  {
     id: "2026-09-13-supabase-retry",
     title: "Connexion à la base",
     items: [
