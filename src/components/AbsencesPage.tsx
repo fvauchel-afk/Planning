@@ -45,6 +45,21 @@ import {
   type TypeAbsence,
 } from "@/lib/types";
 
+function logAbsenceValidate(step: string, data?: Record<string, unknown>) {
+  const line = { step, at: new Date().toISOString(), ...(data ?? {}) };
+  console.log("[absence-validate]", step, data ?? {});
+  if (typeof window === "undefined") return;
+  const store = window as Window & { __absenceValidateLogs?: unknown[] };
+  store.__absenceValidateLogs = store.__absenceValidateLogs ?? [];
+  store.__absenceValidateLogs.push(line);
+  const node = document.getElementById("absence-validate-debug");
+  if (node) {
+    node.textContent = store.__absenceValidateLogs
+      .map((item) => JSON.stringify(item))
+      .join("\n");
+  }
+}
+
 export function AbsencesPage() {
   const pathname = usePathname();
   const { reopen, clearReopen } = useFormDraftReopen();
@@ -251,6 +266,16 @@ export function AbsencesPage() {
     phaseChoices: Record<string, AbsencePhaseChoice>,
     forceConflict = false,
   ) {
+    logAbsenceValidate("persistAbsence:start", {
+      forceConflict,
+      editingId: editingId ?? null,
+      employe_id: payload.employe_id,
+      date_debut: payload.date_debut,
+      date_fin: payload.date_fin,
+      type: payload.type,
+      hasCachedConflict: Boolean(conflict),
+      choiceCount: Object.keys(phaseChoices).length,
+    });
     setSaving(true);
     setError(null);
     let sendingValidation = false;
@@ -261,11 +286,23 @@ export function AbsencesPage() {
           : planAbsenceImprevue(snapRef.current, payload, phaseChoices, {
               ignoreAbsenceId: editingId ?? undefined,
             });
+      logAbsenceValidate("persistAbsence:plan", {
+        usedCachedConflict: Boolean(forceConflict && conflict),
+        planStatus: plan.status,
+        patchCount: plan.patches.length,
+        displacementCount: plan.displacements.length,
+      });
       const needsPlacementConflict =
         plan.status === "conflict" ||
         delayTouchesPrioritaire(snapRef.current, plan.patches);
       sendingValidation = Boolean(needsPlacementConflict && forceConflict);
+      logAbsenceValidate("persistAbsence:needsPlacementConflict", {
+        needsPlacementConflict,
+        sendingValidation,
+        planStatusConflict: plan.status === "conflict",
+      });
       if (needsPlacementConflict && !forceConflict) {
+        logAbsenceValidate("persistAbsence:early-return:open-conflict-modal");
         setConflict(plan);
         return;
       }
@@ -275,12 +312,18 @@ export function AbsencesPage() {
         payload.date_debut,
         payload.date_fin,
       );
+      logAbsenceValidate("persistAbsence:overlap", { overlapCount: overlap.length });
       if (needsPlacementConflict) {
         const pendingSimilar = similarPendingAbsenceSignalement(
           snapRef.current,
           payload,
         );
+        logAbsenceValidate("persistAbsence:pendingSimilar", {
+          pendingSimilar: Boolean(pendingSimilar),
+          pendingSimilarId: pendingSimilar?.id ?? null,
+        });
         if (pendingSimilar) {
+          logAbsenceValidate("persistAbsence:early-return:pending-similar");
           setNotice(
             "Un signalement similaire est déjà en attente. Rien de plus n’a été envoyé — ouvrez Signalements pour le traiter.",
           );
@@ -292,16 +335,30 @@ export function AbsencesPage() {
           payload,
           editingId ?? undefined,
         );
+        logAbsenceValidate("persistAbsence:matchingRecordedAbsence", {
+          already: Boolean(already),
+          alreadyId: already?.id ?? null,
+          willUpdate: Boolean(editingId),
+          willCreate: !editingId && !already,
+        });
         if (editingId) {
+          logAbsenceValidate("persistAbsence:before-updateAbsence");
           await updateAbsence({ id: editingId, ...payload });
+          logAbsenceValidate("persistAbsence:after-updateAbsence");
         } else if (!already) {
+          logAbsenceValidate("persistAbsence:before-createAbsence");
           await createAbsence(payload);
+          logAbsenceValidate("persistAbsence:after-createAbsence");
         }
         const previouslyRejected = similarAbsenceSignalement(snapRef.current, payload, [
           "rejete",
         ]);
         const originPhaseId =
           overlap[0]?.phase.id ?? plan.patches[0]?.id ?? "";
+        logAbsenceValidate("persistAbsence:before-createSignalement", {
+          previouslyRejected: Boolean(previouslyRejected),
+          originPhaseId,
+        });
         await createSignalement({
           employe_id: payload.employe_id,
           phase_id: originPhaseId || null,
@@ -312,24 +369,37 @@ export function AbsencesPage() {
           statut: "en_attente",
           proposition: propositionFromDelay(snapRef.current, plan),
         });
+        logAbsenceValidate("persistAbsence:after-createSignalement");
         setNotice(
           previouslyRejected
             ? "Signalement renvoyé. Le précédent pour ces dates avait été rejeté ; ouvrez Signalements pour le traiter."
             : "Signalement envoyé. L’absence est enregistrée ; les décalages de chantier attendront la validation sur Signalements.",
         );
         resetForm();
+        logAbsenceValidate("persistAbsence:done:signalement-path");
         return;
       }
+      logAbsenceValidate("persistAbsence:no-placement-conflict");
       if (editingId) {
+        logAbsenceValidate("persistAbsence:before-updateAbsence-plain");
         await updateAbsence({ id: editingId, ...payload });
       } else {
+        logAbsenceValidate("persistAbsence:before-createAbsence-plain");
         await createAbsence(payload);
       }
       if (plan.patches.length > 0) {
+        logAbsenceValidate("persistAbsence:before-applyPhasePatches", {
+          patchCount: plan.patches.length,
+        });
         await applyPhasePatches(plan.patches);
       }
       resetForm();
+      logAbsenceValidate("persistAbsence:done:plain-save");
     } catch (err) {
+      logAbsenceValidate("persistAbsence:catch", {
+        error: err instanceof Error ? err.message : String(err),
+        sendingValidation,
+      });
       setError(
         formatSaveError(
           err,
@@ -339,14 +409,22 @@ export function AbsencesPage() {
         ),
       );
     } finally {
+      logAbsenceValidate("persistAbsence:finally", { sendingValidation });
       setSaving(false);
     }
   }
 
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault();
+    logAbsenceValidate("onSubmit:start", {
+      editingId: editingId ?? null,
+      cascadeDirty: cascadeDirty.current,
+    });
     const payload = validatedPayload();
-    if (!payload) return;
+    if (!payload) {
+      logAbsenceValidate("onSubmit:early-return:invalid-payload");
+      return;
+    }
     setNotice(null);
     if (editingId) {
       await live.flush();
@@ -354,11 +432,17 @@ export function AbsencesPage() {
       snapRef.current = latest;
       const remote = latest.absences.find((item) => item.id === editingId);
       const remoteFp = absenceCascadeFingerprint(remote);
+      logAbsenceValidate("onSubmit:after-refresh", {
+        remoteFound: Boolean(remote),
+        cascadeDirty: cascadeDirty.current,
+        fingerprintMatch: remoteFp === cascadeBaseline.current,
+      });
       if (
         cascadeDirty.current &&
         remoteFp &&
         remoteFp !== cascadeBaseline.current
       ) {
+        logAbsenceValidate("onSubmit:stale-cascade-confirm");
         if (confirmStaleReload(STALE_ABSENCE_MESSAGE)) {
           if (remote) {
             cascadeDirty.current = false;
@@ -368,6 +452,7 @@ export function AbsencesPage() {
             cascadeBaseline.current = remoteFp;
           }
         }
+        logAbsenceValidate("onSubmit:early-return:stale-cascade");
         return;
       }
     }
@@ -377,10 +462,16 @@ export function AbsencesPage() {
       payload.date_debut,
       payload.date_fin,
     );
+    logAbsenceValidate("onSubmit:overlap", {
+      overlapCount: overlap.length,
+      usingSnapshotNotSnapRef: true,
+    });
     if (overlap.length > 0) {
+      logAbsenceValidate("onSubmit:early-return:set-reviewPayload");
       setReviewPayload(payload);
       return;
     }
+    logAbsenceValidate("onSubmit:call-persistAbsence");
     await persistAbsence(payload, {});
   }
 
@@ -657,7 +748,21 @@ export function AbsencesPage() {
           error={error}
           busy={saving}
           onValidate={() => {
-            if (reviewPayload) void persistAbsence(reviewPayload, choices, true);
+            logAbsenceValidate("onValidate:click", {
+              hasReviewPayload: Boolean(reviewPayload),
+              reviewEmploye: reviewPayload?.employe_id ?? null,
+              reviewDebut: reviewPayload?.date_debut ?? null,
+              reviewFin: reviewPayload?.date_fin ?? null,
+              saving,
+              hasConflict: Boolean(conflict),
+              editingId: editingId ?? null,
+            });
+            if (!reviewPayload) {
+              logAbsenceValidate("onValidate:early-return:reviewPayload-null");
+              return;
+            }
+            logAbsenceValidate("onValidate:call-persistAbsence-forceConflict");
+            void persistAbsence(reviewPayload, choices, true);
           }}
           onAdjust={() => {
             setConflict(null);
@@ -669,6 +774,10 @@ export function AbsencesPage() {
           }}
         />
       )}
+      <pre
+        id="absence-validate-debug"
+        className="mt-4 max-h-48 overflow-auto rounded border border-stone-200 bg-stone-50 p-2 text-[11px] leading-snug text-stone-700"
+      />
     </div>
   );
 }
