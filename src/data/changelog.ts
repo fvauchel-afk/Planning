@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-14-signalement-rejete-absence",
+    title: "Renvoyer un signalement d’absence",
+    items: [
+      "Après un « Envoyer pour validation » sur un congé, un message s’affiche toujours (envoyé, déjà en attente, renvoyé après un rejet, ou erreur).",
+      "Si un signalement identique a déjà été rejeté, un nouveau est créé au lieu de rester bloqué sur la fenêtre de conflit.",
+    ],
+  },
+  {
     id: "2026-09-14-absence-prioritaire",
     title: "Absence et chantier prioritaire",
     items: [

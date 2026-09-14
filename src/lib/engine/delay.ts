@@ -111,7 +111,7 @@ function addOpenDays(
   if (n <= 0) return start;
   let date = start;
   let added = 0;
-  while (added < n) {
+  for (let i = 0; i < SEARCH_DAYS && added < n; i += 1) {
     date = addDays(date, 1);
     if (!isSlotBlockedForRow(snapshot, rowId, date)) added += 1;
   }

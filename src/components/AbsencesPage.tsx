@@ -12,13 +12,13 @@ import {
   planAbsenceImprevue,
   type AbsencePhaseChoice,
 } from "@/lib/engine/absence-imprevue";
-import { generateDelaySolutions, propositionFromSolutions } from "@/lib/engine/plan-solutions";
 import { delayTouchesPrioritaire } from "@/lib/engine/delay";
 import { usePlanning } from "@/lib/planning-context";
 import {
   absencePeriodNote,
   matchingRecordedAbsence,
   propositionFromDelay,
+  similarAbsenceSignalement,
   similarPendingAbsenceSignalement,
 } from "@/lib/signalements";
 import { formatSaveError } from "@/lib/supabase/errors";
@@ -148,13 +148,18 @@ export function AbsencesPage() {
   ) {
     setSaving(true);
     setError(null);
+    let sendingValidation = false;
     try {
-      const plan = planAbsenceImprevue(snapshot, payload, phaseChoices, {
-        ignoreAbsenceId: editingId ?? undefined,
-      });
+      const plan =
+        forceConflict && conflict
+          ? conflict
+          : planAbsenceImprevue(snapshot, payload, phaseChoices, {
+              ignoreAbsenceId: editingId ?? undefined,
+            });
       const needsPlacementConflict =
         plan.status === "conflict" ||
         delayTouchesPrioritaire(snapshot, plan.patches);
+      sendingValidation = Boolean(needsPlacementConflict && forceConflict);
       if (needsPlacementConflict && !forceConflict) {
         setConflict(plan);
         return;
@@ -166,20 +171,13 @@ export function AbsencesPage() {
         payload.date_fin,
       );
       if (needsPlacementConflict) {
-        const similar = similarPendingAbsenceSignalement(snapshot, payload);
-        if (similar) {
-          const already = matchingRecordedAbsence(
-            snapshot,
-            payload,
-            editingId ?? undefined,
-          );
-          if (editingId) {
-            await updateAbsence({ id: editingId, ...payload });
-          } else if (!already) {
-            await createAbsence(payload);
-          }
+        const pendingSimilar = similarPendingAbsenceSignalement(
+          snapshot,
+          payload,
+        );
+        if (pendingSimilar) {
           setNotice(
-            "Un signalement similaire existe déjà. Rien de plus n’a été envoyé — ouvrez Signalements pour le traiter.",
+            "Un signalement similaire est déjà en attente. Rien de plus n’a été envoyé — ouvrez Signalements pour le traiter.",
           );
           resetForm();
           return;
@@ -194,26 +192,25 @@ export function AbsencesPage() {
         } else if (!already) {
           await createAbsence(payload);
         }
+        const previouslyRejected = similarAbsenceSignalement(snapshot, payload, [
+          "rejete",
+        ]);
+        const originPhaseId =
+          overlap[0]?.phase.id ?? plan.patches[0]?.id ?? "";
         await createSignalement({
           employe_id: payload.employe_id,
-          phase_id: overlap[0]?.phase.id ?? plan.patches[0]?.id ?? null,
+          phase_id: originPhaseId || null,
           retard_demi_journees: 1,
           sens: "retard",
           note: `${absencePeriodNote(payload)} : l’algorithme propose des décalages, non appliqués tant que Mika ou Alexis n’a pas validé.`,
           origine: "decalage_admin",
           statut: "en_attente",
-          proposition:
-            propositionFromSolutions(
-              generateDelaySolutions(
-                snapshot,
-                overlap[0]?.phase.id ?? plan.patches[0]?.id ?? "",
-                2,
-                plan,
-              ),
-            ) ?? propositionFromDelay(snapshot, plan),
+          proposition: propositionFromDelay(snapshot, plan),
         });
         setNotice(
-          "Signalement envoyé. L’absence est enregistrée ; les décalages de chantier attendront la validation sur Signalements.",
+          previouslyRejected
+            ? "Signalement renvoyé. Le précédent pour ces dates avait été rejeté ; ouvrez Signalements pour le traiter."
+            : "Signalement envoyé. L’absence est enregistrée ; les décalages de chantier attendront la validation sur Signalements.",
         );
         resetForm();
         return;
@@ -228,7 +225,14 @@ export function AbsencesPage() {
       }
       resetForm();
     } catch (err) {
-      setError(formatSaveError(err, "l’absence n’a pas été enregistrée"));
+      setError(
+        formatSaveError(
+          err,
+          sendingValidation
+            ? "l’envoi pour validation n’a pas abouti"
+            : "l’absence n’a pas été enregistrée",
+        ),
+      );
     } finally {
       setSaving(false);
     }

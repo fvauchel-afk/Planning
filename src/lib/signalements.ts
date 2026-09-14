@@ -137,18 +137,26 @@ export function matchingRecordedAbsence(
   );
 }
 
-export function similarPendingAbsenceSignalement(
+export function similarAbsenceSignalement(
   snapshot: PlanningSnapshot,
   payload: NewAbsenceInput,
+  statuts: Array<Signalement["statut"]> = ["en_attente"],
 ): Signalement | undefined {
   const needle = absencePeriodNote(payload);
   return (snapshot.signalements ?? []).find(
     (item) =>
-      item.statut === "en_attente" &&
+      statuts.includes(item.statut) &&
       item.origine === "decalage_admin" &&
       item.employe_id === payload.employe_id &&
       (item.note ?? "").includes(needle),
   );
+}
+
+export function similarPendingAbsenceSignalement(
+  snapshot: PlanningSnapshot,
+  payload: NewAbsenceInput,
+): Signalement | undefined {
+  return similarAbsenceSignalement(snapshot, payload, ["en_attente"]);
 }
 
 function runSignalementsSelfCheck() {
@@ -225,6 +233,19 @@ function runSignalementsSelfCheck() {
     })
   ) {
     throw new Error("signalements: autre période ne doit pas coller");
+  }
+  const snapRejected = {
+    ...snap,
+    signalements: snap.signalements.map((item) => ({
+      ...item,
+      statut: "rejete" as const,
+    })),
+  };
+  if (similarPendingAbsenceSignalement(snapRejected, payload)) {
+    throw new Error("signalements: un rejeté ne doit pas compter comme en attente");
+  }
+  if (!similarAbsenceSignalement(snapRejected, payload, ["rejete"])) {
+    throw new Error("signalements: un rejeté pour les mêmes dates doit être détecté");
   }
 }
 runSignalementsSelfCheck();
