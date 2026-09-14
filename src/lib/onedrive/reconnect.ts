@@ -5,6 +5,20 @@ export function needsOnedriveReconnect(message: string | undefined): boolean {
   );
 }
 
+/** Marge avant expiration de l’access token pour un rafraîchissement au login. */
+export const ONEDRIVE_KEEPALIVE_TTL_MS = 10 * 60 * 1000;
+
+export function onedriveAccessNeedsRefresh(
+  expiresAt: string | null | undefined,
+  nowMs: number,
+  minTtlMs: number,
+): boolean {
+  if (!expiresAt) return true;
+  const expires = new Date(expiresAt).getTime();
+  if (!Number.isFinite(expires)) return true;
+  return expires - minTtlMs <= nowMs;
+}
+
 function runOnedriveReconnectSelfCheck() {
   if (
     !needsOnedriveReconnect(
@@ -18,6 +32,34 @@ function runOnedriveReconnectSelfCheck() {
   }
   if (needsOnedriveReconnect("Dossier introuvable.")) {
     throw new Error("onedrive: erreur métier ne doit pas masquer une connexion OK");
+  }
+  const now = Date.parse("2026-09-14T12:00:00.000Z");
+  if (
+    !onedriveAccessNeedsRefresh(
+      "2026-09-14T12:05:00.000Z",
+      now,
+      ONEDRIVE_KEEPALIVE_TTL_MS,
+    )
+  ) {
+    throw new Error("onedrive: access token bientôt expiré doit être rafraîchi");
+  }
+  if (
+    onedriveAccessNeedsRefresh(
+      "2026-09-14T13:00:00.000Z",
+      now,
+      ONEDRIVE_KEEPALIVE_TTL_MS,
+    )
+  ) {
+    throw new Error("onedrive: access token encore valide ne doit pas être rafraîchi");
+  }
+  if (
+    !onedriveAccessNeedsRefresh(
+      "2026-09-14T11:00:00.000Z",
+      now,
+      ONEDRIVE_KEEPALIVE_TTL_MS,
+    )
+  ) {
+    throw new Error("onedrive: access token déjà expiré doit être rafraîchi");
   }
 }
 

@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.116.0",
+    "@vercel/functions": "^3.9.7",
     "bcryptjs": "^3.0.3",
     "next": "14.2.35",
     "pdf-lib": "^1.17.1",

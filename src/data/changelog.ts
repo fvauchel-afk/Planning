@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-14-onedrive-refresh-login",
+    title: "OneDrive reste connecté",
+    items: [
+      "À chaque connexion (n’importe quel code PIN), le planning rafraîchit en silence le jeton OneDrive s’il est bientôt périmé, sans ralentir l’entrée.",
+      "Si Microsoft a révoqué l’accès, l’onglet OneDrive continue d’indiquer qu’il faut reconnecter ; sinon plus besoin d’y passer pour garder la liaison.",
+    ],
+  },
+  {
     id: "2026-09-14-signalement-rejete-absence",
     title: "Renvoyer un signalement d’absence",
     items: [
