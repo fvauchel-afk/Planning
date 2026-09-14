@@ -431,6 +431,24 @@ function relocatableForScope(
   return relocatable;
 }
 
+function prioritaireDatesMoved(
+  snapshot: PlanningSnapshot,
+  patches: PhasePatch[],
+): boolean {
+  return patches.some((patch) => {
+    const phase = snapshot.phases.find((item) => item.id === patch.id);
+    if (!phase) return false;
+    return chantierOf(snapshot, phase)?.priorite === "prioritaire";
+  });
+}
+
+export function delayTouchesPrioritaire(
+  snapshot: PlanningSnapshot,
+  patches: PhasePatch[],
+): boolean {
+  return prioritaireDatesMoved(snapshot, patches);
+}
+
 function resultFromPacked(
   snapshot: PlanningSnapshot,
   origin: PhasePlanning,
@@ -454,6 +472,7 @@ function resultFromPacked(
   const originChantierId = chantierOf(snapshot, origin)?.id;
   const conflict =
     packed.blocked ||
+    prioritaireDatesMoved(snapshot, patches) ||
     displacements.some((item) => {
       if (item.chantier_id === originChantierId) return false;
       if (!canCascadeDisplace(item.priorite, originPriorite)) return true;
@@ -749,6 +768,7 @@ export function planAbsenceCascade(
   const displacements = buildDisplacements(withAbsence, origin, patches);
   const conflict =
     packed.blocked ||
+    prioritaireDatesMoved(withAbsence, patches) ||
     displacements.some(
       (item) =>
         !canCascadeDisplace(

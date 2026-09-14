@@ -13,6 +13,7 @@ import {
   type AbsencePhaseChoice,
 } from "@/lib/engine/absence-imprevue";
 import { generateDelaySolutions, propositionFromSolutions } from "@/lib/engine/plan-solutions";
+import { delayTouchesPrioritaire } from "@/lib/engine/delay";
 import { usePlanning } from "@/lib/planning-context";
 import {
   absencePeriodNote,
@@ -151,7 +152,10 @@ export function AbsencesPage() {
       const plan = planAbsenceImprevue(snapshot, payload, phaseChoices, {
         ignoreAbsenceId: editingId ?? undefined,
       });
-      if (plan.status === "conflict" && !forceConflict) {
+      const needsPlacementConflict =
+        plan.status === "conflict" ||
+        delayTouchesPrioritaire(snapshot, plan.patches);
+      if (needsPlacementConflict && !forceConflict) {
         setConflict(plan);
         return;
       }
@@ -161,7 +165,7 @@ export function AbsencesPage() {
         payload.date_debut,
         payload.date_fin,
       );
-      if (plan.status === "conflict") {
+      if (needsPlacementConflict) {
         const similar = similarPendingAbsenceSignalement(snapshot, payload);
         if (similar) {
           const already = matchingRecordedAbsence(
