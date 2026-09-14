@@ -11,6 +11,13 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-14-absence-envoyer-validation",
+    title: "Envoyer pour validation d’un congé déjà enregistré",
+    items: [
+      "Sur un congé déjà saisi (comme celui d’Alexis du 17 au 18/09), « Envoyer pour validation » envoie le signalement même si un précédent a été rejeté, au lieu de rester bloqué sans message.",
+    ],
+  },
+  {
     id: "2026-09-14-update-gate-keep-edits",
     title: "Mise à jour sans perdre la saisie",
     items: [
