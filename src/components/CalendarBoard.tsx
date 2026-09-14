@@ -40,6 +40,7 @@ import {
 } from "@/lib/engine/drag-shift";
 import { halfFromLabel } from "@/lib/engine/slots";
 import { usePlanning } from "@/lib/planning-context";
+import { useFormDraftReopen } from "@/lib/form-draft";
 import { useEmployeeRowReorder } from "@/lib/use-employee-row-reorder";
 import { useSession } from "@/lib/auth/session-context";
 import { PRIORITE_LABELS, type Chantier, type Employee } from "@/lib/types";
@@ -56,6 +57,7 @@ type ViewMode = "overview" | "week" | "day";
 export function CalendarBoard() {
   const { snapshot, loading, error, usingSupabase, applyPhasePatches, reorderEmployees } =
     usePlanning();
+  const { reopen, clearReopen } = useFormDraftReopen();
   const { session } = useSession();
   const [view, setView] = useState<ViewMode>("overview");
   const [todayIso, setTodayIso] = useState(() => toISODate(new Date()));
@@ -63,6 +65,14 @@ export function CalendarBoard() {
   const [selectedPhaseId, setSelectedPhaseId] = useState<string | null>(null);
   const [absenceEmployee, setAbsenceEmployee] = useState<Employee | null>(null);
   const [editingChantier, setEditingChantier] = useState<Chantier | null>(null);
+
+  useEffect(() => {
+    if (reopen?.kind !== "chantier") return;
+    if (loading) return;
+    const found = snapshot.chantiers.find((item) => item.id === reopen.id);
+    if (found) setEditingChantier(found);
+    clearReopen();
+  }, [reopen, loading, snapshot.chantiers, clearReopen]);
   const [dragError, setDragError] = useState<string | null>(null);
   const [dragPreview, setDragPreview] = useState<{
     cells: Set<string>;

@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { usePathname } from "next/navigation";
 import { CHANGELOG, type ChangelogEntry } from "@/data/changelog";
 import { useSession } from "@/lib/auth/session-context";
+import { useHasUnsavedWork } from "@/lib/form-draft";
 
 const CHECK_MS = 15_000;
 const STORAGE_BUILD = "vauchel_seen_build";
@@ -40,6 +41,7 @@ export function PwaRegister({
 }) {
   const pathname = usePathname();
   const { session, ready } = useSession();
+  const hasUnsaved = useHasUnsavedWork();
   const [pending, setPending] = useState<{
     buildId: string;
     entries: ChangelogEntry[];
@@ -161,8 +163,10 @@ export function PwaRegister({
     };
   }, []);
 
-  const showGate =
+  const loggedIn =
     ready && Boolean(session) && pathname !== "/connexion" && pending !== null;
+  const showGate = loggedIn && !hasUnsaved;
+  const showNudge = loggedIn && hasUnsaved;
 
   useEffect(() => {
     onLockChange?.(showGate);
@@ -244,6 +248,12 @@ export function PwaRegister({
 
   async function applyUpdate() {
     if (!pending) return;
+    if (hasUnsaved) {
+      const ok = window.confirm(
+        "Vous avez une modification non enregistrée. Continuer recharge la page ; votre saisie sera remise ensuite.",
+      );
+      if (!ok) return;
+    }
     setReloading(true);
     window.localStorage.setItem(STORAGE_BUILD, pending.buildId);
     window.localStorage.setItem(
@@ -283,7 +293,32 @@ export function PwaRegister({
     reloadOnce();
   }
 
-  if (!showGate || !mounted) return null;
+  if (!mounted || (!showGate && !showNudge) || !pending) return null;
+
+  if (showNudge) {
+    return createPortal(
+      <div
+        className="pointer-events-none fixed inset-x-0 top-0 z-[80] flex justify-center p-3"
+        role="status"
+      >
+        <div className="pointer-events-auto max-w-lg rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950 shadow-lg">
+          <p>
+            Une mise à jour est prête, elle s’appliquera à la fermeture de cette
+            fiche.
+          </p>
+          <button
+            type="button"
+            disabled={reloading}
+            onClick={() => void applyUpdate()}
+            className="mt-2 text-sm font-medium underline disabled:opacity-60"
+          >
+            {reloading ? "Mise à jour…" : "Mettre à jour maintenant"}
+          </button>
+        </div>
+      </div>,
+      document.body,
+    );
+  }
 
   return createPortal(
     <div

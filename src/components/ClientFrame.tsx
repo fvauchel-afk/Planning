@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
 import { PwaRegister } from "@/components/PwaRegister";
 import { SessionProvider, useSession } from "@/lib/auth/session-context";
+import { FormDraftProvider } from "@/lib/form-draft";
 import { PlanningProvider } from "@/lib/planning-context";
 import { DatabaseUnavailableGate } from "@/components/DatabaseUnavailableGate";
 import { DemandesWidget } from "@/components/DemandesWidget";
@@ -74,7 +75,9 @@ function FramedApp({ children }: { children: React.ReactNode }) {
 export function ClientFrame({ children }: { children: React.ReactNode }) {
   return (
     <SessionProvider>
-      <FramedApp>{children}</FramedApp>
+      <FormDraftProvider>
+        <FramedApp>{children}</FramedApp>
+      </FormDraftProvider>
     </SessionProvider>
   );
 }
