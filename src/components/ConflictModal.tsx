@@ -95,7 +95,10 @@ export function ConflictModal({
           <button
             type="button"
             disabled={busy}
-            onClick={onValidate}
+            onClick={() => {
+              console.log("[absence-validate] ConflictModal button click");
+              onValidate();
+            }}
             className="rounded bg-amber-700 px-3 py-2 text-sm text-amber-50 disabled:opacity-60"
           >
             {busy ? "Envoi…" : validateLabel}
