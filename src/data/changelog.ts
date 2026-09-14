@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-14-recale-apres-salarie",
+    title: "Modifier le chantier",
+    items: [
+      "Si vous changez le salarié d’une phase (fabrication, pose…), les dates des phases suivantes (thermolaquage, livraison, pose) se recalent après, sans se chevaucher.",
+      "Les dates planifiées affichées en haut du formulaire suivent les vraies dates des phases.",
+    ],
+  },
+  {
     id: "2026-09-13-supabase-retry",
     title: "Connexion à la base",
     items: [

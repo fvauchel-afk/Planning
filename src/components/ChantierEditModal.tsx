@@ -205,7 +205,12 @@ export function ChantierEditModal({
       });
       if (forceCreate) return;
     }
-    const dateEdits = visibleOnGrid
+    const startBefore = info.firstDate ?? "";
+    const endBefore = info.lastDate ?? info.firstDate ?? "";
+    const datesChanged =
+      visibleOnGrid &&
+      (planDate !== startBefore || (planEnd || planDate) !== endBefore);
+    const dateEdits = datesChanged
       ? planChantierDateEdits(
           snapshot,
           chantier.id,
