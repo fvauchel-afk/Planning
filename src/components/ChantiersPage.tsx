@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ChantierEditModal } from "@/components/ChantierEditModal";
 import {
   STATUT_CHANTIER_COLORS,
@@ -9,6 +9,7 @@ import {
   chantierPlanningInfo,
 } from "@/lib/chantier-status";
 import { usePlanning } from "@/lib/planning-context";
+import { useFormDraftReopen } from "@/lib/form-draft";
 import { PRIORITE_LABELS, type Chantier } from "@/lib/types";
 import {
   hasPendingSignalements,
@@ -17,7 +18,16 @@ import {
 
 export function ChantiersPage() {
   const { snapshot, loading } = usePlanning();
+  const { reopen, clearReopen } = useFormDraftReopen();
   const [editing, setEditing] = useState<Chantier | null>(null);
+
+  useEffect(() => {
+    if (reopen?.kind !== "chantier") return;
+    if (loading) return;
+    const found = snapshot.chantiers.find((item) => item.id === reopen.id);
+    if (found) setEditing(found);
+    clearReopen();
+  }, [reopen, loading, snapshot.chantiers, clearReopen]);
   const pendingBlock = hasPendingSignalements(snapshot);
 
   const rows = useMemo(() => {

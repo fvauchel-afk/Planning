@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-14-update-gate-keep-edits",
+    title: "Mise à jour sans perdre la saisie",
+    items: [
+      "Si une nouvelle version arrive pendant que vous modifiez des dates, un salarié de phase ou un Oui/Non, l’application n’est plus bloquée : un rappel indique que la mise à jour s’appliquera à la fermeture de la fiche.",
+      "Si vous choisissez quand même « Mettre à jour maintenant », un message prévient, et la saisie en cours est remise après le rechargement.",
+    ],
+  },
+  {
     id: "2026-09-14-live-form-saves",
     title: "Moins d’écrasement à deux sur la même fiche",
     items: [

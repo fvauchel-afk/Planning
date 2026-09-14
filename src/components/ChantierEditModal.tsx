@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { BonCommandeModal } from "@/components/BonCommandeModal";
 import { SousTraitantSelect } from "@/components/SousTraitantSelect";
 import { canGenerateBonCommande } from "@/lib/bon-commande/active-phase";
@@ -34,6 +34,13 @@ import {
   confirmStaleReload,
   useDebouncedPatch,
 } from "@/lib/form-live";
+import {
+  clearFormDraft,
+  readFormDraft,
+  setUnsavedWork,
+  writeFormDraft,
+  type ChantierCascadeDraft,
+} from "@/lib/form-draft";
 import { formatSaveError } from "@/lib/supabase/errors";
 import {
   LOGISTIQUE_ROW_ID,
@@ -63,6 +70,7 @@ export function ChantierEditModal({
   onClose: () => void;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
   const {
     snapshot,
     updateChantier,
@@ -125,6 +133,7 @@ export function ChantierEditModal({
   const cascadeBaseline = useRef("");
   const latestSnap = useRef(snapshot);
   latestSnap.current = snapshot;
+  const unsavedKey = `chantier:${chantier.id}`;
 
   const applySimplePatch = useCallback(
     async (payload: {
@@ -153,6 +162,7 @@ export function ChantierEditModal({
 
   function markCascade() {
     cascadeDirty.current = true;
+    setUnsavedWork(unsavedKey, true);
   }
 
   function applyCascadeFromSnapshot(source: PlanningSnapshot = snapshot) {
@@ -193,6 +203,23 @@ export function ChantierEditModal({
     cascadeDirty.current = false;
     cascadeBaseline.current = chantierCascadeFingerprint(source, chantier.id);
     setStaleCascade(false);
+    setUnsavedWork(unsavedKey, false);
+  }
+
+  function applyChantierDraft(draft: ChantierCascadeDraft) {
+    setDatesEstimatives(draft.datesEstimatives);
+    setAvecPose(draft.avecPose);
+    setAvecThermolaquage(draft.avecThermolaquage);
+    setAvecLivraison(draft.avecLivraison);
+    setDelaiLaquage(draft.delaiLaquage);
+    setSousTraitantId(draft.sousTraitantId);
+    setDureeLivraison(draft.dureeLivraison);
+    setEmployeLivraison(draft.employeLivraison);
+    setEmployeFabrication(draft.employeFabrication);
+    setEmployePose(draft.employePose);
+    setPlanEmployeeId(draft.planEmployeeId);
+    cascadeDirty.current = true;
+    setUnsavedWork(unsavedKey, true);
   }
 
   useEffect(() => {
@@ -207,6 +234,10 @@ export function ChantierEditModal({
     setAdresseLivraison(chantier.adresse_livraison ?? "");
     setTelephoneLivraison(chantier.telephone_livraison ?? "");
     applyCascadeFromSnapshot();
+    const draft = readFormDraft();
+    if (draft?.kind === "chantier" && draft.id === chantier.id) {
+      applyChantierDraft(draft);
+    }
     setError(null);
     live.cancel();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reset only when switching chantier
@@ -258,6 +289,13 @@ export function ChantierEditModal({
   );
 
   useEffect(() => {
+    const draft = readFormDraft();
+    if (draft?.kind === "chantier" && draft.id === chantier.id) {
+      setDatesDirty(true);
+      setPlanDate(draft.planDate);
+      setPlanEnd(draft.planEnd);
+      return;
+    }
     setDatesDirty(false);
     setPlanDate(info.firstDate ?? toISODate(new Date()));
     setPlanEnd(info.lastDate ?? info.firstDate ?? toISODate(new Date()));
@@ -323,6 +361,60 @@ export function ChantierEditModal({
     if (previewRange.firstDate) setPlanDate(previewRange.firstDate);
     if (previewRange.lastDate) setPlanEnd(previewRange.lastDate);
   }, [datesDirty, previewRange.firstDate, previewRange.lastDate]);
+
+  useEffect(() => {
+    if (!cascadeDirty.current) return;
+    writeFormDraft({
+      kind: "chantier",
+      id: chantier.id,
+      path: pathname,
+      planDate,
+      planEnd,
+      datesDirty,
+      planEmployeeId,
+      datesEstimatives,
+      avecPose,
+      avecThermolaquage,
+      avecLivraison,
+      delaiLaquage,
+      sousTraitantId,
+      dureeLivraison,
+      employeLivraison,
+      employeFabrication,
+      employePose,
+    });
+  }, [
+    pathname,
+    chantier.id,
+    planDate,
+    planEnd,
+    datesDirty,
+    planEmployeeId,
+    datesEstimatives,
+    avecPose,
+    avecThermolaquage,
+    avecLivraison,
+    delaiLaquage,
+    sousTraitantId,
+    dureeLivraison,
+    employeLivraison,
+    employeFabrication,
+    employePose,
+  ]);
+
+  useEffect(
+    () => () => {
+      setUnsavedWork(unsavedKey, false);
+    },
+    [unsavedKey],
+  );
+
+  function dismissForm() {
+    cascadeDirty.current = false;
+    setUnsavedWork(unsavedKey, false);
+    clearFormDraft("chantier", chantier.id);
+    onClose();
+  }
 
   const onedriveUrl = onedriveHref(lien || chantier.lien_dossier_onedrive || "");
   const busy = saving || scheduling || deleting;
@@ -493,7 +585,7 @@ export function ChantierEditModal({
         sous_traitant_id: avecThermolaquage ? sousTraitantId || null : null,
       });
       }
-      onClose();
+      dismissForm();
     } catch (err) {
       setError(formatSaveError(err, "le chantier n’a pas été enregistré"));
     } finally {
@@ -538,7 +630,7 @@ export function ChantierEditModal({
     setError(null);
     try {
       await deleteChantier(chantier.id);
-      onClose();
+      dismissForm();
       router.push("/chantiers");
     } catch (err) {
       setError(formatSaveError(err, "la suppression a échoué"));
@@ -1068,7 +1160,7 @@ export function ChantierEditModal({
         <div className="mt-5 flex justify-end gap-2">
           <button
             type="button"
-            onClick={onClose}
+            onClick={dismissForm}
             className="rounded border border-stone-300 px-3 py-2 text-sm"
           >
             Annuler

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
 import { AbsenceImpactEditor } from "@/components/AbsenceImpactEditor";
 import { ConflictModal } from "@/components/ConflictModal";
 import { formatLongDate } from "@/lib/dates";
@@ -21,6 +22,13 @@ import {
   useDebouncedPatch,
 } from "@/lib/form-live";
 import {
+  clearFormDraft,
+  readFormDraft,
+  setUnsavedWork,
+  useFormDraftReopen,
+  writeFormDraft,
+} from "@/lib/form-draft";
+import {
   absencePeriodNote,
   matchingRecordedAbsence,
   propositionFromDelay,
@@ -38,6 +46,8 @@ import {
 } from "@/lib/types";
 
 export function AbsencesPage() {
+  const pathname = usePathname();
+  const { reopen, clearReopen } = useFormDraftReopen();
   const {
     snapshot,
     createAbsence,
@@ -67,6 +77,7 @@ export function AbsencesPage() {
   const dirtySimple = useRef(new Set<string>());
   const cascadeBaseline = useRef("");
   const cascadeDirty = useRef(false);
+  const unsavedKey = editingId ? `absence:${editingId}` : "absence:new";
 
   const applyAbsencePatch = async (payload: {
     type?: TypeAbsence;
@@ -112,11 +123,18 @@ export function AbsencesPage() {
     setChoices((current) => defaultAbsenceChoices(snapshot, impacted, current));
   }, [impacted, reviewPayload, snapshot]);
 
+  function markAbsenceCascade() {
+    cascadeDirty.current = true;
+    setUnsavedWork(unsavedKey, true);
+  }
+
   function resetForm() {
     live.cancel();
     dirtySimple.current.clear();
     cascadeDirty.current = false;
     cascadeBaseline.current = "";
+    setUnsavedWork(unsavedKey, false);
+    if (editingId) clearFormDraft("absence", editingId);
     setEditingId(null);
     setEmployeId("");
     setType("conge");
@@ -145,6 +163,14 @@ export function AbsencesPage() {
     setReviewPayload(null);
     setChoices({});
     setConflict(null);
+    const draft = readFormDraft();
+    if (draft?.kind === "absence" && draft.id === absence.id) {
+      setEmployeId(draft.employeId);
+      setDateDebut(draft.dateDebut);
+      setDateFin(draft.dateFin);
+      cascadeDirty.current = true;
+      setUnsavedWork(`absence:${absence.id}`, true);
+    }
     window.requestAnimationFrame(() => {
       document.getElementById("absence-form")?.scrollIntoView({
         behavior: "smooth",
@@ -152,6 +178,34 @@ export function AbsencesPage() {
       });
     });
   }
+
+  useEffect(() => {
+    if (reopen?.kind !== "absence") return;
+    const found = snapshot.absences.find((item) => item.id === reopen.id);
+    if (found) startEdit(found);
+    clearReopen();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- ouvrir une seule fois le brouillon
+  }, [reopen, snapshot.absences, clearReopen]);
+
+  useEffect(() => {
+    if (!cascadeDirty.current) return;
+    if (!editingId) return;
+    writeFormDraft({
+      kind: "absence",
+      id: editingId,
+      path: pathname || "/absences",
+      employeId,
+      dateDebut,
+      dateFin,
+    });
+  }, [pathname, editingId, employeId, dateDebut, dateFin]);
+
+  useEffect(
+    () => () => {
+      setUnsavedWork(unsavedKey, false);
+    },
+    [unsavedKey],
+  );
 
   useEffect(() => {
     if (!editingId) return;
@@ -426,7 +480,7 @@ export function AbsencesPage() {
           <select
             value={employeId}
             onChange={(event) => {
-              cascadeDirty.current = true;
+              markAbsenceCascade();
               setEmployeId(event.target.value);
             }}
             className="w-full rounded border border-stone-300 px-3 py-2"
@@ -500,7 +554,7 @@ export function AbsencesPage() {
             type="date"
             value={dateDebut}
             onChange={(event) => {
-              cascadeDirty.current = true;
+              markAbsenceCascade();
               setDateDebut(event.target.value);
             }}
             className="w-full rounded border border-stone-300 px-3 py-2"
@@ -512,7 +566,7 @@ export function AbsencesPage() {
             type="date"
             value={dateFin}
             onChange={(event) => {
-              cascadeDirty.current = true;
+              markAbsenceCascade();
               setDateFin(event.target.value);
             }}
             className="w-full rounded border border-stone-300 px-3 py-2"
