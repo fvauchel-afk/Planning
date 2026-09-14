@@ -2,8 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { ConflictModal } from "@/components/ConflictModal";
+import { AbsenceImpactEditor } from "@/components/AbsenceImpactEditor";
 import {
   candidatesForChoices,
+  defaultAbsenceChoices,
   listImpactedPhases,
   planAbsenceImprevue,
   type AbsencePhaseChoice,
@@ -14,41 +16,11 @@ import { generateDelaySolutions, propositionFromSolutions } from "@/lib/engine/p
 import { usePlanning } from "@/lib/planning-context";
 import {
   ABSENCE_LABELS,
-  PHASE_LABELS,
   TYPES_ABSENCE,
   absenceLabel,
   type Employee,
   type TypeAbsence,
 } from "@/lib/types";
-
-function defaultChoices(
-  snapshot: ReturnType<typeof usePlanning>["snapshot"],
-  impacted: ReturnType<typeof listImpactedPhases>,
-  current: Record<string, AbsencePhaseChoice>,
-): Record<string, AbsencePhaseChoice> {
-  const lists = candidatesForChoices(snapshot, impacted, current);
-  const next: Record<string, AbsencePhaseChoice> = {};
-  for (const row of impacted) {
-    const list = lists[row.phase.id] ?? [];
-    const previous = current[row.phase.id];
-    if (list.length === 0) {
-      next[row.phase.id] = { action: "delay" };
-      continue;
-    }
-    const stillValid =
-      previous?.action === "reassign" &&
-      previous.employeeId &&
-      list.some((item) => item.id === previous.employeeId);
-    if (previous?.action === "delay") {
-      next[row.phase.id] = { action: "delay" };
-    } else if (stillValid) {
-      next[row.phase.id] = previous;
-    } else {
-      next[row.phase.id] = { action: "reassign", employeeId: list[0].id };
-    }
-  }
-  return next;
-}
 
 export function AbsenceImprevueModal({
   employee,
@@ -86,7 +58,7 @@ export function AbsenceImprevueModal({
   );
 
   useEffect(() => {
-    setChoices((current) => defaultChoices(snapshot, impacted, current));
+    setChoices((current) => defaultAbsenceChoices(snapshot, impacted, current));
   }, [impacted, snapshot]);
 
   async function persist(forceConflict = false) {
@@ -247,89 +219,12 @@ export function AbsenceImprevueModal({
                 simplement enregistrée.
               </p>
             ) : (
-              <ul className="space-y-3">
-                {impacted.map((row) => {
-                  const list = candidates[row.phase.id] ?? [];
-                  const choice = choices[row.phase.id] ?? { action: "delay" };
-                  const selectedId = choice.employeeId ?? list[0]?.id ?? "";
-                  return (
-                    <li
-                      key={row.phase.id}
-                      className="rounded-lg border border-stone-200 p-3 text-sm"
-                    >
-                      <p className="font-medium">
-                        {row.nom_client} — {row.nom_element} ·{" "}
-                        {PHASE_LABELS[row.phase.type_phase]}
-                      </p>
-                      <p className="text-xs text-stone-500">
-                        {row.phase.date_debut
-                          ? `${formatLongDate(row.phase.date_debut)} → ${formatLongDate(row.phase.date_fin ?? row.phase.date_debut)}`
-                          : "Dates non posées"}
-                      </p>
-                      <div className="mt-2 space-y-2">
-                        <label className="flex items-center gap-2">
-                          <input
-                            type="radio"
-                            name={`res-${row.phase.id}`}
-                            checked={choice.action === "delay"}
-                            onChange={() =>
-                              setChoices((current) => ({
-                                ...current,
-                                [row.phase.id]: { action: "delay" },
-                              }))
-                            }
-                          />
-                          Décaler
-                        </label>
-                        {list.length > 0 ? (
-                          <label className="flex flex-wrap items-center gap-2">
-                            <input
-                              type="radio"
-                              name={`res-${row.phase.id}`}
-                              checked={choice.action === "reassign"}
-                              onChange={() =>
-                                setChoices((current) => ({
-                                  ...current,
-                                  [row.phase.id]: {
-                                    action: "reassign",
-                                    employeeId: selectedId || list[0].id,
-                                  },
-                                }))
-                              }
-                            />
-                            <span>Réassigner à</span>
-                            <select
-                              className="min-w-[12rem] rounded border border-stone-300 px-2 py-1"
-                              value={selectedId}
-                              onChange={(event) =>
-                                setChoices((current) => ({
-                                  ...current,
-                                  [row.phase.id]: {
-                                    action: "reassign",
-                                    employeeId: event.target.value,
-                                  },
-                                }))
-                              }
-                            >
-                              {list.map((item, index) => (
-                                <option key={item.id} value={item.id}>
-                                  {item.nom}
-                                  {index === 0 ? " (moins chargé cette semaine)" : ""}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-                        ) : (
-                          <p className="text-xs text-amber-800">
-                            Aucune réassignation possible (personne de même rôle
-                            libre sur ce créneau). Seul le décalage est proposé.
-                          </p>
-                        )}
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
+              <AbsenceImpactEditor
+                impacted={impacted}
+                candidates={candidates}
+                choices={choices}
+                onChange={setChoices}
+              />
             )}
             {error && <p className="text-sm text-red-700">{error}</p>}
             <div className="flex flex-wrap gap-2 pt-2">

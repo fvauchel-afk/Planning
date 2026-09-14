@@ -701,6 +701,7 @@ export function planAbsenceCascade(
     date_fin: string;
     type: PlanningSnapshot["absences"][number]["type"];
   },
+  options?: { ignoreAbsenceId?: string },
 ): DelayPlanResult {
   const origin = snapshot.phases.find((item) => item.id === phaseId);
   if (!origin || !origin.date_debut || !origin.date_fin) {
@@ -715,7 +716,9 @@ export function planAbsenceCascade(
   const withAbsence: PlanningSnapshot = {
     ...snapshot,
     absences: [
-      ...snapshot.absences,
+      ...snapshot.absences.filter(
+        (item) => item.id !== options?.ignoreAbsenceId,
+      ),
       {
         id: "pending-absence",
         employe_id: pendingAbsence.employe_id,

@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-14-absence-chevauche-chantier",
+    title: "Absences et chantiers",
+    items: [
+      "Si vous enregistrez un congé (ou une autre absence) sur des dates déjà occupées par un chantier, un écran d’avertissement liste les phases concernées.",
+      "Vous pouvez annuler, ou confirmer l’absence : les chantiers sont alors décalés ou réassignés, comme pour un conflit de placement.",
+    ],
+  },
+  {
     id: "2026-09-14-onedrive-me-drive",
     title: "Dossier OneDrive",
     items: [

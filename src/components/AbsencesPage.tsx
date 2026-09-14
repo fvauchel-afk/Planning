@@ -1,20 +1,39 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { AbsenceImpactEditor } from "@/components/AbsenceImpactEditor";
+import { ConflictModal } from "@/components/ConflictModal";
 import { formatLongDate } from "@/lib/dates";
 import { compareEmployeesByOrdre } from "@/lib/display-order";
+import {
+  candidatesForChoices,
+  defaultAbsenceChoices,
+  listImpactedPhases,
+  planAbsenceImprevue,
+  type AbsencePhaseChoice,
+} from "@/lib/engine/absence-imprevue";
+import { generateDelaySolutions, propositionFromSolutions } from "@/lib/engine/plan-solutions";
 import { usePlanning } from "@/lib/planning-context";
+import { propositionFromDelay } from "@/lib/signalements";
 import { formatSaveError } from "@/lib/supabase/errors";
 import {
   ABSENCE_LABELS,
   TYPES_ABSENCE,
   absenceLabel,
   type Absence,
+  type NewAbsenceInput,
   type TypeAbsence,
 } from "@/lib/types";
 
 export function AbsencesPage() {
-  const { snapshot, createAbsence, updateAbsence, deleteAbsence } = usePlanning();
+  const {
+    snapshot,
+    createAbsence,
+    updateAbsence,
+    deleteAbsence,
+    applyPhasePatches,
+    createSignalement,
+  } = usePlanning();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [employeId, setEmployeId] = useState("");
   const [type, setType] = useState<TypeAbsence>("conge");
@@ -22,10 +41,42 @@ export function AbsencesPage() {
   const [dateFin, setDateFin] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [motifPrecision, setMotifPrecision] = useState("");
+  const [reviewPayload, setReviewPayload] = useState<NewAbsenceInput | null>(null);
+  const [choices, setChoices] = useState<Record<string, AbsencePhaseChoice>>({});
+  const [saving, setSaving] = useState(false);
+  const [conflict, setConflict] = useState<ReturnType<typeof planAbsenceImprevue> | null>(
+    null,
+  );
 
   const employeesById = new Map(
     snapshot.employees.map((employee) => [employee.id, employee]),
   );
+
+  const impacted = useMemo(
+    () =>
+      reviewPayload
+        ? listImpactedPhases(
+            snapshot,
+            reviewPayload.employe_id,
+            reviewPayload.date_debut,
+            reviewPayload.date_fin,
+          )
+        : [],
+    [reviewPayload, snapshot],
+  );
+
+  const candidates = useMemo(
+    () =>
+      reviewPayload
+        ? candidatesForChoices(snapshot, impacted, choices)
+        : {},
+    [choices, impacted, reviewPayload, snapshot],
+  );
+
+  useEffect(() => {
+    if (!reviewPayload) return;
+    setChoices((current) => defaultAbsenceChoices(snapshot, impacted, current));
+  }, [impacted, reviewPayload, snapshot]);
 
   function resetForm() {
     setEditingId(null);
@@ -35,6 +86,9 @@ export function AbsencesPage() {
     setDateFin("");
     setMotifPrecision("");
     setError(null);
+    setReviewPayload(null);
+    setChoices({});
+    setConflict(null);
   }
 
   function startEdit(absence: Absence) {
@@ -45,6 +99,9 @@ export function AbsencesPage() {
     setDateFin(absence.date_fin.slice(0, 10));
     setMotifPrecision(absence.motif_precision ?? "");
     setError(null);
+    setReviewPayload(null);
+    setChoices({});
+    setConflict(null);
     window.requestAnimationFrame(() => {
       document.getElementById("absence-form")?.scrollIntoView({
         behavior: "smooth",
@@ -53,39 +110,105 @@ export function AbsencesPage() {
     });
   }
 
-  async function onSubmit(event: React.FormEvent) {
-    event.preventDefault();
+  function validatedPayload(): NewAbsenceInput | null {
     if (!employeId || !dateDebut || !dateFin) {
       setError("Tous les champs sont obligatoires.");
-      return;
+      return null;
     }
     if (dateFin < dateDebut) {
       setError("La date de fin doit être après la date de début.");
-      return;
+      return null;
     }
     if (type === "autre" && !motifPrecision.trim()) {
       setError("Précisez le motif pour une absence de type « Autre ».");
-      return;
+      return null;
     }
     setError(null);
-    const payload = {
+    return {
       employe_id: employeId,
       type,
       date_debut: dateDebut,
       date_fin: dateFin,
       motif_precision: type === "autre" ? motifPrecision.trim() : null,
     };
+  }
+
+  async function persistAbsence(
+    payload: NewAbsenceInput,
+    phaseChoices: Record<string, AbsencePhaseChoice>,
+    forceConflict = false,
+  ) {
+    setSaving(true);
+    setError(null);
     try {
+      const plan = planAbsenceImprevue(snapshot, payload, phaseChoices, {
+        ignoreAbsenceId: editingId ?? undefined,
+      });
+      if (plan.status === "conflict" && !forceConflict) {
+        setConflict(plan);
+        return;
+      }
       if (editingId) {
         await updateAbsence({ id: editingId, ...payload });
       } else {
         await createAbsence(payload);
       }
+      const overlap = listImpactedPhases(
+        snapshot,
+        payload.employe_id,
+        payload.date_debut,
+        payload.date_fin,
+      );
+      if (plan.status === "conflict") {
+        await createSignalement({
+          employe_id: payload.employe_id,
+          phase_id: overlap[0]?.phase.id ?? plan.patches[0]?.id ?? null,
+          retard_demi_journees: 1,
+          sens: "retard",
+          note: `Absence du ${payload.date_debut} au ${payload.date_fin} : l’algorithme propose des décalages, non appliqués tant que Mika ou Alexis n’a pas validé.`,
+          origine: "decalage_admin",
+          statut: "en_attente",
+          proposition:
+            propositionFromSolutions(
+              generateDelaySolutions(
+                snapshot,
+                overlap[0]?.phase.id ?? plan.patches[0]?.id ?? "",
+                2,
+                plan,
+              ),
+            ) ?? propositionFromDelay(snapshot, plan),
+        });
+      } else if (plan.patches.length > 0) {
+        await applyPhasePatches(plan.patches);
+      }
       resetForm();
     } catch (err) {
       setError(formatSaveError(err, "l’absence n’a pas été enregistrée"));
+    } finally {
+      setSaving(false);
     }
   }
+
+  async function onSubmit(event: React.FormEvent) {
+    event.preventDefault();
+    const payload = validatedPayload();
+    if (!payload) return;
+    const overlap = listImpactedPhases(
+      snapshot,
+      payload.employe_id,
+      payload.date_debut,
+      payload.date_fin,
+    );
+    if (overlap.length > 0) {
+      setReviewPayload(payload);
+      return;
+    }
+    await persistAbsence(payload, {});
+  }
+
+  const reviewEmployee = reviewPayload
+    ? employeesById.get(reviewPayload.employe_id)
+    : undefined;
 
   return (
     <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
@@ -161,13 +284,13 @@ export function AbsencesPage() {
 
       <form
         id="absence-form"
-        onSubmit={onSubmit}
+        onSubmit={(event) => void onSubmit(event)}
         className="h-fit space-y-3 rounded-lg border border-stone-300 bg-white p-4"
       >
         <h3 className="font-medium">
           {editingId ? "Modifier l’absence" : "Ajouter une absence"}
         </h3>
-        {error && <p className="text-sm text-red-700">{error}</p>}
+        {error && !reviewPayload && <p className="text-sm text-red-700">{error}</p>}
         <label className="block text-sm">
           <span className="mb-1 block">Employé</span>
           <select
@@ -232,7 +355,8 @@ export function AbsencesPage() {
         <div className="flex gap-2">
           <button
             type="submit"
-            className="rounded bg-amber-700 px-3 py-2 text-sm text-amber-50"
+            disabled={saving}
+            className="rounded bg-amber-700 px-3 py-2 text-sm text-amber-50 disabled:opacity-60"
           >
             {editingId ? "Enregistrer les modifications" : "Enregistrer"}
           </button>
@@ -247,6 +371,77 @@ export function AbsencesPage() {
           ) : null}
         </div>
       </form>
+
+      {reviewPayload && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/50 p-4">
+          <div className="max-h-[90vh] w-full max-w-xl overflow-auto rounded-xl bg-white p-5 shadow-xl">
+            <h3 className="font-serif text-2xl text-stone-900">
+              Conflit avec des chantiers planifiés
+            </h3>
+            <p className="mt-2 text-sm text-stone-600">
+              {reviewEmployee?.nom ?? "Ce salarié"} a déjà des phases de chantier
+              sur {formatLongDate(reviewPayload.date_debut)}
+              {reviewPayload.date_fin !== reviewPayload.date_debut
+                ? ` → ${formatLongDate(reviewPayload.date_fin)}`
+                : ""}{" "}
+              ({absenceLabel(reviewPayload)}). Annulez l’absence, ou confirmez-la
+              : les chantiers concernés seront recalés (décalage ou
+              réassignation).
+            </p>
+            <div className="mt-4">
+              <AbsenceImpactEditor
+                impacted={impacted}
+                candidates={candidates}
+                choices={choices}
+                onChange={setChoices}
+              />
+            </div>
+            {error && <p className="mt-3 text-sm text-red-700">{error}</p>}
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={saving}
+                className="rounded-lg bg-stone-900 px-4 py-2 text-sm text-white disabled:opacity-60"
+                onClick={() => void persistAbsence(reviewPayload, choices)}
+              >
+                {saving ? "Enregistrement…" : "Confirmer l’absence et recaler"}
+              </button>
+              <button
+                type="button"
+                disabled={saving}
+                className="rounded-lg border border-stone-300 px-4 py-2 text-sm"
+                onClick={() => {
+                  setReviewPayload(null);
+                  setChoices({});
+                  setConflict(null);
+                  setError(null);
+                }}
+              >
+                Annuler l’absence
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {conflict && (
+        <ConflictModal
+          title="Conflit de placement"
+          message={conflict.message}
+          displacements={conflict.displacements}
+          incoming={[]}
+          showIncoming={false}
+          validateLabel="Envoyer pour validation"
+          adjustLabel="Annuler"
+          onValidate={() => {
+            const payload = reviewPayload;
+            setConflict(null);
+            if (payload) void persistAbsence(payload, choices, true);
+          }}
+          onAdjust={() => setConflict(null)}
+          onCancel={() => setConflict(null)}
+        />
+      )}
     </div>
   );
 }
