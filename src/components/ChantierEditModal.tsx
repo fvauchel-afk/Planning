@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BonCommandeModal } from "@/components/BonCommandeModal";
 import { SousTraitantSelect } from "@/components/SousTraitantSelect";
 import { canGenerateBonCommande } from "@/lib/bon-commande/active-phase";
 import { chantierVisibleOnGrid } from "@/lib/calendar";
-import { estimativePhaseIdsForChantier } from "@/lib/dates-estimatives";
+import { estimativePhaseIdsForChantier, chantierHasEstimativeDates } from "@/lib/dates-estimatives";
 import {
   STATUT_CHANTIER_LABELS,
   chantierDateRange,
@@ -28,12 +28,19 @@ import { employeeCanTakePhase } from "@/lib/chantier-status";
 import { compareEmployeesByOrdre } from "@/lib/display-order";
 import { moisToToleranceJours, toleranceJoursToMois } from "@/lib/priorite";
 import { usePlanning } from "@/lib/planning-context";
+import {
+  STALE_CHANTIER_MESSAGE,
+  chantierCascadeFingerprint,
+  confirmStaleReload,
+  useDebouncedPatch,
+} from "@/lib/form-live";
 import { formatSaveError } from "@/lib/supabase/errors";
 import {
   LOGISTIQUE_ROW_ID,
   PRIORITES,
   PRIORITE_LABELS,
   type Chantier,
+  type PlanningSnapshot,
   type Priorite,
 } from "@/lib/types";
 
@@ -59,11 +66,13 @@ export function ChantierEditModal({
   const {
     snapshot,
     updateChantier,
+    patchChantier,
     deleteChantier,
     scheduleChantierDay,
     applyPhaseEdits,
     confirmPhaseDates,
     ensureChantierOnedriveFolder,
+    refresh,
   } = usePlanning();
   const [nomClient, setNomClient] = useState(chantier.nom_client);
   const [adresse, setAdresse] = useState(chantier.adresse);
@@ -110,6 +119,125 @@ export function ChantierEditModal({
   const [employeLivraison, setEmployeLivraison] = useState("");
   const [employeFabrication, setEmployeFabrication] = useState("");
   const [employePose, setEmployePose] = useState("");
+  const [staleCascade, setStaleCascade] = useState(false);
+  const dirtySimple = useRef(new Set<string>());
+  const cascadeDirty = useRef(false);
+  const cascadeBaseline = useRef("");
+  const latestSnap = useRef(snapshot);
+  latestSnap.current = snapshot;
+
+  const applySimplePatch = useCallback(
+    async (payload: {
+      nom_client?: string;
+      adresse?: string;
+      priorite?: Priorite;
+      tolerance_deplacement_jours?: number | null;
+      lien_dossier_onedrive?: string | null;
+      adresse_livraison?: string | null;
+      telephone_livraison?: string | null;
+    }) => {
+      try {
+        await patchChantier({ id: chantier.id, ...payload });
+        Object.keys(payload).forEach((key) => dirtySimple.current.delete(key));
+      } catch (err) {
+        setError(formatSaveError(err, "l’enregistrement automatique a échoué"));
+      }
+    },
+    [chantier.id, patchChantier],
+  );
+  const live = useDebouncedPatch(applySimplePatch);
+
+  function markSimple(key: string) {
+    dirtySimple.current.add(key);
+  }
+
+  function markCascade() {
+    cascadeDirty.current = true;
+  }
+
+  function applyCascadeFromSnapshot(source: PlanningSnapshot = snapshot) {
+    const options = chantierPhaseOptions(source, chantier.id);
+    const latest =
+      source.chantiers.find((item) => item.id === chantier.id) ?? chantier;
+    setDatesEstimatives(chantierHasEstimativeDates(source, chantier.id));
+    setAvecPose(options.avecPose);
+    setAvecThermolaquage(options.avecThermolaquage);
+    setAvecLivraison(options.avecLivraison);
+    setDelaiLaquage(String(latest.delai_sous_traitance_jours || 5));
+    setSousTraitantId(latest.sous_traitant_id ?? "");
+    const liv = source.phases.find((phase) => {
+      const element = source.elements.find((item) => item.id === phase.element_id);
+      return (
+        element?.chantier_id === chantier.id &&
+        phase.type_phase === "livraison" &&
+        (Boolean(phase.date_debut) || Number(phase.duree_estimee_heures) > 0)
+      );
+    });
+    setDureeLivraison(String(liv?.duree_estimee_heures || 2));
+    setEmployeLivraison(liv?.employe_id ?? "");
+    const fab = source.phases.find((phase) => {
+      const element = source.elements.find((item) => item.id === phase.element_id);
+      return element?.chantier_id === chantier.id && phase.type_phase === "fabrication";
+    });
+    const pose = source.phases.find((phase) => {
+      const element = source.elements.find((item) => item.id === phase.element_id);
+      return (
+        element?.chantier_id === chantier.id &&
+        phase.type_phase === "pose" &&
+        (Boolean(phase.date_debut) || Number(phase.duree_estimee_heures) > 0)
+      );
+    });
+    setEmployeFabrication(fab?.employe_id ?? "");
+    setEmployePose(pose?.employe_id ?? "");
+    setDatesDirty(false);
+    cascadeDirty.current = false;
+    cascadeBaseline.current = chantierCascadeFingerprint(source, chantier.id);
+    setStaleCascade(false);
+  }
+
+  useEffect(() => {
+    dirtySimple.current.clear();
+    cascadeDirty.current = false;
+    cascadeBaseline.current = chantierCascadeFingerprint(snapshot, chantier.id);
+    setNomClient(chantier.nom_client);
+    setAdresse(chantier.adresse);
+    setLien(chantier.lien_dossier_onedrive ?? "");
+    setPriorite(chantier.priorite);
+    setToleranceMois(toleranceJoursToMois(chantier.tolerance_deplacement_jours));
+    setAdresseLivraison(chantier.adresse_livraison ?? "");
+    setTelephoneLivraison(chantier.telephone_livraison ?? "");
+    applyCascadeFromSnapshot();
+    setError(null);
+    live.cancel();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reset only when switching chantier
+  }, [chantier.id]);
+
+  useEffect(() => {
+    const latest =
+      snapshot.chantiers.find((item) => item.id === chantier.id) ?? chantier;
+    if (!dirtySimple.current.has("nom_client")) setNomClient(latest.nom_client);
+    if (!dirtySimple.current.has("adresse")) setAdresse(latest.adresse);
+    if (!dirtySimple.current.has("lien_dossier_onedrive")) {
+      setLien(latest.lien_dossier_onedrive ?? "");
+    }
+    if (!dirtySimple.current.has("priorite")) setPriorite(latest.priorite);
+    if (!dirtySimple.current.has("tolerance_deplacement_jours")) {
+      setToleranceMois(toleranceJoursToMois(latest.tolerance_deplacement_jours));
+    }
+    if (!dirtySimple.current.has("adresse_livraison")) {
+      setAdresseLivraison(latest.adresse_livraison ?? "");
+    }
+    if (!dirtySimple.current.has("telephone_livraison")) {
+      setTelephoneLivraison(latest.telephone_livraison ?? "");
+    }
+    const remoteFp = chantierCascadeFingerprint(snapshot, chantier.id);
+    if (!cascadeDirty.current) {
+      applyCascadeFromSnapshot();
+    } else {
+      setStaleCascade(remoteFp !== cascadeBaseline.current && remoteFp !== "");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [snapshot, chantier]);
 
   const info = useMemo(
     () => chantierPlanningInfo(snapshot, chantier.id),
@@ -128,47 +256,6 @@ export function ChantierEditModal({
         .sort(compareEmployeesByOrdre),
     [snapshot.employees],
   );
-
-  useEffect(() => {
-    setNomClient(chantier.nom_client);
-    setAdresse(chantier.adresse);
-    setLien(chantier.lien_dossier_onedrive ?? "");
-    setPriorite(chantier.priorite);
-    setToleranceMois(toleranceJoursToMois(chantier.tolerance_deplacement_jours));
-    setDatesEstimatives(Boolean(info.estimatif));
-    setAvecPose(currentOptions.avecPose);
-    setAvecThermolaquage(currentOptions.avecThermolaquage);
-    setAvecLivraison(currentOptions.avecLivraison);
-    setDelaiLaquage(String(chantier.delai_sous_traitance_jours || 5));
-    setSousTraitantId(chantier.sous_traitant_id ?? "");
-    setAdresseLivraison(chantier.adresse_livraison ?? "");
-    setTelephoneLivraison(chantier.telephone_livraison ?? "");
-    const liv = snapshot.phases.find((phase) => {
-      const element = snapshot.elements.find((item) => item.id === phase.element_id);
-      return (
-        element?.chantier_id === chantier.id &&
-        phase.type_phase === "livraison" &&
-        (Boolean(phase.date_debut) || Number(phase.duree_estimee_heures) > 0)
-      );
-    });
-    setDureeLivraison(String(liv?.duree_estimee_heures || 2));
-    setEmployeLivraison(liv?.employe_id ?? "");
-    const fab = snapshot.phases.find((phase) => {
-      const element = snapshot.elements.find((item) => item.id === phase.element_id);
-      return element?.chantier_id === chantier.id && phase.type_phase === "fabrication";
-    });
-    const pose = snapshot.phases.find((phase) => {
-      const element = snapshot.elements.find((item) => item.id === phase.element_id);
-      return (
-        element?.chantier_id === chantier.id &&
-        phase.type_phase === "pose" &&
-        (Boolean(phase.date_debut) || Number(phase.duree_estimee_heures) > 0)
-      );
-    });
-    setEmployeFabrication(fab?.employe_id ?? "");
-    setEmployePose(pose?.employe_id ?? "");
-    setError(null);
-  }, [chantier, info.estimatif, currentOptions, snapshot]);
 
   useEffect(() => {
     setDatesDirty(false);
@@ -242,10 +329,34 @@ export function ChantierEditModal({
 
   function onChangeStart(next: string) {
     setDatesDirty(true);
+    markCascade();
     if (planDate && planEnd) {
       setPlanEnd(addDays(planEnd, calendarDaysBetween(planDate, next)));
     }
     setPlanDate(next);
+  }
+
+  async function abortIfStaleCascade(force = false): Promise<boolean> {
+    const latest = (await refresh({ quiet: true })) ?? latestSnap.current;
+    latestSnap.current = latest;
+    const remote = chantierCascadeFingerprint(latest, chantier.id);
+    const range = chantierDateRange(latest, chantier.id);
+    if (!force && !cascadeDirty.current) {
+      applyCascadeFromSnapshot(latest);
+      if (!datesDirty) {
+        setPlanDate(range.firstDate ?? toISODate(new Date()));
+        setPlanEnd(range.lastDate ?? range.firstDate ?? toISODate(new Date()));
+      }
+      return false;
+    }
+    if (!remote || remote === cascadeBaseline.current) return false;
+    const reload = confirmStaleReload(STALE_CHANTIER_MESSAGE);
+    if (reload) {
+      applyCascadeFromSnapshot(latest);
+      setPlanDate(range.firstDate ?? toISODate(new Date()));
+      setPlanEnd(range.lastDate ?? range.firstDate ?? toISODate(new Date()));
+    }
+    return true;
   }
 
   async function persistPlanning(forceCreate: boolean) {
@@ -264,16 +375,17 @@ export function ChantierEditModal({
       });
       if (forceCreate) return;
     }
+    const snap = latestSnap.current;
     const dateEdits =
       visibleOnGrid && datesDirty
         ? planChantierDateEdits(
-            snapshot,
+            snap,
             chantier.id,
             planDate,
             planEnd || planDate,
           )
         : {};
-    const preview = previewPhaseEdits(snapshot, dateEdits);
+    const preview = previewPhaseEdits(snap, dateEdits);
     const optionEdits = planChantierOptionEdits(preview, chantier.id, {
       avecPose,
       avecThermolaquage,
@@ -321,6 +433,13 @@ export function ChantierEditModal({
     setSaving(true);
     setError(null);
     try {
+      const hadCascadeEdits = cascadeDirty.current;
+      await live.flush();
+      if (await abortIfStaleCascade()) {
+        setSaving(false);
+        return;
+      }
+      if (hadCascadeEdits) {
       const removed: string[] = [];
       if (currentOptions.avecThermolaquage && !avecThermolaquage) {
         removed.push("Thermolaquage / galvanisation");
@@ -349,7 +468,10 @@ export function ChantierEditModal({
         datesDirty &&
         (planDate !== startBefore || (planEnd || planDate) !== endBefore);
       await persistPlanning(false);
-      const confirmIds = estimativePhaseIdsForChantier(snapshot, chantier.id);
+      const confirmIds = estimativePhaseIdsForChantier(
+        latestSnap.current,
+        chantier.id,
+      );
       const confirmNow = (datesChanged || !datesEstimatives) && confirmIds.length > 0;
       if (confirmNow) {
         await confirmPhaseDates(confirmIds);
@@ -370,6 +492,7 @@ export function ChantierEditModal({
         telephone_livraison: avecLivraison ? telephoneLivraison.trim() : null,
         sous_traitant_id: avecThermolaquage ? sousTraitantId || null : null,
       });
+      }
       onClose();
     } catch (err) {
       setError(formatSaveError(err, "le chantier n’a pas été enregistré"));
@@ -394,7 +517,14 @@ export function ChantierEditModal({
     setScheduling(true);
     setError(null);
     try {
+      if (await abortIfStaleCascade(true)) {
+        setScheduling(false);
+        return;
+      }
+      markCascade();
       await persistPlanning(true);
+      cascadeDirty.current = false;
+      setStaleCascade(false);
     } catch (err) {
       setError(formatSaveError(err, "la planification a échoué"));
     } finally {
@@ -428,12 +558,40 @@ export function ChantierEditModal({
           {info.rangeLabel ? ` · ${info.rangeLabel}` : ""}
           {datesEstimatives ? " · Estimatif" : ""}
         </p>
+        <p className="mt-2 text-xs text-stone-500">
+          Nom, adresse, priorité et lien OneDrive s’enregistrent tout seuls. Les
+          dates, salariés et Oui/Non des phases s’appliquent avec Enregistrer.
+        </p>
+        {staleCascade ? (
+          <p className="mt-2 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+            Ce chantier a été modifié entre-temps par quelqu’un d’autre.{" "}
+            <button
+              type="button"
+              className="font-medium underline"
+              onClick={() => {
+                applyCascadeFromSnapshot();
+                setPlanDate(info.firstDate ?? toISODate(new Date()));
+                setPlanEnd(info.lastDate ?? info.firstDate ?? toISODate(new Date()));
+              }}
+            >
+              Recharger la fiche
+            </button>
+          </p>
+        ) : null}
         <div className="mt-4 space-y-3">
           <label className="block text-sm">
             <span className="mb-1 block">Nom</span>
             <input
               value={nomClient}
-              onChange={(event) => setNomClient(event.target.value)}
+              onChange={(event) => {
+                const value = event.target.value;
+                setNomClient(value);
+                markSimple("nom_client");
+                if (value.trim()) live.schedule({ nom_client: value.trim() });
+              }}
+              onBlur={() => {
+                if (nomClient.trim()) void live.flush();
+              }}
               className="w-full rounded border border-stone-300 px-3 py-2"
             />
           </label>
@@ -441,7 +599,13 @@ export function ChantierEditModal({
             <span className="mb-1 block">Adresse</span>
             <input
               value={adresse}
-              onChange={(event) => setAdresse(event.target.value)}
+              onChange={(event) => {
+                const value = event.target.value;
+                setAdresse(value);
+                markSimple("adresse");
+                live.schedule({ adresse: value.trim() });
+              }}
+              onBlur={() => void live.flush()}
               className="w-full rounded border border-stone-300 px-3 py-2"
             />
           </label>
@@ -449,7 +613,18 @@ export function ChantierEditModal({
             <span className="mb-1 block">Priorité</span>
             <select
               value={priorite}
-              onChange={(event) => setPriorite(event.target.value as Priorite)}
+              onChange={(event) => {
+                const value = event.target.value as Priorite;
+                setPriorite(value);
+                markSimple("priorite");
+                void applySimplePatch({
+                  priorite: value,
+                  tolerance_deplacement_jours:
+                    value === "pas_presse"
+                      ? moisToToleranceJours(toleranceMois)
+                      : null,
+                });
+              }}
               className="w-full rounded border border-stone-300 px-3 py-2"
             >
               {PRIORITES.map((value) => (
@@ -464,7 +639,15 @@ export function ChantierEditModal({
               <span className="mb-1 block">Marge de déplacement</span>
               <select
                 value={toleranceMois}
-                onChange={(event) => setToleranceMois(Number(event.target.value))}
+                onChange={(event) => {
+                  const mois = Number(event.target.value);
+                  setToleranceMois(mois);
+                  markSimple("tolerance_deplacement_jours");
+                  void applySimplePatch({
+                    priorite: "pas_presse",
+                    tolerance_deplacement_jours: moisToToleranceJours(mois),
+                  });
+                }}
                 className="w-full rounded border border-stone-300 px-3 py-2"
               >
                 {[1, 2, 3, 4, 5, 6].map((mois) => (
@@ -479,7 +662,15 @@ export function ChantierEditModal({
             <span className="mb-1 block">Lien dossier OneDrive</span>
             <input
               value={lien}
-              onChange={(event) => setLien(event.target.value)}
+              onChange={(event) => {
+                const value = event.target.value;
+                setLien(value);
+                markSimple("lien_dossier_onedrive");
+                live.schedule({
+                  lien_dossier_onedrive: value.trim() || null,
+                });
+              }}
+              onBlur={() => void live.flush()}
               className="w-full rounded border border-stone-300 px-3 py-2"
             />
           </label>
@@ -513,7 +704,10 @@ export function ChantierEditModal({
                   type="radio"
                   name="edit-avec-pose"
                   checked={avecPose}
-                  onChange={() => setAvecPose(true)}
+                  onChange={() => {
+                    markCascade();
+                    setAvecPose(true);
+                  }}
                 />
                 Oui
               </label>
@@ -522,7 +716,10 @@ export function ChantierEditModal({
                   type="radio"
                   name="edit-avec-pose"
                   checked={!avecPose}
-                  onChange={() => setAvecPose(false)}
+                  onChange={() => {
+                    markCascade();
+                    setAvecPose(false);
+                  }}
                 />
                 Non
               </label>
@@ -534,7 +731,10 @@ export function ChantierEditModal({
                 </span>
                 <select
                   value={employePose}
-                  onChange={(event) => setEmployePose(event.target.value)}
+                  onChange={(event) => {
+                    markCascade();
+                    setEmployePose(event.target.value);
+                  }}
                   className="w-full rounded border border-stone-300 bg-white px-3 py-2"
                 >
                   <option value="">Auto (premier disponible)</option>
@@ -557,7 +757,10 @@ export function ChantierEditModal({
               </span>
               <select
                 value={employeFabrication}
-                onChange={(event) => setEmployeFabrication(event.target.value)}
+                  onChange={(event) => {
+                    markCascade();
+                    setEmployeFabrication(event.target.value);
+                  }}
                 className="w-full rounded border border-stone-300 bg-white px-3 py-2"
               >
                 <option value="">Auto (premier disponible)</option>
@@ -583,7 +786,10 @@ export function ChantierEditModal({
                   type="radio"
                   name="edit-avec-thermolaquage"
                   checked={avecThermolaquage}
-                  onChange={() => setAvecThermolaquage(true)}
+                  onChange={() => {
+                    markCascade();
+                    setAvecThermolaquage(true);
+                  }}
                 />
                 Oui
               </label>
@@ -592,7 +798,10 @@ export function ChantierEditModal({
                   type="radio"
                   name="edit-avec-thermolaquage"
                   checked={!avecThermolaquage}
-                  onChange={() => setAvecThermolaquage(false)}
+                  onChange={() => {
+                    markCascade();
+                    setAvecThermolaquage(false);
+                  }}
                 />
                 Non
               </label>
@@ -608,13 +817,19 @@ export function ChantierEditModal({
                     min={1}
                     max={60}
                     value={delaiLaquage}
-                    onChange={(event) => setDelaiLaquage(event.target.value)}
+                    onChange={(event) => {
+                      markCascade();
+                      setDelaiLaquage(event.target.value);
+                    }}
                     className="w-full rounded border border-stone-300 bg-white px-3 py-2"
                   />
                 </label>
                 <SousTraitantSelect
                   value={sousTraitantId}
-                  onChange={setSousTraitantId}
+                  onChange={(id) => {
+                    markCascade();
+                    setSousTraitantId(id);
+                  }}
                   rows={snapshot.sousTraitants ?? []}
                 />
                 <p className="text-xs text-stone-500">
@@ -632,7 +847,10 @@ export function ChantierEditModal({
                   type="radio"
                   name="edit-avec-livraison"
                   checked={avecLivraison}
-                  onChange={() => setAvecLivraison(true)}
+                  onChange={() => {
+                    markCascade();
+                    setAvecLivraison(true);
+                  }}
                 />
                 Oui
               </label>
@@ -641,7 +859,10 @@ export function ChantierEditModal({
                   type="radio"
                   name="edit-avec-livraison"
                   checked={!avecLivraison}
-                  onChange={() => setAvecLivraison(false)}
+                  onChange={() => {
+                    markCascade();
+                    setAvecLivraison(false);
+                  }}
                 />
                 Non
               </label>
@@ -652,7 +873,13 @@ export function ChantierEditModal({
                   <span className="mb-1 block font-medium">Adresse de livraison</span>
                   <input
                     value={adresseLivraison}
-                    onChange={(event) => setAdresseLivraison(event.target.value)}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      setAdresseLivraison(value);
+                      markSimple("adresse_livraison");
+                      live.schedule({ adresse_livraison: value.trim() || null });
+                    }}
+                    onBlur={() => void live.flush()}
                     className="w-full rounded border border-stone-300 bg-white px-3 py-2"
                   />
                 </label>
@@ -663,7 +890,15 @@ export function ChantierEditModal({
                   <input
                     type="tel"
                     value={telephoneLivraison}
-                    onChange={(event) => setTelephoneLivraison(event.target.value)}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      setTelephoneLivraison(value);
+                      markSimple("telephone_livraison");
+                      live.schedule({
+                        telephone_livraison: value.trim() || null,
+                      });
+                    }}
+                    onBlur={() => void live.flush()}
                     className="w-full rounded border border-stone-300 bg-white px-3 py-2"
                   />
                 </label>
@@ -674,7 +909,10 @@ export function ChantierEditModal({
                     min={0.5}
                     step={0.5}
                     value={dureeLivraison}
-                    onChange={(event) => setDureeLivraison(event.target.value)}
+                    onChange={(event) => {
+                      markCascade();
+                      setDureeLivraison(event.target.value);
+                    }}
                     className="w-full rounded border border-stone-300 bg-white px-3 py-2"
                   />
                 </label>
@@ -684,7 +922,10 @@ export function ChantierEditModal({
                   </span>
                   <select
                     value={employeLivraison}
-                    onChange={(event) => setEmployeLivraison(event.target.value)}
+                    onChange={(event) => {
+                      markCascade();
+                      setEmployeLivraison(event.target.value);
+                    }}
                     className="w-full rounded border border-stone-300 bg-white px-3 py-2"
                   >
                     <option value="">Choisir…</option>
@@ -735,6 +976,7 @@ export function ChantierEditModal({
                 value={planEnd}
                 onChange={(event) => {
                   setDatesDirty(true);
+                  markCascade();
                   setPlanEnd(event.target.value);
                 }}
                 className="w-full rounded border border-stone-300 bg-white px-3 py-2"
@@ -747,7 +989,10 @@ export function ChantierEditModal({
                   type="radio"
                   name="edit-dates-kind"
                   checked={datesEstimatives}
-                  onChange={() => setDatesEstimatives(true)}
+                  onChange={() => {
+                    markCascade();
+                    setDatesEstimatives(true);
+                  }}
                 />
                 Estimatif
               </label>
@@ -756,7 +1001,10 @@ export function ChantierEditModal({
                   type="radio"
                   name="edit-dates-kind"
                   checked={!datesEstimatives}
-                  onChange={() => setDatesEstimatives(false)}
+                  onChange={() => {
+                    markCascade();
+                    setDatesEstimatives(false);
+                  }}
                 />
                 Confirmé
               </label>
@@ -778,7 +1026,10 @@ export function ChantierEditModal({
                   <span className="mb-1 block">Salarié</span>
                   <select
                     value={planEmployeeId}
-                    onChange={(event) => setPlanEmployeeId(event.target.value)}
+                    onChange={(event) => {
+                      markCascade();
+                      setPlanEmployeeId(event.target.value);
+                    }}
                     className="w-full rounded border border-stone-300 bg-white px-3 py-2"
                   >
                     {activeEmployees.length === 0 ? (

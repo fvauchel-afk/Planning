@@ -317,6 +317,43 @@ export type ChantierUpdateInput = {
   sous_traitant_id?: string | null;
 };
 
+/** Enregistrement champ par champ (sans recale). Seules les clés présentes sont écrites. */
+export type ChantierSimplePatch = {
+  id: string;
+  nom_client?: string;
+  adresse?: string;
+  priorite?: Priorite;
+  tolerance_deplacement_jours?: number | null;
+  lien_dossier_onedrive?: string | null;
+  adresse_livraison?: string | null;
+  telephone_livraison?: string | null;
+};
+
+export type EmployeePatch = {
+  id: string;
+  nom?: string;
+  roles?: Role[];
+  actif?: boolean;
+  horaires?: HorairesEmploye | null;
+  is_admin?: boolean;
+  pin?: string;
+};
+
+export type AbsenceSimplePatch = {
+  id: string;
+  type?: TypeAbsence;
+  motif_precision?: string | null;
+};
+
+export type SousTraitantPatch = {
+  id: string;
+  nom?: string;
+  specialite?: string;
+  email?: string;
+  telephone?: string | null;
+  adresse?: string | null;
+};
+
 export type ScheduleChantierDayInput = {
   chantierId: string;
   date: string;

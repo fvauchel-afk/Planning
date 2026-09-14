@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-14-live-form-saves",
+    title: "Moins d’écrasement à deux sur la même fiche",
+    items: [
+      "Nom, adresse, priorité et lien OneDrive (et les équivalents sur absences, salariés et sous-traitants) s’enregistrent tout seuls dès qu’on quitte le champ : l’autre personne qui a la fiche ouverte voit le changement.",
+      "Les dates, le salarié par phase et les Oui/Non Thermolaquage / Livraison / Pose restent sur « Enregistrer ». Si quelqu’un d’autre a modifié ces champs entre-temps, un message propose de recharger la fiche au lieu d’écraser en silence.",
+    ],
+  },
+  {
     id: "2026-09-14-onedrive-refresh-login",
     title: "OneDrive reste connecté",
     items: [
