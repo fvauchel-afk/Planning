@@ -14,7 +14,7 @@ import {
 } from "@/lib/engine/absence-imprevue";
 import { generateDelaySolutions, propositionFromSolutions } from "@/lib/engine/plan-solutions";
 import { usePlanning } from "@/lib/planning-context";
-import { needsAlgoValidation, propositionFromDelay } from "@/lib/signalements";
+import { propositionFromDelay } from "@/lib/signalements";
 import { formatSaveError } from "@/lib/supabase/errors";
 import {
   ABSENCE_LABELS,
@@ -159,7 +159,7 @@ export function AbsencesPage() {
         payload.date_debut,
         payload.date_fin,
       );
-      if (needsAlgoValidation(plan)) {
+      if (plan.status === "conflict") {
         await createSignalement({
           employe_id: payload.employe_id,
           phase_id: overlap[0]?.phase.id ?? plan.patches[0]?.id ?? null,
