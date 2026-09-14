@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useDebouncedPatch } from "@/lib/form-live";
 import { usePlanning } from "@/lib/planning-context";
 import type { SousTraitant } from "@/lib/types";
 
@@ -13,12 +14,13 @@ const EMPTY = {
 };
 
 export function SousTraitantsPage() {
-  const { refresh } = usePlanning();
+  const { refresh, snapshot } = usePlanning();
   const [rows, setRows] = useState<SousTraitant[]>([]);
   const [form, setForm] = useState(EMPTY);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const dirty = useRef(new Set<string>());
 
   async function load() {
     const res = await fetch("/api/sous-traitants");
@@ -36,22 +38,102 @@ export function SousTraitantsPage() {
     void load();
   }, []);
 
+  useEffect(() => {
+    if (snapshot.sousTraitants?.length) {
+      setRows(snapshot.sousTraitants);
+    }
+  }, [snapshot.sousTraitants]);
+
+  useEffect(() => {
+    const poll = () => {
+      if (document.visibilityState === "visible") void load();
+    };
+    const timer = window.setInterval(poll, 4000);
+    document.addEventListener("visibilitychange", poll);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", poll);
+    };
+  }, []);
+
+  const applyPatch = useCallback(
+    async (payload: {
+      nom?: string;
+      specialite?: string;
+      email?: string;
+      telephone?: string | null;
+      adresse?: string | null;
+    }) => {
+      if (!editingId) return;
+      const res = await fetch("/api/sous-traitants", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: editingId, ...payload }),
+      });
+      const data = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        setError(data.error || "Enregistrement impossible.");
+        return;
+      }
+      Object.keys(payload).forEach((key) => dirty.current.delete(key));
+      await load();
+      await refresh();
+    },
+    [editingId, refresh],
+  );
+  const live = useDebouncedPatch(applyPatch);
+
+  useEffect(() => {
+    if (!editingId) return;
+    const remote = rows.find((row) => row.id === editingId);
+    if (!remote) return;
+    setForm((current) => ({
+      nom: dirty.current.has("nom") ? current.nom : remote.nom,
+      specialite: dirty.current.has("specialite")
+        ? current.specialite
+        : remote.specialite,
+      email: dirty.current.has("email") ? current.email : remote.email,
+      telephone: dirty.current.has("telephone")
+        ? current.telephone
+        : (remote.telephone ?? ""),
+      adresse: dirty.current.has("adresse")
+        ? current.adresse
+        : (remote.adresse ?? ""),
+    }));
+  }, [rows, editingId]);
+
+  function updateField<K extends keyof typeof EMPTY>(key: K, value: string) {
+    setForm((current) => ({ ...current, [key]: value }));
+    dirty.current.add(key);
+    if (!editingId) return;
+    if (key === "nom" || key === "specialite" || key === "email") {
+      if (!value.trim()) return;
+      if (key === "email" && !value.trim().includes("@")) return;
+      live.schedule({ [key]: value.trim() } as never);
+      return;
+    }
+    live.schedule({ [key]: value.trim() || null } as never);
+  }
+
   async function save() {
     setBusy(true);
     setError(null);
     try {
+      await live.flush();
+      if (editingId) {
+        await load();
+        await refresh();
+        return;
+      }
       const res = await fetch("/api/sous-traitants", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: editingId || undefined,
-          ...form,
-        }),
+        body: JSON.stringify(form),
       });
       const data = (await res.json()) as { error?: string };
       if (!res.ok) throw new Error(data.error || "Enregistrement impossible.");
       setForm(EMPTY);
-      setEditingId(null);
+      dirty.current.clear();
       await load();
       await refresh();
     } catch (err) {
@@ -73,6 +155,12 @@ export function SousTraitantsPage() {
       });
       const data = (await res.json()) as { error?: string };
       if (!res.ok) throw new Error(data.error || "Suppression impossible.");
+      if (editingId === id) {
+        live.cancel();
+        setEditingId(null);
+        setForm(EMPTY);
+        dirty.current.clear();
+      }
       await load();
       await refresh();
     } catch (err) {
@@ -88,7 +176,8 @@ export function SousTraitantsPage() {
         <h2 className="font-serif text-3xl text-stone-900">Sous-traitants</h2>
         <p className="mt-1 text-sm text-stone-600">
           Fiches utilisées pour les bons de commande (thermolaquage, galvanisation
-          ou autre spécialité).
+          ou autre spécialité). Sur une fiche ouverte, les champs s’enregistrent
+          tout seuls.
         </p>
       </div>
       {error ? (
@@ -107,7 +196,10 @@ export function SousTraitantsPage() {
           <span className="mb-1 block font-medium">Nom</span>
           <input
             value={form.nom}
-            onChange={(event) => setForm({ ...form, nom: event.target.value })}
+            onChange={(event) => updateField("nom", event.target.value)}
+            onBlur={() => {
+              if (editingId) void live.flush();
+            }}
             className="w-full rounded border border-stone-300 px-3 py-2"
             required
           />
@@ -116,9 +208,10 @@ export function SousTraitantsPage() {
           <span className="mb-1 block font-medium">Spécialité</span>
           <input
             value={form.specialite}
-            onChange={(event) =>
-              setForm({ ...form, specialite: event.target.value })
-            }
+            onChange={(event) => updateField("specialite", event.target.value)}
+            onBlur={() => {
+              if (editingId) void live.flush();
+            }}
             placeholder="Thermolaquage, Galvanisation…"
             className="w-full rounded border border-stone-300 px-3 py-2"
             required
@@ -129,7 +222,10 @@ export function SousTraitantsPage() {
           <input
             type="email"
             value={form.email}
-            onChange={(event) => setForm({ ...form, email: event.target.value })}
+            onChange={(event) => updateField("email", event.target.value)}
+            onBlur={() => {
+              if (editingId) void live.flush();
+            }}
             className="w-full rounded border border-stone-300 px-3 py-2"
             required
           />
@@ -138,9 +234,10 @@ export function SousTraitantsPage() {
           <span className="mb-1 block font-medium">Téléphone (optionnel)</span>
           <input
             value={form.telephone}
-            onChange={(event) =>
-              setForm({ ...form, telephone: event.target.value })
-            }
+            onChange={(event) => updateField("telephone", event.target.value)}
+            onBlur={() => {
+              if (editingId) void live.flush();
+            }}
             className="w-full rounded border border-stone-300 px-3 py-2"
           />
         </label>
@@ -148,9 +245,10 @@ export function SousTraitantsPage() {
           <span className="mb-1 block font-medium">Adresse (optionnelle)</span>
           <input
             value={form.adresse}
-            onChange={(event) =>
-              setForm({ ...form, adresse: event.target.value })
-            }
+            onChange={(event) => updateField("adresse", event.target.value)}
+            onBlur={() => {
+              if (editingId) void live.flush();
+            }}
             className="w-full rounded border border-stone-300 px-3 py-2"
           />
         </label>
@@ -167,8 +265,10 @@ export function SousTraitantsPage() {
               type="button"
               className="rounded-lg px-4 py-2 text-sm text-stone-600"
               onClick={() => {
+                live.cancel();
                 setEditingId(null);
                 setForm(EMPTY);
+                dirty.current.clear();
               }}
             >
               Annuler
@@ -200,6 +300,8 @@ export function SousTraitantsPage() {
                   type="button"
                   className="rounded border border-stone-300 px-3 py-1.5 text-sm"
                   onClick={() => {
+                    live.cancel();
+                    dirty.current.clear();
                     setEditingId(row.id);
                     setForm({
                       nom: row.nom,

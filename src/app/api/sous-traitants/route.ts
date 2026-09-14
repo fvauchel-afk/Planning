@@ -6,8 +6,10 @@ import {
   unauthorized,
 } from "@/lib/auth/guard";
 import {
+  invalidateSupabaseSnapshotCache,
   supabaseDeleteSousTraitant,
   supabaseListSousTraitants,
+  supabasePatchSousTraitant,
   supabaseUpsertSousTraitant,
 } from "@/lib/store/supabase";
 import { isMissingSchemaError } from "@/lib/supabase/errors";
@@ -71,7 +73,60 @@ export async function POST(request: NextRequest) {
       telephone: body.telephone,
       adresse: body.adresse,
     });
+    invalidateSupabaseSnapshotCache();
     return NextResponse.json({ ok: true, id });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Enregistrement impossible.";
+    return NextResponse.json(
+      { error: isMissingSchemaError(err) ? SQL_HELP : message },
+      { status: 400 },
+    );
+  }
+}
+
+export async function PATCH(request: NextRequest) {
+  const session = await resolveSession(await getSession());
+  if (!session) return unauthorized();
+  if (!session.isAdmin) return forbidden();
+  let body: {
+    id?: string;
+    nom?: string;
+    specialite?: string;
+    email?: string;
+    telephone?: string | null;
+    adresse?: string | null;
+  };
+  try {
+    body = (await request.json()) as typeof body;
+  } catch {
+    return NextResponse.json({ error: "Requête invalide." }, { status: 400 });
+  }
+  if (!body.id) {
+    return NextResponse.json({ error: "Sous-traitant inconnu." }, { status: 400 });
+  }
+  if (body.nom !== undefined && !body.nom.trim()) {
+    return NextResponse.json({ error: "Le nom est obligatoire." }, { status: 400 });
+  }
+  if (body.specialite !== undefined && !body.specialite.trim()) {
+    return NextResponse.json(
+      { error: "La spécialité est obligatoire." },
+      { status: 400 },
+    );
+  }
+  if (body.email !== undefined && !body.email.trim().includes("@")) {
+    return NextResponse.json({ error: "E-mail invalide." }, { status: 400 });
+  }
+  try {
+    await supabasePatchSousTraitant({
+      id: body.id,
+      nom: body.nom,
+      specialite: body.specialite,
+      email: body.email,
+      telephone: body.telephone,
+      adresse: body.adresse,
+    });
+    invalidateSupabaseSnapshotCache();
+    return NextResponse.json({ ok: true });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Enregistrement impossible.";
     return NextResponse.json(
@@ -96,6 +151,7 @@ export async function DELETE(request: NextRequest) {
   }
   try {
     await supabaseDeleteSousTraitant(body.id);
+    invalidateSupabaseSnapshotCache();
     return NextResponse.json({ ok: true });
   } catch (err) {
     return NextResponse.json(

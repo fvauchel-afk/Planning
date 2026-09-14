@@ -27,10 +27,14 @@ import type {
   HoraireSaison,
   NewAbsenceInput,
   AbsenceUpdateInput,
+  AbsenceSimplePatch,
   NewChantierInput,
   ChantierUpdateInput,
+  ChantierSimplePatch,
+  EmployeePatch,
   ScheduleChantierDayInput,
   NewEmployeeInput,
+  SousTraitantPatch,
   NewReceptionInput,
   NewDemandeInput,
   DemandeUpdateInput,
@@ -590,6 +594,62 @@ export async function supabaseUpdateChantier(
   if (error) throw wrapSupabaseError(error);
 }
 
+const CHANTIER_OPTIONAL_COLUMNS = [
+  "tolerance_deplacement_jours",
+  "sous_traitant_id",
+  "adresse_livraison",
+  "telephone_livraison",
+  "delai_sous_traitance_jours",
+  "dates_estimatives",
+] as const;
+
+async function updateChantierPayload(
+  id: string,
+  payload: Record<string, unknown>,
+): Promise<void> {
+  const supabase = createSupabaseServerClient();
+  const current = { ...payload };
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    if (Object.keys(current).length === 0) return;
+    const { error } = await supabase.from("chantiers").update(current).eq("id", id);
+    if (!error) return;
+    const drop = CHANTIER_OPTIONAL_COLUMNS.find(
+      (column) => column in current && isMissingColumnError(error, column),
+    );
+    if (drop) {
+      delete current[drop];
+      continue;
+    }
+    throw wrapSupabaseError(error);
+  }
+}
+
+export async function supabasePatchChantier(
+  input: ChantierSimplePatch,
+): Promise<void> {
+  const payload: Record<string, unknown> = {};
+  if (input.nom_client !== undefined) payload.nom_client = input.nom_client;
+  if (input.adresse !== undefined) payload.adresse = input.adresse;
+  if (input.priorite !== undefined) payload.priorite = input.priorite;
+  if (input.lien_dossier_onedrive !== undefined) {
+    payload.lien_dossier_onedrive = input.lien_dossier_onedrive;
+  }
+  if (input.adresse_livraison !== undefined) {
+    payload.adresse_livraison = input.adresse_livraison;
+  }
+  if (input.telephone_livraison !== undefined) {
+    payload.telephone_livraison = input.telephone_livraison;
+  }
+  if (input.tolerance_deplacement_jours !== undefined) {
+    payload.tolerance_deplacement_jours =
+      input.priorite === "pas_presse" || input.priorite === undefined
+        ? input.tolerance_deplacement_jours
+        : null;
+  }
+  if (Object.keys(payload).length === 0) return;
+  await updateChantierPayload(input.id, payload);
+}
+
 export async function supabaseDeleteChantier(chantierId: string): Promise<void> {
   const supabase = createSupabaseServerClient();
   const { error } = await supabase.from("chantiers").delete().eq("id", chantierId);
@@ -788,6 +848,48 @@ export async function supabaseUpsertEmployee(
   }
 }
 
+export async function supabasePatchEmployee(input: EmployeePatch): Promise<void> {
+  const supabase = createSupabaseServerClient();
+  const payload: Record<string, unknown> = {};
+  if (input.nom !== undefined) payload.nom = input.nom;
+  if (input.roles !== undefined) payload.roles = input.roles;
+  if (input.actif !== undefined) payload.actif = input.actif;
+  if (input.horaires !== undefined) {
+    payload.horaires = normalizeHorairesEmploye(input.horaires);
+  }
+  if (input.is_admin !== undefined) payload.is_admin = Boolean(input.is_admin);
+  if (Object.keys(payload).length > 0) {
+    const current = { ...payload };
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      if (Object.keys(current).length === 0) break;
+      const { error } = await supabase
+        .from("employees")
+        .update(current)
+        .eq("id", input.id);
+      if (!error) break;
+      const drop = (["horaires", "is_admin", "ordre_affichage"] as const).find(
+        (column) => column in current && isMissingColumnError(error, column),
+      );
+      if (drop) {
+        delete current[drop];
+        continue;
+      }
+      throw wrapSupabaseError(error);
+    }
+  }
+  const pin = input.pin?.trim();
+  if (pin) {
+    if (!/^\d{4}$/.test(pin)) {
+      throw wrapSupabaseError(new Error("Le code PIN doit contenir 4 chiffres."));
+    }
+    const { error: pinError } = await supabase.rpc("set_employee_pin", {
+      p_id: input.id,
+      p_pin: pin,
+    });
+    if (pinError) throw wrapSupabaseError(pinError);
+  }
+}
+
 export async function supabaseReorderEmployees(
   rows: { id: string; ordre_affichage: number }[],
 ): Promise<void> {
@@ -844,6 +946,25 @@ export async function supabaseUpdateAbsence(
         input.type === "autre" ? input.motif_precision?.trim() || null : null,
     })
     .eq("id", input.id);
+  if (error) throw wrapSupabaseError(error);
+}
+
+export async function supabasePatchAbsence(
+  input: AbsenceSimplePatch,
+): Promise<void> {
+  const supabase = createSupabaseServerClient();
+  const payload: Record<string, unknown> = {};
+  if (input.type !== undefined) payload.type = input.type;
+  if (input.motif_precision !== undefined) {
+    payload.motif_precision =
+      input.type === "autre" || input.type === undefined
+        ? input.motif_precision?.trim() || null
+        : null;
+  } else if (input.type !== undefined && input.type !== "autre") {
+    payload.motif_precision = null;
+  }
+  if (Object.keys(payload).length === 0) return;
+  const { error } = await supabase.from("absences").update(payload).eq("id", input.id);
   if (error) throw wrapSupabaseError(error);
 }
 
@@ -1113,6 +1234,28 @@ export async function supabaseUpsertSousTraitant(
     .single();
   if (error || !data) throw wrapSupabaseError(error ?? new Error("Création impossible."));
   return data.id as string;
+}
+
+export async function supabasePatchSousTraitant(
+  input: SousTraitantPatch,
+): Promise<void> {
+  const supabase = createSupabaseServerClient();
+  const payload: Record<string, unknown> = {
+    updated_at: new Date().toISOString(),
+  };
+  if (input.nom !== undefined) payload.nom = input.nom.trim();
+  if (input.specialite !== undefined) payload.specialite = input.specialite.trim();
+  if (input.email !== undefined) payload.email = input.email.trim();
+  if (input.telephone !== undefined) {
+    payload.telephone = input.telephone?.trim() || null;
+  }
+  if (input.adresse !== undefined) payload.adresse = input.adresse?.trim() || null;
+  if (Object.keys(payload).length <= 1) return;
+  const { error } = await supabase
+    .from("sous_traitants")
+    .update(payload)
+    .eq("id", input.id);
+  if (error) throw wrapSupabaseError(error);
 }
 
 export async function supabaseDeleteSousTraitant(id: string): Promise<void> {

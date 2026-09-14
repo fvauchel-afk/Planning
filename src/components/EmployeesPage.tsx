@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   defaultHoraires,
   defaultHorairesEmploye,
@@ -13,6 +13,7 @@ import {
 } from "@/lib/engine/hours";
 import { compareEmployeesByOrdre } from "@/lib/display-order";
 import { usePlanning } from "@/lib/planning-context";
+import { useDebouncedPatch } from "@/lib/form-live";
 import { formatSaveError } from "@/lib/supabase/errors";
 import {
   JOURS_OUVRES,
@@ -152,7 +153,8 @@ function HorairesTable({
 }
 
 export function EmployeesPage() {
-  const { snapshot, upsertEmployee, saveHoraires, loading } = usePlanning();
+  const { snapshot, upsertEmployee, patchEmployee, saveHoraires, loading } =
+    usePlanning();
   const [saisons, setSaisons] = useState<HoraireSaison[]>(() =>
     horairesOf(snapshot),
   );
@@ -170,12 +172,36 @@ export function EmployeesPage() {
   const [pin, setPin] = useState("");
   const [isAdmin, setIsAdmin] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const dirty = useRef(new Set<string>());
+
+  const applyEmployeePatch = useCallback(
+    async (payload: {
+      nom?: string;
+      roles?: Role[];
+      actif?: boolean;
+      horaires?: HorairesEmploye | null;
+      is_admin?: boolean;
+      pin?: string;
+    }) => {
+      if (!editing?.id) return;
+      try {
+        await patchEmployee({ id: editing.id, ...payload });
+        Object.keys(payload).forEach((key) => dirty.current.delete(key));
+      } catch (err) {
+        setError(formatSaveError(err, "l’enregistrement automatique a échoué"));
+      }
+    },
+    [editing?.id, patchEmployee],
+  );
+  const live = useDebouncedPatch(applyEmployeePatch);
 
   useEffect(() => {
     setSaisons(horairesOf(snapshot));
   }, [snapshot]);
 
   function startEdit(employee: Employee) {
+    live.cancel();
+    dirty.current.clear();
     setEditing(employee);
     setNom(employee.nom);
     setRoles(employee.roles);
@@ -186,6 +212,8 @@ export function EmployeesPage() {
   }
 
   function resetForm() {
+    live.cancel();
+    dirty.current.clear();
     setEditing(null);
     setNom("");
     setRoles([]);
@@ -195,12 +223,30 @@ export function EmployeesPage() {
     setHoraires(defaultHorairesEmploye());
   }
 
+  useEffect(() => {
+    if (!editing) return;
+    const remote = snapshot.employees.find((item) => item.id === editing.id);
+    if (!remote) return;
+    if (!dirty.current.has("nom")) setNom(remote.nom);
+    if (!dirty.current.has("roles")) setRoles(remote.roles);
+    if (!dirty.current.has("actif")) setActif(remote.actif);
+    if (!dirty.current.has("is_admin")) setIsAdmin(Boolean(remote.is_admin));
+    if (!dirty.current.has("horaires")) {
+      setHoraires(normalizeHorairesEmploye(remote.horaires));
+    }
+  }, [snapshot, editing]);
+
   function toggleRole(role: Role) {
-    setRoles((current) =>
-      current.includes(role)
+    setRoles((current) => {
+      const next = current.includes(role)
         ? current.filter((item) => item !== role)
-        : [...current, role],
-    );
+        : [...current, role];
+      dirty.current.add("roles");
+      if (editing && next.length > 0) {
+        void applyEmployeePatch({ roles: next });
+      }
+      return next;
+    });
   }
 
   async function onSaveSaisons(event: React.FormEvent) {
@@ -235,6 +281,7 @@ export function EmployeesPage() {
     }
     setError(null);
     try {
+      await live.flush();
       await upsertEmployee({
         id: editing?.id,
         nom: nom.trim(),
@@ -335,7 +382,8 @@ export function EmployeesPage() {
           <p className="mt-1 mb-4 text-sm text-stone-600">
             Le thermolaquage n&apos;a pas de personne attitrée : il reste
             sous-traité. Les horaires réels (été et hiver) se renseignent en
-            modifiant un salarié.
+            modifiant un salarié. Sur une fiche déjà ouverte, les champs
+            s’enregistrent tout seuls.
           </p>
           <div className="overflow-hidden rounded-lg border border-stone-300 bg-white">
             <table className="min-w-full text-sm">
@@ -393,7 +441,17 @@ export function EmployeesPage() {
             <span className="mb-1 block">Nom</span>
             <input
               value={nom}
-              onChange={(event) => setNom(event.target.value)}
+              onChange={(event) => {
+                const value = event.target.value;
+                setNom(value);
+                dirty.current.add("nom");
+                if (editing && value.trim()) {
+                  live.schedule({ nom: value.trim() });
+                }
+              }}
+              onBlur={() => {
+                if (editing) void live.flush();
+              }}
               className="w-full rounded border border-stone-300 px-3 py-2"
             />
           </label>
@@ -414,19 +472,32 @@ export function EmployeesPage() {
             title="Horaires été"
             saison="ete"
             horaires={horaires}
-            onChange={setHoraires}
+            onChange={(next) => {
+              setHoraires(next);
+              dirty.current.add("horaires");
+              if (editing) live.schedule({ horaires: next });
+            }}
           />
           <HorairesTable
             title="Horaires hiver"
             saison="hiver"
             horaires={horaires}
-            onChange={setHoraires}
+            onChange={(next) => {
+              setHoraires(next);
+              dirty.current.add("horaires");
+              if (editing) live.schedule({ horaires: next });
+            }}
           />
           <label className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"
               checked={actif}
-              onChange={(event) => setActif(event.target.checked)}
+              onChange={(event) => {
+                const value = event.target.checked;
+                setActif(value);
+                dirty.current.add("actif");
+                if (editing) void applyEmployeePatch({ actif: value });
+              }}
             />
             Actif
           </label>
@@ -434,7 +505,12 @@ export function EmployeesPage() {
             <input
               type="checkbox"
               checked={isAdmin}
-              onChange={(event) => setIsAdmin(event.target.checked)}
+              onChange={(event) => {
+                const value = event.target.checked;
+                setIsAdmin(value);
+                dirty.current.add("is_admin");
+                if (editing) void applyEmployeePatch({ is_admin: value });
+              }}
             />
             Administrateur (accès complet)
           </label>
@@ -445,9 +521,13 @@ export function EmployeesPage() {
               pattern="\d{4}"
               maxLength={4}
               value={pin}
-              onChange={(event) =>
-                setPin(event.target.value.replace(/\D/g, "").slice(0, 4))
-              }
+              onChange={(event) => {
+                const value = event.target.value.replace(/\D/g, "").slice(0, 4);
+                setPin(value);
+                if (editing && /^\d{4}$/.test(value)) {
+                  void applyEmployeePatch({ pin: value });
+                }
+              }}
               placeholder={editing ? "Laisser vide pour ne pas changer" : "1234 par défaut"}
               className="w-full rounded border border-stone-300 px-3 py-2"
             />

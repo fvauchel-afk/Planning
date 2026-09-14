@@ -9,6 +9,7 @@ import {
   supabaseUpdateAbsence,
   supabaseCreateChantier,
   supabaseUpdateChantier,
+  supabasePatchChantier,
   supabaseDeleteChantier,
   supabaseScheduleChantierDay,
   supabaseCreateReception,
@@ -16,9 +17,11 @@ import {
   supabaseCreateDemande,
   supabaseUpdateDemande,
   supabaseDeleteAbsence,
+  supabasePatchAbsence,
   supabaseReplaceHoraires,
   supabaseSetSignalementStatut,
   supabaseUpsertEmployee,
+  supabasePatchEmployee,
   supabaseReorderEmployees,
   fetchSupabaseSnapshot,
   supabaseConfirmPhaseDates,
@@ -32,8 +35,11 @@ import type {
   HoraireSaison,
   NewAbsenceInput,
   AbsenceUpdateInput,
+  AbsenceSimplePatch,
   NewChantierInput,
   ChantierUpdateInput,
+  ChantierSimplePatch,
+  EmployeePatch,
   ScheduleChantierDayInput,
   NewEmployeeInput,
   NewReceptionInput,
@@ -63,16 +69,19 @@ export const maxDuration = 60;
 type MutateBody =
   | { action: "createChantier"; input: NewChantierInput }
   | { action: "updateChantier"; input: ChantierUpdateInput }
+  | { action: "patchChantier"; input: ChantierSimplePatch }
   | { action: "deleteChantier"; chantierId: string }
   | { action: "scheduleChantierDay"; input: ScheduleChantierDayInput }
   | { action: "createChantierWithPatches"; input: NewChantierInput; patches: PhasePatch[] }
   | { action: "upsertEmployee"; input: NewEmployeeInput & { id?: string } }
+  | { action: "patchEmployee"; input: EmployeePatch }
   | {
       action: "reorderEmployees";
       rows: { id: string; ordre_affichage: number }[];
     }
   | { action: "createAbsence"; input: NewAbsenceInput }
   | { action: "updateAbsence"; input: AbsenceUpdateInput }
+  | { action: "patchAbsence"; input: AbsenceSimplePatch }
   | { action: "deleteAbsence"; id: string }
   | { action: "applyPhasePatches"; patches: PhasePatch[] }
   | { action: "applyPhaseEdits"; edits: PhaseEdits }
@@ -115,13 +124,16 @@ export async function POST(request: NextRequest) {
   const adminOnly = new Set<MutateBody["action"]>([
     "createChantier",
     "updateChantier",
+    "patchChantier",
     "deleteChantier",
     "scheduleChantierDay",
     "createChantierWithPatches",
     "upsertEmployee",
+    "patchEmployee",
     "reorderEmployees",
     "createAbsence",
     "updateAbsence",
+    "patchAbsence",
     "deleteAbsence",
     "applyPhasePatches",
     "applyPhaseEdits",
@@ -147,6 +159,12 @@ export async function POST(request: NextRequest) {
       chantierId = await supabaseCreateChantier(body.input);
     } else if (body.action === "updateChantier") {
       await supabaseUpdateChantier(body.input);
+      chantierId = body.input.id;
+    } else if (body.action === "patchChantier") {
+      if (!body.input?.id) {
+        return NextResponse.json({ error: "Chantier inconnu." }, { status: 400 });
+      }
+      await supabasePatchChantier(body.input);
       chantierId = body.input.id;
     } else if (body.action === "deleteChantier") {
       await supabaseDeleteChantier(body.chantierId);
@@ -178,6 +196,18 @@ export async function POST(request: NextRequest) {
         );
       }
       await supabaseUpsertEmployee(body.input);
+    } else if (body.action === "patchEmployee") {
+      if (!body.input?.id) {
+        return NextResponse.json({ error: "Salarié inconnu." }, { status: 400 });
+      }
+      const pin = body.input.pin?.trim();
+      if (pin && !/^\d{4}$/.test(pin)) {
+        return NextResponse.json(
+          { error: "Le code PIN doit contenir 4 chiffres." },
+          { status: 400 },
+        );
+      }
+      await supabasePatchEmployee(body.input);
     } else if (body.action === "reorderEmployees") {
       const rows = body.rows ?? [];
       if (!Array.isArray(rows) || rows.length === 0) {
@@ -199,6 +229,11 @@ export async function POST(request: NextRequest) {
       await supabaseCreateAbsence(body.input);
     } else if (body.action === "updateAbsence") {
       await supabaseUpdateAbsence(body.input);
+    } else if (body.action === "patchAbsence") {
+      if (!body.input?.id) {
+        return NextResponse.json({ error: "Absence inconnue." }, { status: 400 });
+      }
+      await supabasePatchAbsence(body.input);
     } else if (body.action === "deleteAbsence") {
       await supabaseDeleteAbsence(body.id);
     } else if (body.action === "applyPhasePatches") {

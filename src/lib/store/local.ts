@@ -13,8 +13,11 @@ import type {
   HoraireSaison,
   NewAbsenceInput,
   AbsenceUpdateInput,
+  AbsenceSimplePatch,
   NewChantierInput,
   ChantierUpdateInput,
+  ChantierSimplePatch,
+  EmployeePatch,
   ScheduleChantierDayInput,
   NewEmployeeInput,
   NewReceptionInput,
@@ -228,6 +231,33 @@ export function localUpsertEmployee(
   return next;
 }
 
+export function localPatchEmployee(
+  snapshot: PlanningSnapshot,
+  input: EmployeePatch,
+): PlanningSnapshot {
+  const next = clone(snapshot);
+  next.employees = next.employees.map((employee) =>
+    employee.id === input.id
+      ? {
+          ...employee,
+          nom: input.nom ?? employee.nom,
+          roles: input.roles ?? employee.roles,
+          actif: input.actif ?? employee.actif,
+          horaires:
+            input.horaires !== undefined
+              ? normalizeHorairesEmploye(input.horaires)
+              : employee.horaires,
+          is_admin:
+            input.is_admin !== undefined
+              ? Boolean(input.is_admin)
+              : employee.is_admin,
+        }
+      : employee,
+  );
+  saveLocalSnapshot(next);
+  return next;
+}
+
 export function localReorderEmployees(
   snapshot: PlanningSnapshot,
   rows: { id: string; ordre_affichage: number }[],
@@ -292,6 +322,31 @@ export function localUpdateAbsence(
         }
       : absence,
   );
+  saveLocalSnapshot(next);
+  return next;
+}
+
+export function localPatchAbsence(
+  snapshot: PlanningSnapshot,
+  input: AbsenceSimplePatch,
+): PlanningSnapshot {
+  const next = clone(snapshot);
+  next.absences = next.absences.map((absence) => {
+    if (absence.id !== input.id) return absence;
+    const type = input.type ?? absence.type;
+    return {
+      ...absence,
+      type,
+      motif_precision:
+        input.motif_precision !== undefined
+          ? type === "autre"
+            ? input.motif_precision?.trim() || null
+            : null
+          : type === "autre"
+            ? absence.motif_precision
+            : null,
+    };
+  });
   saveLocalSnapshot(next);
   return next;
 }
@@ -518,6 +573,42 @@ export function localUpdateChantier(
         }
       : chantier,
   );
+  saveLocalSnapshot(next);
+  return next;
+}
+
+export function localPatchChantier(
+  snapshot: PlanningSnapshot,
+  input: ChantierSimplePatch,
+): PlanningSnapshot {
+  const next = clone(snapshot);
+  next.chantiers = next.chantiers.map((chantier) => {
+    if (chantier.id !== input.id) return chantier;
+    return {
+      ...chantier,
+      nom_client: input.nom_client ?? chantier.nom_client,
+      adresse: input.adresse ?? chantier.adresse,
+      priorite: input.priorite ?? chantier.priorite,
+      lien_dossier_onedrive:
+        input.lien_dossier_onedrive !== undefined
+          ? input.lien_dossier_onedrive
+          : chantier.lien_dossier_onedrive,
+      adresse_livraison:
+        input.adresse_livraison !== undefined
+          ? input.adresse_livraison
+          : chantier.adresse_livraison,
+      telephone_livraison:
+        input.telephone_livraison !== undefined
+          ? input.telephone_livraison
+          : chantier.telephone_livraison,
+      tolerance_deplacement_jours:
+        input.tolerance_deplacement_jours !== undefined
+          ? input.tolerance_deplacement_jours
+          : input.priorite && input.priorite !== "pas_presse"
+            ? null
+            : chantier.tolerance_deplacement_jours,
+    };
+  });
   saveLocalSnapshot(next);
   return next;
 }

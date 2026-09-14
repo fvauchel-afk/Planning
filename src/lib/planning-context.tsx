@@ -20,6 +20,7 @@ import {
   localApplyPhaseEdits,
   localCreateAbsence,
   localUpdateAbsence,
+  localPatchAbsence,
   localCreateChantier,
   localCreateReception,
   localCreateSignalement,
@@ -32,9 +33,11 @@ import {
   localSetSignalementStatut,
   localValidateSignalement,
   localUpdateChantier,
+  localPatchChantier,
   localDeleteChantier,
   localScheduleChantierDay,
   localUpsertEmployee,
+  localPatchEmployee,
   localReorderEmployees,
   localConfirmPhaseDates,
   loadLocalSnapshot,
@@ -45,8 +48,11 @@ import { DATABASE_UNAVAILABLE_MESSAGE, formatSaveError } from "@/lib/supabase/er
 import type {
   NewAbsenceInput,
   AbsenceUpdateInput,
+  AbsenceSimplePatch,
   NewChantierInput,
   ChantierUpdateInput,
+  ChantierSimplePatch,
+  EmployeePatch,
   ScheduleChantierDayInput,
   NewEmployeeInput,
   HoraireSaison,
@@ -70,17 +76,23 @@ type PlanningContextValue = {
   clearSaveNotice: () => void;
   usingSupabase: boolean;
   databaseUnavailable: boolean;
-  refresh: () => Promise<void>;
+  refresh: (options?: {
+    throwOnError?: boolean;
+    quiet?: boolean;
+  }) => Promise<PlanningSnapshot | void>;
   createChantier: (input: NewChantierInput) => Promise<void>;
   updateChantier: (input: ChantierUpdateInput) => Promise<void>;
+  patchChantier: (input: ChantierSimplePatch) => Promise<void>;
   deleteChantier: (chantierId: string) => Promise<void>;
   scheduleChantierDay: (input: ScheduleChantierDayInput) => Promise<void>;
   upsertEmployee: (input: NewEmployeeInput & { id?: string }) => Promise<void>;
+  patchEmployee: (input: EmployeePatch) => Promise<void>;
   reorderEmployees: (
     rows: { id: string; ordre_affichage: number }[],
   ) => Promise<void>;
   createAbsence: (input: NewAbsenceInput) => Promise<void>;
   updateAbsence: (input: AbsenceUpdateInput) => Promise<void>;
+  patchAbsence: (input: AbsenceSimplePatch) => Promise<void>;
   deleteAbsence: (id: string) => Promise<void>;
   applyPhasePatches: (patches: PhasePatch[]) => Promise<void>;
   applyPhaseEdits: (edits: PhaseEdits) => Promise<void>;
@@ -177,13 +189,14 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
     }
   }, [useShared]);
 
-  const refresh = useCallback(async (options?: { throwOnError?: boolean }) => {
+  const refresh = useCallback(async (options?: { throwOnError?: boolean; quiet?: boolean }): Promise<PlanningSnapshot | undefined> => {
     try {
       if (!useShared) {
         setLiveSupabase(false);
-        setSnapshot(loadLocalSnapshot());
+        const local = loadLocalSnapshot();
+        setSnapshot(local);
         setError(null);
-        return;
+        return local;
       }
       const remote = await Promise.race([
         fetchPlanningSnapshot(),
@@ -194,24 +207,45 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
       if (!remote.usingSupabase || !remote.snapshot) {
         throw new Error(DATABASE_UNAVAILABLE_MESSAGE);
       }
-      setSnapshot(remote.snapshot as PlanningSnapshot);
+      const next = remote.snapshot as PlanningSnapshot;
+      setSnapshot(next);
       setLiveSupabase(true);
       setError(null);
+      return next;
     } catch (err) {
       console.error("[planning] refresh", err);
+      if (options?.quiet) return undefined;
       setLiveSupabase(false);
       setError(
         err instanceof Error ? err.message : DATABASE_UNAVAILABLE_MESSAGE,
       );
       if (options?.throwOnError) throw err;
     } finally {
-      setLoading(false);
+      if (!options?.quiet) setLoading(false);
     }
   }, [useShared]);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  const refreshRef = useRef(refresh);
+  refreshRef.current = refresh;
+
+  useEffect(() => {
+    if (!useShared) return;
+    const poll = () => {
+      if (document.visibilityState === "visible") {
+        void refreshRef.current({ quiet: true });
+      }
+    };
+    const timer = window.setInterval(poll, 4000);
+    document.addEventListener("visibilitychange", poll);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", poll);
+    };
+  }, [useShared]);
 
   const clearSaveNotice = useCallback(() => setSaveNotice(null), []);
 
@@ -295,6 +329,19 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
     [useShared, refresh, assertWritable, mutate],
   );
 
+  const patchChantier = useCallback(
+    async (input: ChantierSimplePatch) => {
+      assertWritable();
+      if (useShared) {
+        await mutate({ action: "patchChantier", input });
+        await refresh({ throwOnError: true });
+        return;
+      }
+      setSnapshot((current) => localPatchChantier(current, input));
+    },
+    [useShared, refresh, assertWritable, mutate],
+  );
+
   const deleteChantier = useCallback(
     async (chantierId: string) => {
       assertWritable();
@@ -330,6 +377,19 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
         return;
       }
       setSnapshot((current) => localUpsertEmployee(current, input));
+    },
+    [useShared, refresh, assertWritable, mutate],
+  );
+
+  const patchEmployee = useCallback(
+    async (input: EmployeePatch) => {
+      assertWritable();
+      if (useShared) {
+        await mutate({ action: "patchEmployee", input });
+        await refresh({ throwOnError: true });
+        return;
+      }
+      setSnapshot((current) => localPatchEmployee(current, input));
     },
     [useShared, refresh, assertWritable, mutate],
   );
@@ -385,6 +445,19 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
         return;
       }
       setSnapshot((current) => localUpdateAbsence(current, input));
+    },
+    [useShared, refresh, assertWritable, mutate],
+  );
+
+  const patchAbsence = useCallback(
+    async (input: AbsenceSimplePatch) => {
+      assertWritable();
+      if (useShared) {
+        await mutate({ action: "patchAbsence", input });
+        await refresh({ throwOnError: true });
+        return;
+      }
+      setSnapshot((current) => localPatchAbsence(current, input));
     },
     [useShared, refresh, assertWritable, mutate],
   );
@@ -668,12 +741,15 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
       refresh,
       createChantier,
       updateChantier,
+      patchChantier,
       deleteChantier,
       scheduleChantierDay,
       upsertEmployee,
+      patchEmployee,
       reorderEmployees,
       createAbsence,
       updateAbsence,
+      patchAbsence,
       deleteAbsence,
       applyPhasePatches,
       applyPhaseEdits,
@@ -700,12 +776,15 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
       refresh,
       createChantier,
       updateChantier,
+      patchChantier,
       deleteChantier,
       scheduleChantierDay,
       upsertEmployee,
+      patchEmployee,
       reorderEmployees,
       createAbsence,
       updateAbsence,
+      patchAbsence,
       deleteAbsence,
       applyPhasePatches,
       applyPhaseEdits,

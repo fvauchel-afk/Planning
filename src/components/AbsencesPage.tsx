@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AbsenceImpactEditor } from "@/components/AbsenceImpactEditor";
 import { ConflictModal } from "@/components/ConflictModal";
 import { formatLongDate } from "@/lib/dates";
@@ -14,6 +14,12 @@ import {
 } from "@/lib/engine/absence-imprevue";
 import { delayTouchesPrioritaire } from "@/lib/engine/delay";
 import { usePlanning } from "@/lib/planning-context";
+import {
+  STALE_ABSENCE_MESSAGE,
+  absenceCascadeFingerprint,
+  confirmStaleReload,
+  useDebouncedPatch,
+} from "@/lib/form-live";
 import {
   absencePeriodNote,
   matchingRecordedAbsence,
@@ -36,9 +42,11 @@ export function AbsencesPage() {
     snapshot,
     createAbsence,
     updateAbsence,
+    patchAbsence,
     deleteAbsence,
     applyPhasePatches,
     createSignalement,
+    refresh,
   } = usePlanning();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [employeId, setEmployeId] = useState("");
@@ -54,6 +62,25 @@ export function AbsencesPage() {
   const [conflict, setConflict] = useState<ReturnType<typeof planAbsenceImprevue> | null>(
     null,
   );
+  const snapRef = useRef(snapshot);
+  snapRef.current = snapshot;
+  const dirtySimple = useRef(new Set<string>());
+  const cascadeBaseline = useRef("");
+  const cascadeDirty = useRef(false);
+
+  const applyAbsencePatch = async (payload: {
+    type?: TypeAbsence;
+    motif_precision?: string | null;
+  }) => {
+    if (!editingId) return;
+    try {
+      await patchAbsence({ id: editingId, ...payload });
+      Object.keys(payload).forEach((key) => dirtySimple.current.delete(key));
+    } catch (err) {
+      setError(formatSaveError(err, "l’enregistrement automatique a échoué"));
+    }
+  };
+  const live = useDebouncedPatch(applyAbsencePatch);
 
   const employeesById = new Map(
     snapshot.employees.map((employee) => [employee.id, employee]),
@@ -86,6 +113,10 @@ export function AbsencesPage() {
   }, [impacted, reviewPayload, snapshot]);
 
   function resetForm() {
+    live.cancel();
+    dirtySimple.current.clear();
+    cascadeDirty.current = false;
+    cascadeBaseline.current = "";
     setEditingId(null);
     setEmployeId("");
     setType("conge");
@@ -99,6 +130,10 @@ export function AbsencesPage() {
   }
 
   function startEdit(absence: Absence) {
+    live.cancel();
+    dirtySimple.current.clear();
+    cascadeDirty.current = false;
+    cascadeBaseline.current = absenceCascadeFingerprint(absence);
     setEditingId(absence.id);
     setEmployeId(absence.employe_id);
     setType(absence.type);
@@ -117,6 +152,22 @@ export function AbsencesPage() {
       });
     });
   }
+
+  useEffect(() => {
+    if (!editingId) return;
+    const remote = snapshot.absences.find((item) => item.id === editingId);
+    if (!remote) return;
+    if (!dirtySimple.current.has("type")) setType(remote.type);
+    if (!dirtySimple.current.has("motif_precision")) {
+      setMotifPrecision(remote.motif_precision ?? "");
+    }
+    if (!cascadeDirty.current) {
+      setEmployeId(remote.employe_id);
+      setDateDebut(remote.date_debut.slice(0, 10));
+      setDateFin(remote.date_fin.slice(0, 10));
+      cascadeBaseline.current = absenceCascadeFingerprint(remote);
+    }
+  }, [snapshot, editingId]);
 
   function validatedPayload(): NewAbsenceInput | null {
     if (!employeId || !dateDebut || !dateFin) {
@@ -153,26 +204,26 @@ export function AbsencesPage() {
       const plan =
         forceConflict && conflict
           ? conflict
-          : planAbsenceImprevue(snapshot, payload, phaseChoices, {
+          : planAbsenceImprevue(snapRef.current, payload, phaseChoices, {
               ignoreAbsenceId: editingId ?? undefined,
             });
       const needsPlacementConflict =
         plan.status === "conflict" ||
-        delayTouchesPrioritaire(snapshot, plan.patches);
+        delayTouchesPrioritaire(snapRef.current, plan.patches);
       sendingValidation = Boolean(needsPlacementConflict && forceConflict);
       if (needsPlacementConflict && !forceConflict) {
         setConflict(plan);
         return;
       }
       const overlap = listImpactedPhases(
-        snapshot,
+        snapRef.current,
         payload.employe_id,
         payload.date_debut,
         payload.date_fin,
       );
       if (needsPlacementConflict) {
         const pendingSimilar = similarPendingAbsenceSignalement(
-          snapshot,
+          snapRef.current,
           payload,
         );
         if (pendingSimilar) {
@@ -183,7 +234,7 @@ export function AbsencesPage() {
           return;
         }
         const already = matchingRecordedAbsence(
-          snapshot,
+          snapRef.current,
           payload,
           editingId ?? undefined,
         );
@@ -192,7 +243,7 @@ export function AbsencesPage() {
         } else if (!already) {
           await createAbsence(payload);
         }
-        const previouslyRejected = similarAbsenceSignalement(snapshot, payload, [
+        const previouslyRejected = similarAbsenceSignalement(snapRef.current, payload, [
           "rejete",
         ]);
         const originPhaseId =
@@ -205,7 +256,7 @@ export function AbsencesPage() {
           note: `${absencePeriodNote(payload)} : l’algorithme propose des décalages, non appliqués tant que Mika ou Alexis n’a pas validé.`,
           origine: "decalage_admin",
           statut: "en_attente",
-          proposition: propositionFromDelay(snapshot, plan),
+          proposition: propositionFromDelay(snapRef.current, plan),
         });
         setNotice(
           previouslyRejected
@@ -243,6 +294,29 @@ export function AbsencesPage() {
     const payload = validatedPayload();
     if (!payload) return;
     setNotice(null);
+    if (editingId) {
+      await live.flush();
+      const latest = (await refresh({ quiet: true })) ?? snapshot;
+      snapRef.current = latest;
+      const remote = latest.absences.find((item) => item.id === editingId);
+      const remoteFp = absenceCascadeFingerprint(remote);
+      if (
+        cascadeDirty.current &&
+        remoteFp &&
+        remoteFp !== cascadeBaseline.current
+      ) {
+        if (confirmStaleReload(STALE_ABSENCE_MESSAGE)) {
+          if (remote) {
+            cascadeDirty.current = false;
+            setEmployeId(remote.employe_id);
+            setDateDebut(remote.date_debut.slice(0, 10));
+            setDateFin(remote.date_fin.slice(0, 10));
+            cascadeBaseline.current = remoteFp;
+          }
+        }
+        return;
+      }
+    }
     const overlap = listImpactedPhases(
       snapshot,
       payload.employe_id,
@@ -266,7 +340,8 @@ export function AbsencesPage() {
         <h2 className="font-serif text-3xl text-stone-900">Absences</h2>
         <p className="mt-1 mb-4 text-sm text-stone-600">
           Congés, maladie, formation, jour férié d&apos;entreprise ou autre
-          motif justifié.
+          motif justifié. Type et motif s’enregistrent tout seuls sur une fiche
+          déjà ouverte ; les dates et le salarié s’appliquent avec Enregistrer.
         </p>
         {notice && (
           <p className="mb-4 rounded border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-950">
@@ -350,7 +425,10 @@ export function AbsencesPage() {
           <span className="mb-1 block">Employé</span>
           <select
             value={employeId}
-            onChange={(event) => setEmployeId(event.target.value)}
+            onChange={(event) => {
+              cascadeDirty.current = true;
+              setEmployeId(event.target.value);
+            }}
             className="w-full rounded border border-stone-300 px-3 py-2"
           >
             <option value="">Choisir…</option>
@@ -368,7 +446,21 @@ export function AbsencesPage() {
           <span className="mb-1 block">Type</span>
           <select
             value={type}
-            onChange={(event) => setType(event.target.value as TypeAbsence)}
+            onChange={(event) => {
+              const value = event.target.value as TypeAbsence;
+              setType(value);
+              dirtySimple.current.add("type");
+              if (editingId) {
+                live.schedule({
+                  type: value,
+                  motif_precision:
+                    value === "autre" ? motifPrecision.trim() || null : null,
+                });
+              }
+            }}
+            onBlur={() => {
+              if (editingId) void live.flush();
+            }}
             className="w-full rounded border border-stone-300 px-3 py-2"
           >
             {TYPES_ABSENCE.map((value) => (
@@ -383,7 +475,20 @@ export function AbsencesPage() {
             <span className="mb-1 block">Préciser le motif</span>
             <input
               value={motifPrecision}
-              onChange={(event) => setMotifPrecision(event.target.value)}
+              onChange={(event) => {
+                const value = event.target.value;
+                setMotifPrecision(value);
+                dirtySimple.current.add("motif_precision");
+                if (editingId) {
+                  live.schedule({
+                    type: "autre",
+                    motif_precision: value.trim() || null,
+                  });
+                }
+              }}
+              onBlur={() => {
+                if (editingId) void live.flush();
+              }}
               placeholder="Ex. rendez-vous administratif…"
               className="w-full rounded border border-stone-300 px-3 py-2"
             />
@@ -394,7 +499,10 @@ export function AbsencesPage() {
           <input
             type="date"
             value={dateDebut}
-            onChange={(event) => setDateDebut(event.target.value)}
+            onChange={(event) => {
+              cascadeDirty.current = true;
+              setDateDebut(event.target.value);
+            }}
             className="w-full rounded border border-stone-300 px-3 py-2"
           />
         </label>
@@ -403,7 +511,10 @@ export function AbsencesPage() {
           <input
             type="date"
             value={dateFin}
-            onChange={(event) => setDateFin(event.target.value)}
+            onChange={(event) => {
+              cascadeDirty.current = true;
+              setDateFin(event.target.value);
+            }}
             className="w-full rounded border border-stone-300 px-3 py-2"
           />
         </label>
