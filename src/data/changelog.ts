@@ -11,6 +11,13 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-14-onedrive-compte-perso",
+    title: "Dossier OneDrive",
+    items: [
+      "La création du dossier client à l’enregistrement d’un chantier fonctionne de nouveau avec un compte Microsoft personnel (Hotmail), au lieu d’afficher une erreur de jeton JWT.",
+    ],
+  },
+  {
     id: "2026-09-14-cascade-employe",
     title: "Changement de salarié",
     items: [
