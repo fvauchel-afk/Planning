@@ -206,20 +206,58 @@ function applyPatchesLocally(
   };
 }
 
+export function defaultAbsenceChoices(
+  snapshot: PlanningSnapshot,
+  impacted: ImpactedPhaseView[],
+  current: Record<string, AbsencePhaseChoice>,
+): Record<string, AbsencePhaseChoice> {
+  const lists = candidatesForChoices(snapshot, impacted, current);
+  const next: Record<string, AbsencePhaseChoice> = {};
+  for (const row of impacted) {
+    const list = lists[row.phase.id] ?? [];
+    const previous = current[row.phase.id];
+    if (list.length === 0) {
+      next[row.phase.id] = { action: "delay" };
+      continue;
+    }
+    const stillValid =
+      previous?.action === "reassign" &&
+      previous.employeeId &&
+      list.some((item) => item.id === previous.employeeId);
+    if (previous?.action === "delay") {
+      next[row.phase.id] = { action: "delay" };
+    } else if (stillValid) {
+      next[row.phase.id] = previous;
+    } else {
+      next[row.phase.id] = { action: "reassign", employeeId: list[0]!.id };
+    }
+  }
+  return next;
+}
+
 export function planAbsenceImprevue(
   snapshot: PlanningSnapshot,
   absence: NewAbsenceInput,
   choices: Record<string, AbsencePhaseChoice>,
+  options?: { ignoreAbsenceId?: string },
 ): DelayPlanResult {
+  const workingSnapshot = options?.ignoreAbsenceId
+    ? {
+        ...snapshot,
+        absences: snapshot.absences.filter(
+          (item) => item.id !== options.ignoreAbsenceId,
+        ),
+      }
+    : snapshot;
   const impacted = listImpactedPhases(
-    snapshot,
+    workingSnapshot,
     absence.employe_id,
     absence.date_debut,
     absence.date_fin,
   );
-  const candidates = candidatesForChoices(snapshot, impacted, choices);
+  const candidates = candidatesForChoices(workingSnapshot, impacted, choices);
   const patches: PhasePatch[] = [];
-  let working = snapshot;
+  let working = workingSnapshot;
 
   for (const row of impacted) {
     const choice = choices[row.phase.id];
@@ -248,7 +286,9 @@ export function planAbsenceImprevue(
 
   if (delayIds.length > 0) {
     const originId = delayIds[0];
-    const result = planAbsenceCascade(working, originId, absence);
+    const result = planAbsenceCascade(working, originId, absence, {
+      ignoreAbsenceId: options?.ignoreAbsenceId,
+    });
     patches.push(...result.patches);
     displacements.push(...result.displacements);
     conflict = result.status === "conflict";
@@ -265,3 +305,75 @@ export function planAbsenceImprevue(
     message: messages[0] ?? `${merged.size} phase(s) mise(s) à jour.`,
   };
 }
+
+function runAbsenceOverlapSelfCheck() {
+  const snapshot: PlanningSnapshot = {
+    employees: [
+      {
+        id: "alexis",
+        nom: "Alexis",
+        roles: ["fabrication", "pose"],
+        actif: true,
+      },
+    ],
+    chantiers: [
+      {
+        id: "dupont",
+        nom_client: "Portail Dupont",
+        adresse: "",
+        lien_dossier_onedrive: null,
+        priorite: "normal",
+        date_creation: "2026-09-01",
+      },
+    ],
+    elements: [{ id: "el-dupont", chantier_id: "dupont", nom_element: "Portail" }],
+    phases: [
+      {
+        id: "fab-dupont",
+        element_id: "el-dupont",
+        type_phase: "fabrication",
+        duree_estimee_heures: 16,
+        date_debut: "2026-09-17",
+        date_fin: "2026-09-18",
+        heure_debut: "07:30",
+        employe_id: "alexis",
+        statut: "a_faire",
+        urgent: false,
+      },
+    ],
+    absences: [],
+    signalements: [],
+    receptions: [],
+    demandes: [],
+    horaires: [],
+  };
+  const hit = listImpactedPhases(snapshot, "alexis", "2026-09-17", "2026-09-18");
+  if (hit.length !== 1 || hit[0]?.nom_client !== "Portail Dupont") {
+    throw new Error(
+      `absence-imprevue: chevauchement 17-18/09 attendu, reçu ${hit.length}`,
+    );
+  }
+  const miss = listImpactedPhases(snapshot, "alexis", "2026-09-19", "2026-09-20");
+  if (miss.length !== 0) {
+    throw new Error("absence-imprevue: hors période, aucun chantier");
+  }
+  const plan = planAbsenceImprevue(
+    snapshot,
+    {
+      employe_id: "alexis",
+      date_debut: "2026-09-17",
+      date_fin: "2026-09-18",
+      type: "conge",
+    },
+    { "fab-dupont": { action: "delay" } },
+  );
+  const moved = plan.patches.find((patch) => patch.id === "fab-dupont");
+  if (!moved?.date_debut || moved.date_debut <= "2026-09-18") {
+    throw new Error(
+      `absence-imprevue: décalage attendu après le 18/09, reçu ${moved?.date_debut ?? "aucun patch"}`,
+    );
+  }
+}
+
+runAbsenceOverlapSelfCheck();
+
