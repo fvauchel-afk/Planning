@@ -1,7 +1,7 @@
 import "server-only";
 import { getOnedriveConfig } from "@/lib/onedrive/config";
 import { sanitizeOnedriveName } from "@/lib/onedrive/sanitize";
-import { toPersonalOnedrivePath } from "@/lib/onedrive/personal-path";
+import { toGraphMeDrivePath } from "@/lib/onedrive/personal-path";
 import {
   getValidAccessToken,
   loadOnedriveTokens,
@@ -14,7 +14,6 @@ type GraphErrorBody = {
 };
 
 const GRAPH_BASE = "https://graph.microsoft.com/v1.0";
-const ONEDRIVE_PERSONAL_BASE = "https://api.onedrive.com/v1.0";
 
 function bearerValue(token: string): string {
   return token.replace(/^Bearer\s+/i, "").trim();
@@ -24,12 +23,20 @@ function isJwtAuthError(message: string | undefined): boolean {
   return /IDX14100|JWT is not well formed/i.test(message ?? "");
 }
 
+function isVroomAuthError(message: string | undefined): boolean {
+  return /UnauthenticatedVroomException|Vroom/i.test(message ?? "");
+}
+
 function graphErrorMessage(json: GraphErrorBody, status: number): string {
   const raw = json.error?.message || `Erreur Microsoft Graph (${status}).`;
-  if (isJwtAuthError(raw)) {
-    return "Microsoft a refusé le jeton OneDrive du compte personnel. Ouvrez l’onglet OneDrive et cliquez sur « Connecter OneDrive », puis réessayez.";
+  if (isJwtAuthError(raw) || isVroomAuthError(raw)) {
+    return "Microsoft a refusé l’accès au OneDrive personnel. Réessayez, ou ouvrez l’onglet OneDrive puis « Connecter OneDrive ».";
   }
   return raw;
+}
+
+function meItemPath(itemId: string, suffix = ""): string {
+  return `/me/drive/items/${itemId}${suffix}`;
 }
 
 async function fetchJson<T>(
@@ -64,16 +71,11 @@ async function graphFetch<T>(
   const graph = await fetchJson<T>(GRAPH_BASE, token, path, init);
   if (graph.ok) return graph.data;
   const message = graph.json.error?.message;
-  const personalPath = toPersonalOnedrivePath(path);
-  if (isJwtAuthError(message) && personalPath) {
-    const personal = await fetchJson<T>(
-      ONEDRIVE_PERSONAL_BASE,
-      token,
-      personalPath,
-      init,
-    );
-    if (personal.ok) return personal.data;
-    throw new Error(graphErrorMessage(personal.json, personal.status));
+  const mePath = toGraphMeDrivePath(path);
+  if (isJwtAuthError(message) && mePath && mePath !== path) {
+    const retry = await fetchJson<T>(GRAPH_BASE, token, mePath, init);
+    if (retry.ok) return retry.data;
+    throw new Error(graphErrorMessage(retry.json, retry.status));
   }
   throw new Error(graphErrorMessage(graph.json, graph.status));
 }
@@ -89,12 +91,12 @@ async function graphRequest(
   };
   const graph = await fetch(`${GRAPH_BASE}${path}`, { ...init, headers });
   if (graph.ok) return graph;
-  const personalPath = toPersonalOnedrivePath(path);
-  if (!personalPath) return graph;
+  const mePath = toGraphMeDrivePath(path);
+  if (!mePath || mePath === path) return graph;
   const clone = graph.clone();
   const json = (await clone.json().catch(() => ({}))) as GraphErrorBody;
   if (!isJwtAuthError(json.error?.message)) return graph;
-  return fetch(`${ONEDRIVE_PERSONAL_BASE}${personalPath}`, { ...init, headers });
+  return fetch(`${GRAPH_BASE}${mePath}`, { ...init, headers });
 }
 
 export function encodeSharingUrl(url: string): string {
@@ -155,35 +157,59 @@ export async function persistAccountLabel(): Promise<void> {
 export async function getRootFolder(): Promise<{ itemId: string; driveId: string }> {
   const token = await getValidAccessToken();
   const row = await loadOnedriveTokens();
-  if (row?.root_item_id && row.root_drive_id) {
+  if (row?.root_item_id) {
     try {
-      await graphFetch(
+      const item = await graphFetch<DriveItem>(
         token,
-        `/drives/${row.root_drive_id}/items/${row.root_item_id}?$select=id`,
+        `${meItemPath(row.root_item_id)}?$select=id,parentReference`,
       );
-      return { itemId: row.root_item_id, driveId: row.root_drive_id };
+      const driveId = item.parentReference?.driveId || row.root_drive_id;
+      if (item.id && driveId) {
+        return { itemId: item.id, driveId };
+      }
     } catch {
       // Dossier déplacé ou lien périmé : on re-résout une fois.
     }
   }
   const cfg = getOnedriveConfig();
-  const resolved = await resolveShareItem(token, cfg.rootShareUrl);
-  await saveOnedriveRoot({
-    root_item_id: resolved.itemId,
-    root_drive_id: resolved.driveId,
-  });
-  return { itemId: resolved.itemId, driveId: resolved.driveId };
+  try {
+    const resolved = await resolveShareItem(token, cfg.rootShareUrl);
+    await saveOnedriveRoot({
+      root_item_id: resolved.itemId,
+      root_drive_id: resolved.driveId,
+    });
+    return { itemId: resolved.itemId, driveId: resolved.driveId };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "";
+    if (
+      !isJwtAuthError(message) &&
+      !isVroomAuthError(message) &&
+      !/OneDrive personnel/i.test(message)
+    ) {
+      throw err;
+    }
+    const root = await graphFetch<DriveItem>(
+      token,
+      "/me/drive/root?$select=id,parentReference",
+    );
+    const driveId = root.parentReference?.driveId;
+    if (!root.id || !driveId) {
+      throw new Error("Impossible d’accéder à la racine OneDrive du compte.");
+    }
+    await saveOnedriveRoot({ root_item_id: root.id, root_drive_id: driveId });
+    return { itemId: root.id, driveId };
+  }
 }
 
 async function createShareLink(
   token: string,
-  driveId: string,
+  _driveId: string,
   itemId: string,
 ): Promise<string | null> {
   try {
     const created = await graphFetch<{ link?: { webUrl?: string } }>(
       token,
-      `/drives/${driveId}/items/${itemId}/createLink`,
+      `${meItemPath(itemId)}/createLink`,
       {
         method: "POST",
         body: JSON.stringify({ type: "view", scope: "anonymous" }),
@@ -201,7 +227,7 @@ export async function createClientFolder(nomClient: string): Promise<string> {
   const name = sanitizeOnedriveName(nomClient, "Client");
   const item = await graphFetch<DriveItem>(
     token,
-    `/drives/${root.driveId}/items/${root.itemId}/children`,
+    `${meItemPath(root.itemId)}/children`,
     {
       method: "POST",
       body: JSON.stringify({
@@ -229,7 +255,7 @@ export async function ensureChildFolder(name: string): Promise<{
   try {
     const existing = await graphFetch<DriveItem>(
       token,
-      `/drives/${root.driveId}/items/${root.itemId}:/${encoded}`,
+      `${meItemPath(root.itemId)}:/${encoded}`,
     );
     return {
       itemId: existing.id,
@@ -239,7 +265,7 @@ export async function ensureChildFolder(name: string): Promise<{
     try {
       const created = await graphFetch<DriveItem>(
         token,
-        `/drives/${root.driveId}/items/${root.itemId}/children`,
+        `${meItemPath(root.itemId)}/children`,
         {
           method: "POST",
           body: JSON.stringify({
@@ -256,7 +282,7 @@ export async function ensureChildFolder(name: string): Promise<{
     } catch {
       const existing = await graphFetch<DriveItem>(
         token,
-        `/drives/${root.driveId}/items/${root.itemId}:/${encoded}`,
+        `${meItemPath(root.itemId)}:/${encoded}`,
       );
       return {
         itemId: existing.id,
@@ -276,7 +302,7 @@ export async function getBackupFolder(): Promise<{
     try {
       const existing = await graphFetch<DriveItem>(
         token,
-        `/drives/${root.driveId}/items/${root.itemId}:/${encodeURIComponent(name)}`,
+        `${meItemPath(root.itemId)}:/${encodeURIComponent(name)}`,
       );
       return {
         itemId: existing.id,
@@ -314,7 +340,7 @@ export async function listBackupFiles(): Promise<BackupFileMeta[]> {
     }>;
   }>(
     token,
-    `/drives/${folder.driveId}/items/${folder.itemId}/children?$select=id,name,size,file,folder,createdDateTime,lastModifiedDateTime,webUrl&$top=200`,
+    `${meItemPath(folder.itemId)}/children?$select=id,name,size,file,folder,createdDateTime,lastModifiedDateTime,webUrl&$top=200`,
   );
   return (page.value ?? [])
     .filter(
@@ -341,7 +367,7 @@ export async function downloadBackupJson(itemId: string): Promise<string> {
     DriveItem & { parentReference?: { id?: string; driveId?: string } }
   >(
     token,
-    `/drives/${folder.driveId}/items/${encodeURIComponent(itemId)}?$select=id,name,parentReference`,
+    `${meItemPath(encodeURIComponent(itemId))}?$select=id,name,parentReference`,
   );
   const parentId = meta.parentReference?.id;
   if (!parentId || parentId !== folder.itemId) {
@@ -349,7 +375,7 @@ export async function downloadBackupJson(itemId: string): Promise<string> {
   }
   const res = await graphRequest(
     token,
-    `/drives/${folder.driveId}/items/${encodeURIComponent(itemId)}/content`,
+    `${meItemPath(encodeURIComponent(itemId))}/content`,
     { redirect: "follow" },
   );
   if (!res.ok) {
@@ -369,7 +395,7 @@ export async function uploadJsonToBackupFolder(input: {
   const encodedName = encodeURIComponent(safeName);
   const res = await graphRequest(
     token,
-    `/drives/${folder.driveId}/items/${folder.itemId}:/${encodedName}:/content`,
+    `${meItemPath(folder.itemId)}:/${encodedName}:/content`,
     {
       method: "PUT",
       headers: {
@@ -414,7 +440,7 @@ export async function uploadBytesToShareFolder(input: {
       : new Uint8Array(input.bytes);
   const res = await graphRequest(
     token,
-    `/drives/${folder.driveId}/items/${folder.itemId}:/${encodedName}:/content`,
+    `${meItemPath(folder.itemId)}:/${encodedName}:/content`,
     {
       method: "PUT",
       headers: { "Content-Type": input.contentType },

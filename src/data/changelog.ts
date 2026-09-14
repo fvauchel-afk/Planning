@@ -11,6 +11,13 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-14-onedrive-me-drive",
+    title: "Dossier OneDrive",
+    items: [
+      "Créer le dossier OneDrive d’un chantier passe par le OneDrive du compte connecté (Hotmail compris), au lieu de l’ancienne API qui refusait le jeton.",
+    ],
+  },
+  {
     id: "2026-09-14-onedrive-compte-perso",
     title: "Dossier OneDrive",
     items: [
