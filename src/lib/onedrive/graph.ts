@@ -1,6 +1,7 @@
 import "server-only";
 import { getOnedriveConfig } from "@/lib/onedrive/config";
 import { sanitizeOnedriveName } from "@/lib/onedrive/sanitize";
+import { toPersonalOnedrivePath } from "@/lib/onedrive/personal-path";
 import {
   getValidAccessToken,
   loadOnedriveTokens,
@@ -12,15 +13,35 @@ type GraphErrorBody = {
   error?: { message?: string; code?: string };
 };
 
-async function graphFetch<T>(
+const GRAPH_BASE = "https://graph.microsoft.com/v1.0";
+const ONEDRIVE_PERSONAL_BASE = "https://api.onedrive.com/v1.0";
+
+function bearerValue(token: string): string {
+  return token.replace(/^Bearer\s+/i, "").trim();
+}
+
+function isJwtAuthError(message: string | undefined): boolean {
+  return /IDX14100|JWT is not well formed/i.test(message ?? "");
+}
+
+function graphErrorMessage(json: GraphErrorBody, status: number): string {
+  const raw = json.error?.message || `Erreur Microsoft Graph (${status}).`;
+  if (isJwtAuthError(raw)) {
+    return "Microsoft a refusé le jeton OneDrive du compte personnel. Ouvrez l’onglet OneDrive et cliquez sur « Connecter OneDrive », puis réessayez.";
+  }
+  return raw;
+}
+
+async function fetchJson<T>(
+  base: string,
   token: string,
   path: string,
   init?: RequestInit,
-): Promise<T> {
-  const res = await fetch(`https://graph.microsoft.com/v1.0${path}`, {
+): Promise<{ ok: true; data: T } | { ok: false; status: number; json: T & GraphErrorBody }> {
+  const res = await fetch(`${base}${path}`, {
     ...init,
     headers: {
-      Authorization: `Bearer ${token}`,
+      Authorization: `Bearer ${bearerValue(token)}`,
       ...(init?.body instanceof Buffer || init?.body instanceof Uint8Array
         ? {}
         : typeof init?.body === "string"
@@ -29,14 +50,51 @@ async function graphFetch<T>(
       ...(init?.headers ?? {}),
     },
   });
-  if (res.status === 204) return undefined as T;
+  if (res.status === 204) return { ok: true, data: undefined as T };
   const json = (await res.json().catch(() => ({}))) as T & GraphErrorBody;
-  if (!res.ok) {
-    throw new Error(
-      json.error?.message || `Erreur Microsoft Graph (${res.status}).`,
+  if (!res.ok) return { ok: false, status: res.status, json };
+  return { ok: true, data: json };
+}
+
+async function graphFetch<T>(
+  token: string,
+  path: string,
+  init?: RequestInit,
+): Promise<T> {
+  const graph = await fetchJson<T>(GRAPH_BASE, token, path, init);
+  if (graph.ok) return graph.data;
+  const message = graph.json.error?.message;
+  const personalPath = toPersonalOnedrivePath(path);
+  if (isJwtAuthError(message) && personalPath) {
+    const personal = await fetchJson<T>(
+      ONEDRIVE_PERSONAL_BASE,
+      token,
+      personalPath,
+      init,
     );
+    if (personal.ok) return personal.data;
+    throw new Error(graphErrorMessage(personal.json, personal.status));
   }
-  return json;
+  throw new Error(graphErrorMessage(graph.json, graph.status));
+}
+
+async function graphRequest(
+  token: string,
+  path: string,
+  init?: RequestInit,
+): Promise<Response> {
+  const headers = {
+    Authorization: `Bearer ${bearerValue(token)}`,
+    ...(init?.headers ?? {}),
+  };
+  const graph = await fetch(`${GRAPH_BASE}${path}`, { ...init, headers });
+  if (graph.ok) return graph;
+  const personalPath = toPersonalOnedrivePath(path);
+  if (!personalPath) return graph;
+  const clone = graph.clone();
+  const json = (await clone.json().catch(() => ({}))) as GraphErrorBody;
+  if (!isJwtAuthError(json.error?.message)) return graph;
+  return fetch(`${ONEDRIVE_PERSONAL_BASE}${personalPath}`, { ...init, headers });
 }
 
 export function encodeSharingUrl(url: string): string {
@@ -289,12 +347,10 @@ export async function downloadBackupJson(itemId: string): Promise<string> {
   if (!parentId || parentId !== folder.itemId) {
     throw new Error("Ce fichier n’est pas une sauvegarde du dossier Sauvegarde.");
   }
-  const res = await fetch(
-    `https://graph.microsoft.com/v1.0/drives/${folder.driveId}/items/${encodeURIComponent(itemId)}/content`,
-    {
-      headers: { Authorization: `Bearer ${token}` },
-      redirect: "follow",
-    },
+  const res = await graphRequest(
+    token,
+    `/drives/${folder.driveId}/items/${encodeURIComponent(itemId)}/content`,
+    { redirect: "follow" },
   );
   if (!res.ok) {
     throw new Error(`Impossible de lire la sauvegarde (${res.status}).`);
@@ -311,12 +367,12 @@ export async function uploadJsonToBackupFolder(input: {
   const folder = await getBackupFolder();
   const safeName = sanitizeOnedriveName(input.fileName, "sauvegarde-planning.json");
   const encodedName = encodeURIComponent(safeName);
-  const res = await fetch(
-    `https://graph.microsoft.com/v1.0/drives/${folder.driveId}/items/${folder.itemId}:/${encodedName}:/content`,
+  const res = await graphRequest(
+    token,
+    `/drives/${folder.driveId}/items/${folder.itemId}:/${encodedName}:/content`,
     {
       method: "PUT",
       headers: {
-        Authorization: `Bearer ${token}`,
         "Content-Type": "application/json; charset=utf-8",
         Prefer: input.failIfExists
           ? "conflictBehavior=fail"
@@ -337,7 +393,7 @@ export async function uploadJsonToBackupFolder(input: {
     ) {
       throw new Error("BACKUP_ALREADY_EXISTS");
     }
-    throw new Error(message);
+    throw new Error(graphErrorMessage(json, res.status));
   }
   return { name: json.name || safeName, webUrl: json.webUrl };
 }
@@ -356,22 +412,18 @@ export async function uploadBytesToShareFolder(input: {
     input.bytes instanceof Uint8Array
       ? input.bytes
       : new Uint8Array(input.bytes);
-  const res = await fetch(
-    `https://graph.microsoft.com/v1.0/drives/${folder.driveId}/items/${folder.itemId}:/${encodedName}:/content`,
+  const res = await graphRequest(
+    token,
+    `/drives/${folder.driveId}/items/${folder.itemId}:/${encodedName}:/content`,
     {
       method: "PUT",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": input.contentType,
-      },
+      headers: { "Content-Type": input.contentType },
       body: raw as unknown as BodyInit,
     },
   );
   if (!res.ok) {
     const json = (await res.json().catch(() => ({}))) as GraphErrorBody;
-    throw new Error(
-      json.error?.message || `Envoi du fichier OneDrive impossible (${res.status}).`,
-    );
+    throw new Error(graphErrorMessage(json, res.status));
   }
 }
 
