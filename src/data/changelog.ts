@@ -11,6 +11,15 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-14-demandes-conge",
+    title: "Demandes de congé",
+    items: [
+      "Depuis la bulle en bas à droite, un salarié peut envoyer une demande de congé (dates, type d’absence, commentaire optionnel), sans passer par un admin.",
+      "L’onglet Mes congés liste vos demandes : En attente, Acceptée, ou Refusée (avec le motif).",
+      "Dans Demandes, l’admin accepte (l’absence est créée comme dans Absences, y compris le conflit de placement) ou refuse avec un motif. Tant que c’est en attente, le planning ne change pas.",
+    ],
+  },
+  {
     id: "2026-09-14-absence-envoyer-validation",
     title: "Envoyer pour validation d’un congé déjà enregistré",
     items: [

@@ -24,6 +24,7 @@ const ADMIN_LINKS: { href: string; label: string }[] = [
 
 const SALARIE_LINKS: { href: string; label: string }[] = [
   { href: "/moi", label: "Mon planning" },
+  { href: "/moi/conges", label: "Mes congés" },
   { href: "/moi/retard", label: "Signalements" },
 ];
 

@@ -13,7 +13,8 @@ import {
   vapidSubject,
 } from "@/lib/push/vapid";
 
-export async function sendPlanningAlertPush(input: {
+async function sendPushToEmployeeIds(input: {
+  employeeIds: Set<string>;
   title: string;
   body: string;
   url: string;
@@ -34,15 +35,7 @@ export async function sendPlanningAlertPush(input: {
     console.warn("[push]", message);
     return { sent: 0, warning: message };
   }
-  if (rows.length === 0) return { sent: 0 };
-
-  const snapshot = await fetchSupabaseSnapshot();
-  const allowedIds = new Set(
-    snapshot.employees
-      .filter((employee) => canReceiveCommandes(employee.nom))
-      .map((employee) => employee.id),
-  );
-  const targets = rows.filter((row) => allowedIds.has(row.employe_id));
+  const targets = rows.filter((row) => input.employeeIds.has(row.employe_id));
   if (targets.length === 0) return { sent: 0 };
 
   webpush.setVapidDetails(vapidSubject(), vapidPublicKey(), vapidPrivateKey());
@@ -82,6 +75,39 @@ export async function sendPlanningAlertPush(input: {
     }),
   );
   return { sent };
+}
+
+export async function sendPlanningAlertPush(input: {
+  title: string;
+  body: string;
+  url: string;
+}): Promise<{ sent: number; warning?: string }> {
+  const snapshot = await fetchSupabaseSnapshot();
+  const allowedIds = new Set(
+    snapshot.employees
+      .filter((employee) => canReceiveCommandes(employee.nom))
+      .map((employee) => employee.id),
+  );
+  return sendPushToEmployeeIds({
+    employeeIds: allowedIds,
+    title: input.title,
+    body: input.body,
+    url: input.url,
+  });
+}
+
+export async function sendEmployeePush(input: {
+  employeeId: string;
+  title: string;
+  body: string;
+  url: string;
+}): Promise<{ sent: number; warning?: string }> {
+  return sendPushToEmployeeIds({
+    employeeIds: new Set([input.employeeId]),
+    title: input.title,
+    body: input.body,
+    url: input.url,
+  });
 }
 
 export async function sendCommandePush(input: {

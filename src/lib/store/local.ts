@@ -95,8 +95,19 @@ export function loadLocalSnapshot(): PlanningSnapshot {
       receptions: parsed.receptions ?? [],
       demandes: (parsed.demandes ?? []).map((row) => ({
         ...row,
-        statut: row.statut === "traite" ? "traite" : "en_attente",
+        statut:
+          row.statut === "traite" ||
+          row.statut === "acceptee" ||
+          row.statut === "refusee"
+            ? row.statut
+            : "en_attente",
         archivee: Boolean(row.archivee),
+        date_debut: row.date_debut ?? null,
+        date_fin: row.date_fin ?? null,
+        type_absence: row.type_absence ?? null,
+        motif_precision: row.motif_precision ?? null,
+        motif_refus: row.motif_refus ?? null,
+        absence_id: row.absence_id ?? null,
       })),
       sousTraitants: parsed.sousTraitants ?? [],
     };
@@ -471,6 +482,12 @@ export function localCreateDemande(
     date_creation: new Date().toISOString(),
     statut: "en_attente",
     archivee: false,
+    date_debut: input.date_debut?.slice(0, 10) ?? null,
+    date_fin: input.date_fin?.slice(0, 10) ?? null,
+    type_absence: input.type_absence ?? null,
+    motif_precision: input.motif_precision?.trim() || null,
+    motif_refus: null,
+    absence_id: null,
   };
   next.demandes = [row, ...(next.demandes ?? [])];
   saveLocalSnapshot(next);
@@ -488,6 +505,12 @@ export function localUpdateDemande(
           ...row,
           statut: input.statut ?? row.statut,
           archivee: input.archivee ?? row.archivee,
+          motif_refus:
+            input.motif_refus !== undefined
+              ? input.motif_refus
+              : row.motif_refus,
+          absence_id:
+            input.absence_id !== undefined ? input.absence_id : row.absence_id,
         }
       : row,
   );
