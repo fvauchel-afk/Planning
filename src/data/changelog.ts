@@ -11,6 +11,13 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-14-absence-prioritaire",
+    title: "Absence et chantier prioritaire",
+    items: [
+      "Si un congé décale un chantier Prioritaire, l’écran « Conflit de placement » s’ouvre et rien n’est appliqué tant que vous n’avez pas envoyé pour validation.",
+    ],
+  },
+  {
     id: "2026-09-14-onedrive-statut-signalement",
     title: "OneDrive et absences",
     items: [

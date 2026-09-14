@@ -373,6 +373,30 @@ function runAbsenceOverlapSelfCheck() {
       `absence-imprevue: décalage attendu après le 18/09, reçu ${moved?.date_debut ?? "aucun patch"}`,
     );
   }
+  if (plan.status === "conflict") {
+    throw new Error("absence-imprevue: un chantier normal ne doit pas exiger l’arbitrage");
+  }
+  const prioPlan = planAbsenceImprevue(
+    {
+      ...snapshot,
+      chantiers: snapshot.chantiers.map((item) => ({
+        ...item,
+        priorite: "prioritaire",
+      })),
+    },
+    {
+      employe_id: "alexis",
+      date_debut: "2026-09-17",
+      date_fin: "2026-09-18",
+      type: "conge",
+    },
+    { "fab-dupont": { action: "delay" } },
+  );
+  if (prioPlan.status !== "conflict") {
+    throw new Error(
+      "absence-imprevue: décaler un chantier prioritaire doit ouvrir le conflit de placement",
+    );
+  }
 }
 
 runAbsenceOverlapSelfCheck();
