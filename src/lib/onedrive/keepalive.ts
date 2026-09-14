@@ -2,7 +2,12 @@ import "server-only";
 import { waitUntil } from "@vercel/functions";
 import { refreshOnedriveQuietly } from "@/lib/onedrive/tokens";
 
-/** Démarre le rafraîchissement OneDrive sans attendre la fin. */
+/** Démarre le rafraîchissement OneDrive sans attendre la fin, sans bloquer le login. */
 export function scheduleOnedriveKeepalive(): void {
-  waitUntil(refreshOnedriveQuietly());
+  const run = refreshOnedriveQuietly().catch(() => undefined);
+  try {
+    waitUntil(run);
+  } catch {
+    void run;
+  }
 }

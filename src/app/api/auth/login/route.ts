@@ -87,7 +87,11 @@ async function sessionResponse(request: NextRequest, user: SessionUser) {
     token,
     sessionCookieOptions(requestIsHttps(request)),
   );
-  scheduleOnedriveKeepalive();
+  try {
+    scheduleOnedriveKeepalive();
+  } catch {
+    /* OneDrive en arrière-plan : ne jamais bloquer l’entrée. */
+  }
   return response;
 }
 
