@@ -1,6 +1,13 @@
 import type { Displacement } from "@/lib/engine/planner";
 import type { DelayPlanResult } from "@/lib/engine/delay";
-import { type PhasePatch, type PlanningSnapshot, type SignalementProposition } from "@/lib/types";
+import {
+  type Absence,
+  type NewAbsenceInput,
+  type PhasePatch,
+  type PlanningSnapshot,
+  type Signalement,
+  type SignalementProposition,
+} from "@/lib/types";
 
 export const PENDING_CHANTIER_MESSAGE =
   "Un signalement est en attente de validation — merci de le traiter avant d’ajouter un nouveau chantier.";
@@ -111,6 +118,39 @@ export function propositionFromDelay(
   };
 }
 
+export function absencePeriodNote(payload: Pick<NewAbsenceInput, "date_debut" | "date_fin">): string {
+  return `Absence du ${payload.date_debut} au ${payload.date_fin}`;
+}
+
+export function matchingRecordedAbsence(
+  snapshot: PlanningSnapshot,
+  payload: NewAbsenceInput,
+  ignoreAbsenceId?: string,
+): Absence | undefined {
+  return snapshot.absences.find(
+    (item) =>
+      item.id !== ignoreAbsenceId &&
+      item.employe_id === payload.employe_id &&
+      item.date_debut.slice(0, 10) === payload.date_debut &&
+      item.date_fin.slice(0, 10) === payload.date_fin &&
+      item.type === payload.type,
+  );
+}
+
+export function similarPendingAbsenceSignalement(
+  snapshot: PlanningSnapshot,
+  payload: NewAbsenceInput,
+): Signalement | undefined {
+  const needle = absencePeriodNote(payload);
+  return (snapshot.signalements ?? []).find(
+    (item) =>
+      item.statut === "en_attente" &&
+      item.origine === "decalage_admin" &&
+      item.employe_id === payload.employe_id &&
+      (item.note ?? "").includes(needle),
+  );
+}
+
 function runSignalementsSelfCheck() {
   if (!needsAlgoValidation({ status: "conflict", displacements: [] })) {
     throw new Error("signalements: un conflit doit attendre une validation");
@@ -133,6 +173,58 @@ function runSignalementsSelfCheck() {
   }
   if (needsAlgoValidation({ status: "ok", displacements: [] })) {
     throw new Error("signalements: sans répercussion externe, pas de file d’attente");
+  }
+  const snap = {
+    employees: [],
+    chantiers: [],
+    elements: [],
+    phases: [],
+    absences: [
+      {
+        id: "a1",
+        employe_id: "alexis",
+        type: "conge" as const,
+        date_debut: "2026-09-17",
+        date_fin: "2026-09-18",
+      },
+    ],
+    signalements: [
+      {
+        id: "s1",
+        employe_id: "alexis",
+        phase_id: "p1",
+        retard_demi_journees: 1,
+        sens: "retard" as const,
+        note: "Absence du 2026-09-17 au 2026-09-18 : l’algorithme propose des décalages.",
+        statut: "en_attente" as const,
+        date_creation: "2026-09-14",
+        origine: "decalage_admin" as const,
+      },
+    ],
+    receptions: [],
+    demandes: [],
+    horaires: [],
+  };
+  const payload = {
+    employe_id: "alexis",
+    type: "conge" as const,
+    date_debut: "2026-09-17",
+    date_fin: "2026-09-18",
+  };
+  if (!matchingRecordedAbsence(snap, payload)) {
+    throw new Error("signalements: absence déjà enregistrée non détectée");
+  }
+  if (!similarPendingAbsenceSignalement(snap, payload)) {
+    throw new Error("signalements: signalement d’absence en attente non détecté");
+  }
+  if (
+    similarPendingAbsenceSignalement(snap, {
+      ...payload,
+      date_debut: "2026-09-19",
+      date_fin: "2026-09-20",
+    })
+  ) {
+    throw new Error("signalements: autre période ne doit pas coller");
   }
 }
 runSignalementsSelfCheck();

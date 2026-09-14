@@ -1,20 +1,16 @@
 import { NextResponse } from "next/server";
-import { loadOnedriveTokens } from "@/lib/onedrive/tokens";
+import { probeOnedriveConnection } from "@/lib/onedrive/graph";
 import { isMissingSchemaError } from "@/lib/supabase/errors";
 
 export async function GET() {
   try {
-    const row = await loadOnedriveTokens();
-    return NextResponse.json({
-      connected: Boolean(row?.refresh_token),
-      account: row?.account_label ?? null,
-      expiresAt: row?.expires_at ?? null,
-      rootCached: Boolean(row?.root_item_id && row?.root_drive_id),
-    });
+    const status = await probeOnedriveConnection();
+    return NextResponse.json(status);
   } catch (err) {
     if (isMissingSchemaError(err)) {
       return NextResponse.json({
         connected: false,
+        expired: false,
         account: null,
         needsMigration: true,
         error:
@@ -22,6 +18,9 @@ export async function GET() {
       });
     }
     const message = err instanceof Error ? err.message : "Statut OneDrive indisponible.";
-    return NextResponse.json({ connected: false, error: message }, { status: 500 });
+    return NextResponse.json(
+      { connected: false, expired: false, error: message },
+      { status: 500 },
+    );
   }
 }

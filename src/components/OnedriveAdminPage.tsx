@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 
 type Status = {
   connected: boolean;
+  expired?: boolean;
   account: string | null;
   needsMigration?: boolean;
   error?: string;
@@ -30,6 +31,7 @@ export function OnedriveAdminPage() {
   }, []);
 
   const connected = Boolean(status?.connected);
+  const expired = Boolean(status?.expired);
 
   return (
     <section className="mx-auto max-w-xl space-y-4">
@@ -58,10 +60,29 @@ export function OnedriveAdminPage() {
                 <p className="mt-1">Compte : {status.account}</p>
               )}
             </>
+          ) : expired ? (
+            <>
+              <p className="font-medium">
+                Connexion expirée, reconnexion nécessaire.
+              </p>
+              {status.account && (
+                <p className="mt-1">Dernier compte : {status.account}</p>
+              )}
+              <p className="mt-2 text-amber-900">
+                Un jeton est encore enregistré, mais Microsoft refuse les appels
+                (dossier chantier, sauvegarde). Cliquez sur « Connecter OneDrive ».
+              </p>
+            </>
           ) : (
             <p className="font-medium">OneDrive n’est pas connecté.</p>
           )}
         </div>
+      )}
+
+      {status?.error && !status.needsMigration && !connected && !expired && (
+        <p className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+          {status.error}
+        </p>
       )}
 
       {status?.needsMigration && (

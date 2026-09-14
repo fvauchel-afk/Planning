@@ -8,6 +8,7 @@ import {
   saveOnedriveRoot,
   saveOnedriveTokens,
 } from "@/lib/onedrive/tokens";
+import { needsOnedriveReconnect } from "@/lib/onedrive/reconnect";
 
 type GraphErrorBody = {
   error?: { message?: string; code?: string };
@@ -136,6 +137,47 @@ export async function fetchOnedriveAccountLabel(token: string): Promise<string |
     return me.mail || me.userPrincipalName || me.displayName || null;
   } catch {
     return null;
+  }
+}
+
+export type OnedriveProbeResult = {
+  connected: boolean;
+  expired: boolean;
+  account: string | null;
+  error?: string;
+  rootCached?: boolean;
+  expiresAt?: string | null;
+};
+
+/** Vérifie un appel Graph réel, pas seulement la présence d’un jeton en base. */
+export async function probeOnedriveConnection(): Promise<OnedriveProbeResult> {
+  const row = await loadOnedriveTokens();
+  if (!row?.refresh_token) {
+    return { connected: false, expired: false, account: null };
+  }
+  const base = {
+    account: row.account_label,
+    rootCached: Boolean(row.root_item_id && row.root_drive_id),
+    expiresAt: row.expires_at,
+  };
+  try {
+    const token = await getValidAccessToken();
+    await graphFetch<{ id?: string }>(token, "/me/drive?$select=id");
+    const label =
+      (await fetchOnedriveAccountLabel(token)) || row.account_label || null;
+    return { ...base, connected: true, expired: false, account: label };
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : "Accès OneDrive impossible.";
+    const expired = needsOnedriveReconnect(message);
+    return {
+      ...base,
+      connected: false,
+      expired,
+      error: expired
+        ? "Connexion expirée, reconnexion nécessaire."
+        : message,
+    };
   }
 }
 
