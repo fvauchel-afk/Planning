@@ -26,6 +26,13 @@ export default function ConnexionPage() {
         setPin("");
         return;
       }
+      void fetch("/api/onedrive/keepalive", {
+        method: "POST",
+        credentials: "include",
+        keepalive: true,
+      }).catch(() => {
+        /* OneDrive en arrière-plan : ne jamais bloquer l’entrée. */
+      });
       window.location.assign(data.user?.isAdmin ? "/" : "/moi");
     } catch {
       setError("Connexion impossible.");

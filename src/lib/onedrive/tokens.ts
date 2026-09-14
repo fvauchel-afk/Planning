@@ -1,6 +1,10 @@
 import "server-only";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getOnedriveConfig, ONEDRIVE_SCOPES } from "@/lib/onedrive/config";
+import {
+  ONEDRIVE_KEEPALIVE_TTL_MS,
+  onedriveAccessNeedsRefresh,
+} from "@/lib/onedrive/reconnect";
 
 export type OnedriveTokenRow = {
   id: string;
@@ -130,12 +134,23 @@ export async function exchangeAuthorizationCode(
 }
 
 export async function getValidAccessToken(): Promise<string> {
-  const row = await loadOnedriveTokens();
-  if (!row) {
+  const token = await refreshOnedriveAccessToken({ minTtlMs: 120_000 });
+  if (!token) {
     throw new Error("OneDrive n’est pas connecté. Ouvrez /admin/onedrive.");
   }
-  const expires = new Date(row.expires_at).getTime();
-  if (expires - 120_000 > Date.now() && row.access_token) {
+  return token;
+}
+
+export async function refreshOnedriveAccessToken(options?: {
+  minTtlMs?: number;
+}): Promise<string | null> {
+  const row = await loadOnedriveTokens();
+  if (!row?.refresh_token) return null;
+  const minTtlMs = options?.minTtlMs ?? 120_000;
+  if (
+    row.access_token &&
+    !onedriveAccessNeedsRefresh(row.expires_at, Date.now(), minTtlMs)
+  ) {
     return row.access_token;
   }
   const cfg = getOnedriveConfig();
@@ -158,4 +173,16 @@ export async function getValidAccessToken(): Promise<string> {
     root_drive_id: row.root_drive_id,
   });
   return json.access_token;
+}
+
+/** Ne jette jamais : pour le login, sans bloquer l’employé. */
+export async function refreshOnedriveQuietly(): Promise<void> {
+  try {
+    await refreshOnedriveAccessToken({ minTtlMs: ONEDRIVE_KEEPALIVE_TTL_MS });
+  } catch (err) {
+    console.warn(
+      "[onedrive-keepalive]",
+      err instanceof Error ? err.message : "rafraîchissement impossible",
+    );
+  }
 }

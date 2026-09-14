@@ -15,6 +15,7 @@ import {
   verifiedSessionFromEmployee,
 } from "@/lib/auth/login-identity";
 import { employeesMatchingPin } from "@/lib/auth/pin-verify";
+import { scheduleOnedriveKeepalive } from "@/lib/onedrive/keepalive";
 import {
   createSupabaseAnonClient,
   createSupabaseServerClient,
@@ -86,6 +87,7 @@ async function sessionResponse(request: NextRequest, user: SessionUser) {
     token,
     sessionCookieOptions(requestIsHttps(request)),
   );
+  scheduleOnedriveKeepalive();
   return response;
 }
 
