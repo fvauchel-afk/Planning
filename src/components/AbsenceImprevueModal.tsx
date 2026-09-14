@@ -264,6 +264,7 @@ export function AbsenceImprevueModal({
           showIncoming={false}
           validateLabel="Envoyer pour validation"
           adjustLabel="Annuler"
+          showCancel={false}
           onValidate={() => {
             setConflict(null);
             void persist(true);

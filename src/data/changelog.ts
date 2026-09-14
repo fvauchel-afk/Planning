@@ -11,6 +11,15 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-14-onedrive-statut-signalement",
+    title: "OneDrive et absences",
+    items: [
+      "L’onglet OneDrive vérifie un vrai accès Microsoft : si le jeton est périmé ou refusé, le statut indique « Connexion expirée, reconnexion nécessaire » au lieu de « connecté ».",
+      "Dans le conflit de placement d’une absence, il n’y a plus deux boutons Annuler.",
+      "« Envoyer pour validation » affiche un message (envoyé, déjà existant, ou erreur). Un second envoi du même conflit n’ajoute pas un doublon tant qu’un signalement identique est encore en attente.",
+    ],
+  },
+  {
     id: "2026-09-14-absence-chevauche-chantier",
     title: "Absences et chantiers",
     items: [

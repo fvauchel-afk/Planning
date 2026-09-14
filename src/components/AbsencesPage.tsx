@@ -14,7 +14,12 @@ import {
 } from "@/lib/engine/absence-imprevue";
 import { generateDelaySolutions, propositionFromSolutions } from "@/lib/engine/plan-solutions";
 import { usePlanning } from "@/lib/planning-context";
-import { propositionFromDelay } from "@/lib/signalements";
+import {
+  absencePeriodNote,
+  matchingRecordedAbsence,
+  propositionFromDelay,
+  similarPendingAbsenceSignalement,
+} from "@/lib/signalements";
 import { formatSaveError } from "@/lib/supabase/errors";
 import {
   ABSENCE_LABELS,
@@ -40,6 +45,7 @@ export function AbsencesPage() {
   const [dateDebut, setDateDebut] = useState("");
   const [dateFin, setDateFin] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [motifPrecision, setMotifPrecision] = useState("");
   const [reviewPayload, setReviewPayload] = useState<NewAbsenceInput | null>(null);
   const [choices, setChoices] = useState<Record<string, AbsencePhaseChoice>>({});
@@ -99,6 +105,7 @@ export function AbsencesPage() {
     setDateFin(absence.date_fin.slice(0, 10));
     setMotifPrecision(absence.motif_precision ?? "");
     setError(null);
+    setNotice(null);
     setReviewPayload(null);
     setChoices({});
     setConflict(null);
@@ -148,11 +155,6 @@ export function AbsencesPage() {
         setConflict(plan);
         return;
       }
-      if (editingId) {
-        await updateAbsence({ id: editingId, ...payload });
-      } else {
-        await createAbsence(payload);
-      }
       const overlap = listImpactedPhases(
         snapshot,
         payload.employe_id,
@@ -160,12 +162,40 @@ export function AbsencesPage() {
         payload.date_fin,
       );
       if (plan.status === "conflict") {
+        const similar = similarPendingAbsenceSignalement(snapshot, payload);
+        if (similar) {
+          const already = matchingRecordedAbsence(
+            snapshot,
+            payload,
+            editingId ?? undefined,
+          );
+          if (editingId) {
+            await updateAbsence({ id: editingId, ...payload });
+          } else if (!already) {
+            await createAbsence(payload);
+          }
+          setNotice(
+            "Un signalement similaire existe déjà. Rien de plus n’a été envoyé — ouvrez Signalements pour le traiter.",
+          );
+          resetForm();
+          return;
+        }
+        const already = matchingRecordedAbsence(
+          snapshot,
+          payload,
+          editingId ?? undefined,
+        );
+        if (editingId) {
+          await updateAbsence({ id: editingId, ...payload });
+        } else if (!already) {
+          await createAbsence(payload);
+        }
         await createSignalement({
           employe_id: payload.employe_id,
           phase_id: overlap[0]?.phase.id ?? plan.patches[0]?.id ?? null,
           retard_demi_journees: 1,
           sens: "retard",
-          note: `Absence du ${payload.date_debut} au ${payload.date_fin} : l’algorithme propose des décalages, non appliqués tant que Mika ou Alexis n’a pas validé.`,
+          note: `${absencePeriodNote(payload)} : l’algorithme propose des décalages, non appliqués tant que Mika ou Alexis n’a pas validé.`,
           origine: "decalage_admin",
           statut: "en_attente",
           proposition:
@@ -178,7 +208,18 @@ export function AbsencesPage() {
               ),
             ) ?? propositionFromDelay(snapshot, plan),
         });
-      } else if (plan.patches.length > 0) {
+        setNotice(
+          "Signalement envoyé. L’absence est enregistrée ; les décalages de chantier attendront la validation sur Signalements.",
+        );
+        resetForm();
+        return;
+      }
+      if (editingId) {
+        await updateAbsence({ id: editingId, ...payload });
+      } else {
+        await createAbsence(payload);
+      }
+      if (plan.patches.length > 0) {
         await applyPhasePatches(plan.patches);
       }
       resetForm();
@@ -193,6 +234,7 @@ export function AbsencesPage() {
     event.preventDefault();
     const payload = validatedPayload();
     if (!payload) return;
+    setNotice(null);
     const overlap = listImpactedPhases(
       snapshot,
       payload.employe_id,
@@ -218,6 +260,11 @@ export function AbsencesPage() {
           Congés, maladie, formation, jour férié d&apos;entreprise ou autre
           motif justifié.
         </p>
+        {notice && (
+          <p className="mb-4 rounded border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-950">
+            {notice}
+          </p>
+        )}
         <div className="overflow-hidden rounded-lg border border-stone-300 bg-white">
           <table className="min-w-full text-sm">
             <thead className="bg-stone-100 text-left">
@@ -431,15 +478,22 @@ export function AbsencesPage() {
           displacements={conflict.displacements}
           incoming={[]}
           showIncoming={false}
+          showCancel={false}
           validateLabel="Envoyer pour validation"
           adjustLabel="Annuler"
+          error={error}
+          busy={saving}
           onValidate={() => {
-            const payload = reviewPayload;
-            setConflict(null);
-            if (payload) void persistAbsence(payload, choices, true);
+            if (reviewPayload) void persistAbsence(reviewPayload, choices, true);
           }}
-          onAdjust={() => setConflict(null)}
-          onCancel={() => setConflict(null)}
+          onAdjust={() => {
+            setConflict(null);
+            setError(null);
+          }}
+          onCancel={() => {
+            setConflict(null);
+            setError(null);
+          }}
         />
       )}
     </div>

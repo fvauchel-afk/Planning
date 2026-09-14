@@ -492,6 +492,7 @@ export function PhaseFicheModal({
           showIncoming={false}
           validateLabel="Envoyer pour validation"
           adjustLabel="Annuler"
+          showCancel={false}
           onValidate={() => {
             const current = pending;
             setPending(null);

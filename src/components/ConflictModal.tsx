@@ -13,6 +13,9 @@ export function ConflictModal({
   adjustLabel = "Ajuster (placer à la suite, sans décaler)",
   validateLabel = "Valider les décalages",
   showIncoming = true,
+  showCancel = true,
+  error,
+  busy = false,
   onValidate,
   onAdjust,
   onCancel,
@@ -25,6 +28,9 @@ export function ConflictModal({
   adjustLabel?: string;
   validateLabel?: string;
   showIncoming?: boolean;
+  showCancel?: boolean;
+  error?: string | null;
+  busy?: boolean;
   onValidate: () => void;
   onAdjust: () => void;
   onCancel: () => void;
@@ -83,28 +89,35 @@ export function ConflictModal({
         </div>
         )}
 
+        {error && <p className="mt-4 text-sm text-red-700">{error}</p>}
+
         <div className="mt-5 flex flex-wrap gap-2">
           <button
             type="button"
+            disabled={busy}
             onClick={onValidate}
-            className="rounded bg-amber-700 px-3 py-2 text-sm text-amber-50"
+            className="rounded bg-amber-700 px-3 py-2 text-sm text-amber-50 disabled:opacity-60"
           >
-            {validateLabel}
+            {busy ? "Envoi…" : validateLabel}
           </button>
           <button
             type="button"
+            disabled={busy}
             onClick={onAdjust}
-            className="rounded border border-stone-300 bg-white px-3 py-2 text-sm"
+            className="rounded border border-stone-300 bg-white px-3 py-2 text-sm disabled:opacity-60"
           >
             {adjustLabel}
           </button>
-          <button
-            type="button"
-            onClick={onCancel}
-            className="rounded px-3 py-2 text-sm text-stone-600"
-          >
-            Annuler
-          </button>
+          {showCancel && adjustLabel !== "Annuler" ? (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={onCancel}
+              className="rounded px-3 py-2 text-sm text-stone-600 disabled:opacity-60"
+            >
+              Annuler
+            </button>
+          ) : null}
         </div>
       </div>
     </div>
