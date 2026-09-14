@@ -8,6 +8,7 @@ import {
   freeRangesOnDate,
   isCompanyHoliday,
   isEmployeeAbsent,
+  isSlotBlockedForRow,
   todayIso,
 } from "@/lib/engine/slots";
 import {
@@ -435,6 +436,51 @@ function lastDatedEnd(
   return end;
 }
 
+function firstOpenDateOnOrAfter(
+  snapshot: PlanningSnapshot,
+  rowId: string,
+  fromDate: string,
+): string {
+  let date = fromDate;
+  for (let i = 0; i < SEARCH_DAYS; i += 1) {
+    if (!isSlotBlockedForRow(snapshot, rowId, date)) return date;
+    date = addDays(date, 1);
+  }
+  return date;
+}
+
+function rangeEndOnRow(
+  snapshot: PlanningSnapshot,
+  rowId: string | null,
+  start: string,
+  workingDays: number,
+): string {
+  if (workingDays <= 1) return start;
+  if (!rowId) return rangeEnd(start, workingDays);
+  let date = start;
+  let seen = 1;
+  for (let i = 0; i < SEARCH_DAYS && seen < workingDays; i += 1) {
+    date = addDays(date, 1);
+    if (!isSlotBlockedForRow(snapshot, rowId, date)) seen += 1;
+  }
+  return date;
+}
+
+function scheduleOnAssignee(
+  snapshot: PlanningSnapshot,
+  employeId: string | null,
+  fromDate: string,
+  workingDays: number,
+): { start: string; end: string } {
+  const days = Math.max(1, workingDays);
+  if (!employeId) {
+    const aligned = firstWorkingOnOrAfter(fromDate);
+    return { start: aligned, end: rangeEnd(aligned, days) };
+  }
+  const start = firstOpenDateOnOrAfter(snapshot, employeId, fromDate);
+  return { start, end: rangeEndOnRow(snapshot, employeId, start, days) };
+}
+
 type OptionEditOptions = {
   avecPose: boolean;
   avecThermolaquage: boolean;
@@ -446,6 +492,16 @@ type OptionEditOptions = {
   delayDays?: number | null;
   datesEstimatives?: boolean;
 };
+
+function preferredAssigneeForType(
+  type: TypePhase,
+  options: OptionEditOptions,
+): string | null | undefined {
+  if (type === "fabrication") return options.employeFabricationId;
+  if (type === "pose") return options.employePoseId;
+  if (type === "livraison") return options.employeLivraisonId;
+  return undefined;
+}
 
 function mergePhasePatch(
   patches: PhasePatch[],
@@ -474,6 +530,173 @@ function mergePhasePatch(
   const next = { ...current, ...extra };
   if (index >= 0) patches[index] = next;
   else patches.push(next);
+}
+
+function workingDaysOfPhase(
+  type: TypePhase,
+  debut: string | null,
+  fin: string | null,
+  hours: number,
+  delayDays: number,
+): number {
+  if (type === "logistique") return delayDays;
+  if (debut && fin) return inclusiveWorkingDays(debut, fin);
+  return workingDaysFromHours(type === "livraison" && hours <= 0 ? 2 : hours);
+}
+
+function recaleElementChain(
+  snapshot: PlanningSnapshot,
+  elementId: string,
+  fromType: TypePhase,
+  delayDays: number,
+  patches: PhasePatch[],
+  inserts: PhaseInsert[],
+  deleteIds: string[],
+) {
+  const deleted = new Set(deleteIds);
+  const siblings = snapshot.phases.filter(
+    (phase) => phase.element_id === elementId && !deleted.has(phase.id),
+  );
+  const resolved = (type: TypePhase) => {
+    const phase = siblings.find((item) => item.type_phase === type);
+    const insert = inserts.find(
+      (item) => item.element_id === elementId && item.type_phase === type,
+    );
+    if (phase) {
+      const patched = patches.find((item) => item.id === phase.id);
+      return {
+        kind: "phase" as const,
+        phase,
+        date_debut: patched?.date_debut ?? phase.date_debut,
+        date_fin: patched?.date_fin ?? phase.date_fin,
+        employe_id: patched?.employe_id ?? phase.employe_id,
+        heure_debut: patched?.heure_debut ?? phase.heure_debut ?? null,
+        duree_estimee_heures:
+          patched?.duree_estimee_heures ?? phase.duree_estimee_heures,
+      };
+    }
+    if (insert) {
+      return {
+        kind: "insert" as const,
+        insert,
+        date_debut: insert.date_debut,
+        date_fin: insert.date_fin,
+        employe_id: insert.employe_id,
+        heure_debut: insert.heure_debut ?? null,
+        duree_estimee_heures: insert.duree_estimee_heures,
+      };
+    }
+    return null;
+  };
+
+  let prevEnd = lastDatedEnd(
+    PHASE_ORDER.map((type) => {
+      const item = resolved(type);
+      return {
+        type_phase: type,
+        date_debut: item?.date_debut ?? null,
+        date_fin: item?.date_fin ?? null,
+      };
+    }),
+    fromType,
+  );
+  const fromIndex = PHASE_ORDER.indexOf(fromType);
+
+  for (const type of PHASE_ORDER) {
+    if (PHASE_ORDER.indexOf(type) < fromIndex) continue;
+    const current = resolved(type);
+    if (!current) continue;
+    const debut = current.date_debut;
+    const fin = current.date_fin ?? debut;
+    if (!debut && Number(current.duree_estimee_heures) <= 0 && type !== "logistique") {
+      continue;
+    }
+    const days = workingDaysOfPhase(
+      type,
+      debut,
+      fin,
+      Number(current.duree_estimee_heures) || 0,
+      delayDays,
+    );
+    const afterPrev = prevEnd ? nextWorkingDayAfter(prevEnd) : null;
+    const requested = debut || afterPrev;
+    if (!requested && !afterPrev) continue;
+    const minStart = afterPrev && requested ? laterDate(afterPrev, requested) : (afterPrev || requested)!;
+    const range =
+      type === "logistique"
+        ? scheduleAfter(snapshot, prevEnd, days)
+        : scheduleOnAssignee(snapshot, current.employe_id, minStart, days);
+    if (range.start !== debut || range.end !== fin) {
+      if (current.kind === "phase") {
+        mergePhasePatch(patches, current.phase, {
+          date_debut: range.start,
+          date_fin: range.end,
+          employe_id: current.employe_id,
+          heure_debut: current.heure_debut,
+          duree_estimee_heures: current.duree_estimee_heures,
+        });
+      } else {
+        current.insert.date_debut = range.start;
+        current.insert.date_fin = range.end;
+      }
+    }
+    prevEnd = range.end;
+  }
+}
+
+function cascadeAfterAssigneeChanges(
+  snapshot: PlanningSnapshot,
+  chantierId: string,
+  options: OptionEditOptions,
+  wantLivraison: boolean,
+  patches: PhasePatch[],
+  inserts: PhaseInsert[],
+  deleteIds: string[],
+) {
+  const delayDays = clampDelay(options.delayDays);
+  const deleted = new Set(deleteIds);
+  const elements = snapshot.elements.filter(
+    (element) => element.chantier_id === chantierId,
+  );
+  for (const element of elements) {
+    const siblings = snapshot.phases.filter(
+      (phase) => phase.element_id === element.id && !deleted.has(phase.id),
+    );
+    let fromType: TypePhase | null = null;
+    for (const type of ASSIGN_REQUIRED) {
+      if (type === "pose" && !options.avecPose) continue;
+      if (type === "livraison" && !wantLivraison) continue;
+      const phase = siblings.find((item) => item.type_phase === type);
+      const insert = inserts.find(
+        (item) => item.element_id === element.id && item.type_phase === type,
+      );
+      const originalId = phase?.employe_id ?? insert?.employe_id ?? null;
+      const preferred = preferredAssigneeForType(type, options);
+      const changed = Boolean(preferred) && preferred !== originalId;
+      const newlyDated =
+        Boolean(phase) &&
+        !phase!.date_debut &&
+        Boolean(patches.find((item) => item.id === phase!.id)?.date_debut);
+      if (!changed && !newlyDated) continue;
+      if (
+        !fromType ||
+        PHASE_ORDER.indexOf(type) < PHASE_ORDER.indexOf(fromType)
+      ) {
+        fromType = type;
+      }
+    }
+    if (fromType) {
+      recaleElementChain(
+        snapshot,
+        element.id,
+        fromType,
+        delayDays,
+        patches,
+        inserts,
+        deleteIds,
+      );
+    }
+  }
 }
 
 function applyAssigneeEdits(
@@ -573,6 +796,16 @@ function applyAssigneeEdits(
       preferred ?? insert.employe_id,
     );
   }
+
+  cascadeAfterAssigneeChanges(
+    snapshot,
+    chantierId,
+    options,
+    wantLivraison,
+    patches,
+    inserts,
+    deleteIds,
+  );
 }
 
 /**
@@ -1281,6 +1514,119 @@ function runPhaseChainSelfCheck() {
     throw new Error(
       `phase-chain: fabrication existante sans salarié doit être réparée, reçu ${fabFix?.employe_id}`,
     );
+  }
+
+  const cascadeBase: PlanningSnapshot = {
+    ...snapshot,
+    employees: [
+      { id: "emp-a", nom: "A", roles: ["fabrication", "pose", "administratif"], actif: true },
+      { id: "emp-b", nom: "Alexis", roles: ["fabrication", "pose"], actif: true },
+    ],
+    chantiers: [
+      {
+        id: "ch-cascade",
+        nom_client: "Cascade",
+        adresse: "",
+        lien_dossier_onedrive: null,
+        priorite: "normal",
+        date_creation: "2026-09-01",
+        delai_sous_traitance_jours: 5,
+      },
+    ],
+    elements: [{ id: "el-cascade", chantier_id: "ch-cascade", nom_element: "Portail" }],
+    phases: [
+      {
+        id: "fab-cascade",
+        element_id: "el-cascade",
+        type_phase: "fabrication",
+        duree_estimee_heures: 16,
+        date_debut: "2026-09-14",
+        date_fin: "2026-09-15",
+        heure_debut: "07:30",
+        employe_id: "emp-a",
+        statut: "a_faire",
+        urgent: false,
+      },
+      {
+        id: "log-cascade",
+        element_id: "el-cascade",
+        type_phase: "logistique",
+        duree_estimee_heures: 40,
+        date_debut: "2026-09-14",
+        date_fin: "2026-09-18",
+        heure_debut: null,
+        employe_id: null,
+        statut: "a_faire",
+        urgent: false,
+      },
+      {
+        id: "liv-cascade",
+        element_id: "el-cascade",
+        type_phase: "livraison",
+        duree_estimee_heures: 2,
+        date_debut: "2026-09-21",
+        date_fin: "2026-09-21",
+        heure_debut: "07:30",
+        employe_id: "emp-a",
+        statut: "a_faire",
+        urgent: false,
+      },
+      {
+        id: "pose-cascade",
+        element_id: "el-cascade",
+        type_phase: "pose",
+        duree_estimee_heures: 8,
+        date_debut: "2026-09-22",
+        date_fin: "2026-09-22",
+        heure_debut: "07:30",
+        employe_id: "emp-a",
+        statut: "a_faire",
+        urgent: false,
+      },
+    ],
+    absences: [
+      {
+        id: "abs-b",
+        employe_id: "emp-b",
+        date_debut: "2026-09-14",
+        date_fin: "2026-09-15",
+        type: "conge",
+      },
+    ],
+  };
+  const cascaded = planChantierOptionEdits(cascadeBase, "ch-cascade", {
+    avecPose: true,
+    avecThermolaquage: true,
+    avecLivraison: true,
+    employeFabricationId: "emp-b",
+    delayDays: 5,
+  });
+  const fabMoved = cascaded.patches.find((item) => item.id === "fab-cascade");
+  const logMoved = cascaded.patches.find((item) => item.id === "log-cascade");
+  const livMoved = cascaded.patches.find((item) => item.id === "liv-cascade");
+  const poseMoved = cascaded.patches.find((item) => item.id === "pose-cascade");
+  if (fabMoved?.date_debut !== "2026-09-16" || fabMoved.date_fin !== "2026-09-17") {
+    throw new Error(
+      `phase-chain: fab recalee sur Alexis, reçu ${fabMoved?.date_debut} → ${fabMoved?.date_fin}`,
+    );
+  }
+  if (logMoved?.date_debut !== "2026-09-18" || logMoved.date_fin !== "2026-09-24") {
+    throw new Error(
+      `phase-chain: thermo doit suivre la fab, reçu ${logMoved?.date_debut} → ${logMoved?.date_fin}`,
+    );
+  }
+  if (!livMoved?.date_debut || livMoved.date_debut <= logMoved!.date_fin!) {
+    throw new Error(
+      `phase-chain: livraison doit suivre le thermo, reçu ${livMoved?.date_debut}`,
+    );
+  }
+  if (!poseMoved?.date_debut || poseMoved.date_debut <= livMoved.date_fin!) {
+    throw new Error(
+      `phase-chain: pose doit suivre la livraison, reçu ${poseMoved?.date_debut}`,
+    );
+  }
+  if (logMoved.date_debut! <= fabMoved.date_fin!) {
+    throw new Error("phase-chain: thermo ne doit pas chevaucher la fabrication");
   }
 
   const nobody = applyPhaseChainOnCreate(
