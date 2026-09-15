@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { formatIsoFr } from "@/lib/dates";
+import { FINITION_LAQUAGE_LABELS } from "@/lib/thermolaquage";
 import type { Chantier, ElementChantier, PhasePlanning, SousTraitant } from "@/lib/types";
 
 export type BonCommandePdfInput = {
@@ -112,6 +113,21 @@ export async function buildBonCommandePdf(
     `Adresse : ${line(input.chantier.adresse || "Non renseignee")}`,
     { x: 48, y, size: 11, font },
   );
+  y -= 16;
+  page.drawText(
+    `Couleur RAL : ${line(input.chantier.couleur_ral?.trim() || "Non renseignee")}`,
+    { x: 48, y, size: 11, font },
+  );
+  y -= 16;
+  const finitionLabel = input.chantier.finition
+    ? FINITION_LAQUAGE_LABELS[input.chantier.finition]
+    : "Non renseignee";
+  page.drawText(`Finition : ${line(finitionLabel)}`, {
+    x: 48,
+    y,
+    size: 11,
+    font,
+  });
   y -= 24;
   page.drawText("Ouvrages / description", { x: 48, y, size: 13, font: bold });
   y -= 20;

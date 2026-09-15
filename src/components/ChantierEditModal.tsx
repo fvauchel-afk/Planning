@@ -47,6 +47,12 @@ import {
   type LigneFourniture,
 } from "@/lib/fournitures";
 import {
+  FINITION_LAQUAGE_LABELS,
+  FINITIONS_LAQUAGE,
+  parseFinitionLaquage,
+  type FinitionLaquage,
+} from "@/lib/thermolaquage";
+import {
   LOGISTIQUE_ROW_ID,
   PRIORITES,
   PRIORITE_LABELS,
@@ -109,6 +115,10 @@ export function ChantierEditModal({
   const [fournitures, setFournitures] = useState<LigneFourniture[]>(
     chantier.fournitures?.length ? chantier.fournitures : [],
   );
+  const [couleurRal, setCouleurRal] = useState(chantier.couleur_ral ?? "");
+  const [finition, setFinition] = useState<FinitionLaquage | "">(
+    parseFinitionLaquage(chantier.finition) ?? "",
+  );
   const [validatingPlan, setValidatingPlan] = useState(false);
   const currentOptions = useMemo(
     () => chantierPhaseOptions(snapshot, chantier.id),
@@ -154,6 +164,8 @@ export function ChantierEditModal({
       adresse_livraison?: string | null;
       telephone_livraison?: string | null;
       fournitures?: LigneFourniture[];
+      couleur_ral?: string | null;
+      finition?: FinitionLaquage | null;
     }) => {
       try {
         await patchChantier({ id: chantier.id, ...payload });
@@ -244,6 +256,8 @@ export function ChantierEditModal({
     setAdresseLivraison(chantier.adresse_livraison ?? "");
     setTelephoneLivraison(chantier.telephone_livraison ?? "");
     setFournitures(chantier.fournitures?.length ? chantier.fournitures : []);
+    setCouleurRal(chantier.couleur_ral ?? "");
+    setFinition(parseFinitionLaquage(chantier.finition) ?? "");
     applyCascadeFromSnapshot();
     const draft = readFormDraft();
     if (draft?.kind === "chantier" && draft.id === chantier.id) {
@@ -274,6 +288,12 @@ export function ChantierEditModal({
     }
     if (!dirtySimple.current.has("fournitures")) {
       setFournitures(latest.fournitures?.length ? latest.fournitures : []);
+    }
+    if (!dirtySimple.current.has("couleur_ral")) {
+      setCouleurRal(latest.couleur_ral ?? "");
+    }
+    if (!dirtySimple.current.has("finition")) {
+      setFinition(parseFinitionLaquage(latest.finition) ?? "");
     }
     const remoteFp = chantierCascadeFingerprint(snapshot, chantier.id);
     if (!cascadeDirty.current) {
@@ -997,6 +1017,44 @@ export function ChantierEditModal({
                   }}
                   rows={snapshot.sousTraitants ?? []}
                 />
+                <label className="block">
+                  <span className="mb-1 block font-medium">Couleur RAL</span>
+                  <input
+                    value={couleurRal}
+                    placeholder="ex. RAL 7016"
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      setCouleurRal(value);
+                      markSimple("couleur_ral");
+                      live.schedule({
+                        couleur_ral: value.trim() || null,
+                      });
+                    }}
+                    onBlur={() => void live.flush()}
+                    className="w-full rounded border border-stone-300 bg-white px-3 py-2"
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-1 block font-medium">Finition</span>
+                  <select
+                    value={finition}
+                    onChange={(event) => {
+                      const value =
+                        parseFinitionLaquage(event.target.value) ?? null;
+                      setFinition(value ?? "");
+                      markSimple("finition");
+                      void applySimplePatch({ finition: value });
+                    }}
+                    className="w-full rounded border border-stone-300 bg-white px-3 py-2"
+                  >
+                    <option value="">Non renseignée</option>
+                    {FINITIONS_LAQUAGE.map((value) => (
+                      <option key={value} value={value}>
+                        {FINITION_LAQUAGE_LABELS[value]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
                 <p className="text-xs text-stone-500">
                   La phase se cale après la fabrication. Si une pose est prévue,
                   elle commence après ce thermolaquage.

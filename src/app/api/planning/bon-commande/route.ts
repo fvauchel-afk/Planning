@@ -8,6 +8,7 @@ import {
 import { canGenerateBonCommande } from "@/lib/bon-commande/active-phase";
 import { BON_COMMANDE_CC, sendBonCommandeEmail } from "@/lib/bon-commande/mail";
 import { buildBonCommandePdf } from "@/lib/bon-commande/pdf";
+import { FINITION_LAQUAGE_LABELS } from "@/lib/thermolaquage";
 import { applyBonCommandeDelay } from "@/lib/engine/phase-chain";
 import { phaseIdsToConfirmAfterBonCommande } from "@/lib/dates-estimatives";
 import { todayIso } from "@/lib/engine/slots";
@@ -117,6 +118,12 @@ export async function POST(request: NextRequest) {
       `Bon de commande Ferronnerie Vauchel / La Métallerie du Sud.`,
       `Chantier : ${chantier.nom_client}`,
       chantier.adresse ? `Adresse : ${chantier.adresse}` : "",
+      chantier.couleur_ral?.trim()
+        ? `Couleur RAL : ${chantier.couleur_ral.trim()}`
+        : "",
+      chantier.finition
+        ? `Finition : ${FINITION_LAQUAGE_LABELS[chantier.finition]}`
+        : "",
       `Départ fabrication prévu : ${formatIsoFr(dateDocument)}`,
       `Sous-traitant : ${sousTraitant.nom} (${sousTraitant.specialite})`,
       `Délai officiel : 5 jours ouvrés à compter de l’envoi (${formatIsoFr(sendDate)}).`,
