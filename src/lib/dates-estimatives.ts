@@ -156,5 +156,62 @@ function runEstimatifSelfCheck() {
   if (confirmed.chantiers[0]?.dates_estimatives) {
     throw new Error("dates-estimatives: le chantier doit suivre les phases");
   }
+  if (!fabricationAwaitingLaunch(snapshot.phases[0]!, "2026-09-13")) {
+    throw new Error("dates-estimatives: fabrication estimative commencée à alerter");
+  }
+  if (fabricationAwaitingLaunch(snapshot.phases[0]!, "2026-09-12")) {
+    throw new Error("dates-estimatives: avant le début, pas d’alerte lancement");
+  }
+  if (lancementsEnAttente(snapshot, "2026-09-14")[0]?.nomClient !== "Test") {
+    throw new Error("dates-estimatives: l’alerte doit citer le chantier");
+  }
+}
+
+export function fabricationAwaitingLaunch(
+  phase: PhasePlanning,
+  today = toISODate(new Date()),
+): boolean {
+  if (phase.type_phase !== "fabrication") return false;
+  if (!phaseIsEstimative(phase)) return false;
+  const start = phase.date_debut?.slice(0, 10);
+  if (!start) return false;
+  return start <= today;
+}
+
+export type LancementEnAttente = {
+  chantierId: string;
+  nomClient: string;
+  phaseId: string;
+  dateDebut: string;
+};
+
+export function lancementsEnAttente(
+  snapshot: PlanningSnapshot,
+  today = toISODate(new Date()),
+): LancementEnAttente[] {
+  const elementById = new Map(
+    snapshot.elements.map((element) => [element.id, element]),
+  );
+  const chantierById = new Map(
+    snapshot.chantiers.map((chantier) => [chantier.id, chantier]),
+  );
+  const rows: LancementEnAttente[] = [];
+  const seen = new Set<string>();
+  for (const phase of snapshot.phases) {
+    if (!fabricationAwaitingLaunch(phase, today)) continue;
+    const element = elementById.get(phase.element_id);
+    if (!element) continue;
+    const chantier = chantierById.get(element.chantier_id);
+    if (!chantier || seen.has(chantier.id)) continue;
+    seen.add(chantier.id);
+    rows.push({
+      chantierId: chantier.id,
+      nomClient: chantier.nom_client,
+      phaseId: phase.id,
+      dateDebut: phase.date_debut!.slice(0, 10),
+    });
+  }
+  rows.sort((a, b) => a.dateDebut.localeCompare(b.dateDebut) || a.nomClient.localeCompare(b.nomClient, "fr"));
+  return rows;
 }
 runEstimatifSelfCheck();

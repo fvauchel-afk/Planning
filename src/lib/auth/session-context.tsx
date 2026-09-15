@@ -8,6 +8,7 @@ export type ClientSession = {
   isAdmin: boolean;
   canRestore?: boolean;
   canReceiveCommandes?: boolean;
+  canReceiveLancementAlerts?: boolean;
 };
 
 type SessionContextValue = {

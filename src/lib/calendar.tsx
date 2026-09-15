@@ -13,7 +13,7 @@ import {
 } from "@/lib/types";
 import { colorForChantier } from "@/lib/colors";
 import { dateInRange, formatOvertimeHours } from "@/lib/dates";
-import { phaseIsEstimative } from "@/lib/dates-estimatives";
+import { phaseIsEstimative, fabricationAwaitingLaunch } from "@/lib/dates-estimatives";
 import {
   LOGISTIQUE_ROW_LABEL,
   LOGISTIQUE_ROW_ORDRE,
@@ -239,11 +239,15 @@ export function AssignmentChip({
   compact?: boolean;
 }) {
   const color = colorForChantier(assignment.chantier.id);
+  const needsLaunch = fabricationAwaitingLaunch(assignment.phase);
   return (
     <div
-      className={`overflow-hidden rounded px-1.5 py-0.5 ${compact ? "text-[10px] leading-tight" : "text-xs"}`}
-      style={{ backgroundColor: color.bg, color: color.fg }}
-      title={`${assignment.chantier.nom_client} — ${assignment.element.nom_element} (${PHASE_LABELS[assignment.phase.type_phase]}) · ${formatHoursLabel(assignment.phase.duree_estimee_heures)}`}
+      className={`overflow-hidden rounded px-1.5 py-0.5 ${compact ? "text-[10px] leading-tight" : "text-xs"} ${
+        needsLaunch ? "ring-2 ring-orange-500" : ""
+      }`}
+      title={`${assignment.chantier.nom_client} — ${assignment.element.nom_element} (${PHASE_LABELS[assignment.phase.type_phase]}) · ${formatHoursLabel(assignment.phase.duree_estimee_heures)}${
+        needsLaunch ? " — à valider" : ""
+      }`}
     >
       <span className="font-semibold">{assignment.chantier.nom_client}</span>
       {!compact && (
@@ -257,7 +261,13 @@ export function AssignmentChip({
           {formatHoursLabel(assignment.phase.duree_estimee_heures)}
         </span>
       ) : null}
-      {phaseIsEstimative(assignment.phase) ? (
+      {needsLaunch ? (
+        <span
+          className={`ml-1 rounded bg-orange-600 px-1 font-semibold uppercase tracking-wide text-orange-50 ${compact ? "text-[8px]" : "text-[9px]"}`}
+        >
+          ⚠ à valider
+        </span>
+      ) : phaseIsEstimative(assignment.phase) ? (
         <span
           className={`ml-1 rounded bg-violet-900/80 px-1 font-semibold uppercase tracking-wide text-violet-50 ${compact ? "text-[8px]" : "text-[9px]"}`}
         >

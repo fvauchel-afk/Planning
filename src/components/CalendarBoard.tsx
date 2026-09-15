@@ -52,6 +52,7 @@ import {
   STATUTS_CHANTIER,
   chantierPlanningInfo,
 } from "@/lib/chantier-status";
+import { fabricationAwaitingLaunch } from "@/lib/dates-estimatives";
 
 type ViewMode = "overview" | "week" | "day";
 
@@ -849,7 +850,9 @@ function DayDetail({
                                 focusCell.date === iso &&
                                 focusCell.half === slot.half
                                   ? "ring-2 ring-amber-600"
-                                  : ""
+                                  : fabricationAwaitingLaunch(assignment.phase)
+                                    ? "ring-2 ring-orange-500"
+                                    : ""
                               }`}
                               style={{
                                 left: `${((start - dayStart) / span) * 100}%`,
@@ -868,7 +871,11 @@ function DayDetail({
                               <span className="block truncate">
                                 {assignment.chantier.nom_client}
                               </span>
-                              {assignment.phase.dates_estimatives ? (
+                              {fabricationAwaitingLaunch(assignment.phase) ? (
+                                <span className="mt-0.5 inline-block rounded bg-orange-600 px-1 text-[9px] font-semibold uppercase tracking-wide text-orange-50">
+                                  ⚠ à valider
+                                </span>
+                              ) : assignment.phase.dates_estimatives ? (
                                 <span className="mt-0.5 inline-block rounded bg-violet-900/80 px-1 text-[9px] font-semibold uppercase tracking-wide text-violet-50">
                                   Estimatif
                                 </span>

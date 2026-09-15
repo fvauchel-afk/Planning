@@ -22,7 +22,7 @@ import { useSession } from "@/lib/auth/session-context";
 import { useSalarieId } from "@/lib/use-salarie";
 import { WelcomeBanner } from "@/components/WelcomeBanner";
 import { PhaseFicheModal } from "@/components/PhaseFicheModal";
-import { phaseIsEstimative } from "@/lib/dates-estimatives";
+import { fabricationAwaitingLaunch, phaseIsEstimative } from "@/lib/dates-estimatives";
 
 export function MonPlanningPage() {
   const { snapshot, loading } = usePlanning();
@@ -218,7 +218,11 @@ function SlotBlock({
         return (
           <div
             key={assignment.phase.id + title}
-            className="rounded-md px-2 py-2 text-xs"
+            className={`rounded-md px-2 py-2 text-xs ${
+              fabricationAwaitingLaunch(assignment.phase)
+                ? "ring-2 ring-orange-500"
+                : ""
+            }`}
             style={{ backgroundColor: color.bg, color: color.fg }}
           >
             <button
@@ -228,7 +232,11 @@ function SlotBlock({
             >
               <p className="font-semibold">
                 {assignment.chantier.nom_client}
-                {phaseIsEstimative(assignment.phase) ? (
+                {fabricationAwaitingLaunch(assignment.phase) ? (
+                  <span className="ml-1 rounded bg-orange-600 px-1 text-[9px] font-semibold uppercase tracking-wide text-orange-50">
+                    ⚠ à valider
+                  </span>
+                ) : phaseIsEstimative(assignment.phase) ? (
                   <span className="ml-1 rounded bg-violet-900/80 px-1 text-[9px] font-semibold uppercase tracking-wide text-violet-50">
                     Estimatif
                   </span>
