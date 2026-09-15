@@ -29,6 +29,7 @@ import {
   localDeleteDemande,
   localDeleteAbsence,
   localReplaceHoraires,
+  localSetSaisonForcee,
   localSetChantierOnedriveLink,
   localSetReceptionOnedriveErreur,
   localSetSignalementStatut,
@@ -121,6 +122,7 @@ type PlanningContextValue = {
   confirmPhaseDates: (ids: string[]) => Promise<void>;
   validateChantierPlan: (chantierId: string) => Promise<void>;
   saveHoraires: (rows: HoraireSaison[]) => Promise<void>;
+  setSaisonForcee: (saison: "ete" | "hiver" | null) => Promise<void>;
   ensureChantierOnedriveFolder: (chantierId: string) => Promise<void>;
 };
 
@@ -750,6 +752,19 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
     [useShared, refresh, assertWritable, mutate],
   );
 
+  const setSaisonForcee = useCallback(
+    async (saison: "ete" | "hiver" | null) => {
+      assertWritable();
+      if (useShared) {
+        await mutate({ action: "setSaisonForcee", saison });
+        await refresh({ throwOnError: true });
+        return;
+      }
+      setSnapshot((current) => localSetSaisonForcee(current, saison));
+    },
+    [useShared, refresh, assertWritable, mutate],
+  );
+
   const ensureChantierOnedriveFolder = useCallback(
     async (chantierId: string) => {
       const chantier = snapshot.chantiers.find((row) => row.id === chantierId);
@@ -818,6 +833,7 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
       confirmPhaseDates,
       validateChantierPlan,
       saveHoraires,
+      setSaisonForcee,
       ensureChantierOnedriveFolder,
     }),
     [
@@ -855,6 +871,7 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
       confirmPhaseDates,
       validateChantierPlan,
       saveHoraires,
+      setSaisonForcee,
       ensureChantierOnedriveFolder,
     ],
   );
