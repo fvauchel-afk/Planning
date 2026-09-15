@@ -45,6 +45,10 @@ export function demandeEstOuverte(demande: Pick<Demande, "statut">): boolean {
   return demande.statut === "en_attente";
 }
 
+export function demandePeutEtreSupprimee(demande: Pick<Demande, "statut">): boolean {
+  return !demandeEstOuverte(demande);
+}
+
 export function syntheseMessageConge(input: {
   type_absence: TypeAbsence;
   date_debut: string;
@@ -104,6 +108,18 @@ function runDemandesSelfCheck() {
   }
   if (demandeEstOuverte({ statut: "acceptee" })) {
     throw new Error("demandes: une demande acceptée n’est plus ouverte");
+  }
+  if (!demandePeutEtreSupprimee({ statut: "acceptee" })) {
+    throw new Error("demandes: une demande acceptée peut être supprimée");
+  }
+  if (!demandePeutEtreSupprimee({ statut: "refusee" })) {
+    throw new Error("demandes: une demande refusée peut être supprimée");
+  }
+  if (!demandePeutEtreSupprimee({ statut: "traite" })) {
+    throw new Error("demandes: une demande traitée peut être supprimée");
+  }
+  if (demandePeutEtreSupprimee({ statut: "en_attente" })) {
+    throw new Error("demandes: une demande en attente ne se supprime pas");
   }
   const synthese = syntheseMessageConge({
     type_absence: "conge",

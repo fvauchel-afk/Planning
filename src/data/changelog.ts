@@ -11,6 +11,13 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-15-supprimer-demande-traitee",
+    title: "Supprimer une demande déjà traitée",
+    items: [
+      "Dans Demandes, une demande Acceptée, Refusée ou Traité a maintenant un bouton Supprimer, en plus d’Archiver, pour la retirer aussi de Mes congés.",
+    ],
+  },
+  {
     id: "2026-09-15-bulle-envoyer-conge",
     title: "Envoyer une demande de congé",
     items: [

@@ -518,6 +518,16 @@ export function localUpdateDemande(
   return next;
 }
 
+export function localDeleteDemande(
+  snapshot: PlanningSnapshot,
+  id: string,
+): PlanningSnapshot {
+  const next = clone(snapshot);
+  next.demandes = (next.demandes ?? []).filter((row) => row.id !== id);
+  saveLocalSnapshot(next);
+  return next;
+}
+
 export function localCreateReception(
   snapshot: PlanningSnapshot,
   input: NewReceptionInput,

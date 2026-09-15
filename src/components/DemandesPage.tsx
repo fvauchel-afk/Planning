@@ -6,7 +6,7 @@ import { useSession } from "@/lib/auth/session-context";
 import { markCommandesSeen } from "@/components/CommandeAlert";
 import { DemandeCongeAdmin, DemandeCongeDetails } from "@/components/DemandeCongeAdmin";
 import { COMMANDE_MAIL_TEMPLATE_CHOICES } from "@/lib/mail/commande-templates";
-import { demandeEstOuverte } from "@/lib/demandes";
+import { demandeEstOuverte, demandePeutEtreSupprimee } from "@/lib/demandes";
 import {
   CATEGORIES_DEMANDE,
   CATEGORIE_DEMANDE_LABELS,
@@ -25,7 +25,8 @@ function formatDemandeWhen(iso: string) {
 }
 
 export function DemandesPage() {
-  const { snapshot, loading, updateDemande, sendDemandeMail } = usePlanning();
+  const { snapshot, loading, updateDemande, deleteDemande, sendDemandeMail } =
+    usePlanning();
   const { session } = useSession();
   const canMail = Boolean(session?.canReceiveCommandes);
   const [filtre, setFiltre] = useState<"tout" | CategorieDemande>("tout");
@@ -115,6 +116,25 @@ export function DemandesPage() {
       setError(
         err instanceof Error ? err.message : "Mise à jour impossible.",
       );
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function remove(demande: Demande) {
+    if (
+      !window.confirm(
+        "Supprimer définitivement cette demande ? Elle disparaîtra aussi de Mes congés.",
+      )
+    ) {
+      return;
+    }
+    setBusyId(demande.id);
+    setError(null);
+    try {
+      await deleteDemande(demande.id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Suppression impossible.");
     } finally {
       setBusyId(null);
     }
@@ -325,6 +345,16 @@ export function DemandesPage() {
                       Archiver
                     </button>
                   )}
+                  {demandePeutEtreSupprimee(demande) ? (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void remove(demande)}
+                      className="rounded border border-red-200 bg-white px-3 py-1.5 text-sm text-red-800 disabled:opacity-60"
+                    >
+                      {busy ? "Suppression…" : "Supprimer"}
+                    </button>
+                  ) : null}
                   {canMail && demande.categorie === "commande"
                     ? COMMANDE_MAIL_TEMPLATE_CHOICES.map((template) => (
                         <button

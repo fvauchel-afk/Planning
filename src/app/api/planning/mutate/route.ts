@@ -16,6 +16,7 @@ import {
   supabaseCreateSignalement,
   supabaseCreateDemande,
   supabaseUpdateDemande,
+  supabaseDeleteDemande,
   supabaseDeleteAbsence,
   supabasePatchAbsence,
   supabaseReplaceHoraires,
@@ -58,6 +59,7 @@ import {
   sendSignalementPush,
 } from "@/lib/push/send";
 import {
+  demandePeutEtreSupprimee,
   syntheseMessageConge,
   validateDemandeCongeInput,
 } from "@/lib/demandes";
@@ -99,6 +101,7 @@ type MutateBody =
   | { action: "createReception"; input: NewReceptionInput }
   | { action: "createDemande"; input: NewDemandeInput }
   | { action: "updateDemande"; input: DemandeUpdateInput }
+  | { action: "deleteDemande"; id: string }
   | {
       action: "sendDemandeMail";
       id: string;
@@ -148,6 +151,7 @@ export async function POST(request: NextRequest) {
     "setSignalementStatut",
     "validateSignalement",
     "updateDemande",
+    "deleteDemande",
     "sendDemandeMail",
     "saveHoraires",
   ]);
@@ -440,6 +444,22 @@ export async function POST(request: NextRequest) {
         });
         if (push.warning) console.warn("[conge-push]", push.warning);
       }
+    } else if (body.action === "deleteDemande") {
+      if (!body.id) {
+        return NextResponse.json({ error: "Demande inconnue." }, { status: 400 });
+      }
+      const current = await fetchSupabaseSnapshot();
+      const demande = current.demandes.find((row) => row.id === body.id);
+      if (!demande) {
+        return NextResponse.json({ error: "Demande introuvable." }, { status: 404 });
+      }
+      if (!demandePeutEtreSupprimee(demande)) {
+        return NextResponse.json(
+          { error: "Seules les demandes déjà traitées peuvent être supprimées." },
+          { status: 400 },
+        );
+      }
+      await supabaseDeleteDemande(body.id);
     } else if (body.action === "sendDemandeMail") {
       if (!canReceiveCommandes(session.nom)) {
         return forbidden("Seuls Alexis et Mika envoient ces messages.");
