@@ -9,8 +9,13 @@ import {
   type PlanningSnapshot,
 } from "@/lib/types";
 
-/** Même id que `LOGISTIQUE_ROW_ID` dans types — import local pour éviter un cycle de bundle. */
+/** Même ids que types — import local pour éviter un cycle de bundle. */
 const LOGISTICS_ROW_ID = "logistique-sous-traitance";
+const TRANSPORT_ROW_ID = "transport-livraison";
+
+function isCompanyHoursRow(rowId: string): boolean {
+  return rowId === LOGISTICS_ROW_ID || rowId === TRANSPORT_ROW_ID;
+}
 
 export function emptyHorairesJour(): HorairesJour {
   return {
@@ -421,7 +426,7 @@ export function hoursForSlot(
   if (cached !== undefined) return cached;
   let hours = 0;
   if (!isSunday(date) && !isHolidayDate(runtime, date)) {
-    if (rowId === LOGISTICS_ROW_ID) {
+    if (isCompanyHoursRow(rowId)) {
       hours = logisticsHalfHours(snapshot, date, half);
     } else {
       const employee = runtime.employeeById.get(rowId);
@@ -447,17 +452,17 @@ export function workWindowsForRow(
     runtime.windows.set(key, []);
     return [];
   }
-  if (rowId !== LOGISTICS_ROW_ID && isOffDate(runtime, rowId, date)) {
+  if (!isCompanyHoursRow(rowId) && isOffDate(runtime, rowId, date)) {
     runtime.windows.set(key, []);
     return [];
   }
   const employee = runtime.employeeById.get(rowId);
-  if (rowId !== LOGISTICS_ROW_ID && !employee) {
+  if (!isCompanyHoursRow(rowId) && !employee) {
     runtime.windows.set(key, []);
     return [];
   }
   const jour =
-    rowId === LOGISTICS_ROW_ID
+    isCompanyHoursRow(rowId)
       ? stockSaison(saisonKind(saisonForDate(snapshot, date))).jours[
           String(isoWeekday(date))
         ] ?? emptyHorairesJour()

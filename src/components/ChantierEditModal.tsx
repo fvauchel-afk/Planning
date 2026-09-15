@@ -54,6 +54,7 @@ import {
 } from "@/lib/thermolaquage";
 import {
   LOGISTIQUE_ROW_ID,
+  TRANSPORT_ROW_ID,
   PRIORITES,
   PRIORITE_LABELS,
   type Chantier,
@@ -320,7 +321,7 @@ export function ChantierEditModal({
   const activeEmployees = useMemo(
     () =>
       snapshot.employees
-        .filter((employee) => employee.actif && employee.id !== LOGISTIQUE_ROW_ID)
+        .filter((employee) => employee.actif && employee.id !== LOGISTIQUE_ROW_ID && employee.id !== TRANSPORT_ROW_ID)
         .sort(compareEmployeesByOrdre),
     [snapshot.employees],
   );

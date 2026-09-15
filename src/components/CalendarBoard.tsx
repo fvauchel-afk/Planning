@@ -44,7 +44,7 @@ import { usePlanning } from "@/lib/planning-context";
 import { useFormDraftReopen } from "@/lib/form-draft";
 import { useEmployeeRowReorder } from "@/lib/use-employee-row-reorder";
 import { useSession } from "@/lib/auth/session-context";
-import { PRIORITE_LABELS, type Chantier, type Employee } from "@/lib/types";
+import { PRIORITE_LABELS, TRANSPORT_ROW_ID, type Chantier, type Employee } from "@/lib/types";
 import { WelcomeBanner } from "@/components/WelcomeBanner";
 import {
   STATUT_CHANTIER_COLORS,
@@ -287,7 +287,9 @@ export function CalendarBoard() {
           <h2 className="font-serif text-3xl text-stone-900">Planning équipe</h2>
           <p className="mt-1 text-sm text-stone-600">
             Une ligne par personne, chaque jour en matin / après-midi. Le
-            thermolaquage sous-traité a sa propre ligne. Glissez un chantier
+            thermolaquage sous-traité et les livraisons ont chacun leur ligne.
+            Les livraisons restent aussi sur la ligne du salarié responsable.
+            Glissez un chantier
             vers une autre date ou vers un autre salarié.             Les blocs collés sur
             la ligne d’arrivée reculent ou avancent pour laisser la place.
             Un dépôt sur une case déjà prise (absence, indisponibilité ou
@@ -611,6 +613,8 @@ export function CalendarBoard() {
                               assignment={assignment}
                               compact={compact}
                               dragging={Boolean(dragPreview)}
+                              showLivraisonAddress={row.id === TRANSPORT_ROW_ID}
+                              allowDrag={row.id !== TRANSPORT_ROW_ID}
 
                               onPointerDragStart={(event) => {
                                 event.currentTarget.setPointerCapture(
@@ -644,7 +648,11 @@ export function CalendarBoard() {
                                 updateDragPreview(event.clientX, event.clientY);
                               }}
                               onPointerDragEnd={(event, phaseId) => {
-                                if (dragRef.current?.pointerId !== event.pointerId) {
+                                if (!dragRef.current) {
+                                  setSelectedPhaseId(phaseId);
+                                  return;
+                                }
+                                if (dragRef.current.pointerId !== event.pointerId) {
                                   return;
                                 }
                                 void finishDrag(event.clientX, event.clientY, phaseId);
@@ -859,7 +867,12 @@ function DayDetail({
                                 ).bg,
                                 color: colorForChantier(assignment.chantier.id).fg,
                               }}
-                              title={`${formatClock(start)}–${formatClock(end)} · ${assignment.chantier.nom_client}`}
+                              title={`${formatClock(start)}–${formatClock(end)} · ${assignment.chantier.nom_client}${
+                                row.id === TRANSPORT_ROW_ID &&
+                                assignment.chantier.adresse_livraison
+                                  ? ` · ${assignment.chantier.adresse_livraison}`
+                                  : ""
+                              }`}
                               onClick={() => onOpenPhase(assignment.phase.id)}
                             >
                               <span className="block font-semibold">
@@ -868,6 +881,12 @@ function DayDetail({
                               <span className="block truncate">
                                 {assignment.chantier.nom_client}
                               </span>
+                              {row.id === TRANSPORT_ROW_ID &&
+                              assignment.chantier.adresse_livraison ? (
+                                <span className="block truncate opacity-90">
+                                  {assignment.chantier.adresse_livraison}
+                                </span>
+                              ) : null}
                               {assignment.phase.dates_estimatives ? (
                                 <span className="mt-0.5 inline-block rounded bg-violet-900/80 px-1 text-[9px] font-semibold uppercase tracking-wide text-violet-50">
                                   Estimatif
@@ -895,6 +914,8 @@ function PhaseChipButton({
   assignment,
   compact,
   dragging,
+  showLivraisonAddress,
+  allowDrag = true,
   onPointerDragStart,
   onPointerDragMove,
   onPointerDragEnd,
@@ -902,6 +923,8 @@ function PhaseChipButton({
   assignment: CalendarAssignment;
   compact?: boolean;
   dragging?: boolean;
+  showLivraisonAddress?: boolean;
+  allowDrag?: boolean;
   onPointerDragStart: (event: PointerEvent<HTMLButtonElement>) => void;
   onPointerDragMove: (event: PointerEvent<HTMLButtonElement>) => void;
   onPointerDragEnd: (
@@ -912,13 +935,21 @@ function PhaseChipButton({
   return (
     <button
       type="button"
-      className={`block w-full touch-none text-left ${dragging ? "cursor-grabbing" : "cursor-grab"}`}
-      onPointerDown={onPointerDragStart}
-      onPointerMove={onPointerDragMove}
+      className={`block w-full text-left ${
+        allowDrag
+          ? `touch-none ${dragging ? "cursor-grabbing" : "cursor-grab"}`
+          : "cursor-pointer"
+      }`}
+      onPointerDown={allowDrag ? onPointerDragStart : undefined}
+      onPointerMove={allowDrag ? onPointerDragMove : undefined}
       onPointerUp={(event) => onPointerDragEnd(event, assignment.phase.id)}
       onPointerCancel={(event) => onPointerDragEnd(event, assignment.phase.id)}
     >
-      <AssignmentChip assignment={assignment} compact={compact} />
+      <AssignmentChip
+        assignment={assignment}
+        compact={compact}
+        showLivraisonAddress={showLivraisonAddress}
+      />
     </button>
   );
 }

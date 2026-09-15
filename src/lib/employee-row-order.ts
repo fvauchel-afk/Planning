@@ -1,5 +1,5 @@
 import { LOGISTIQUE_ROW_ORDRE, employeeOrdre } from "@/lib/display-order";
-import { LOGISTIQUE_ROW_ID, type Employee } from "@/lib/types";
+import { LOGISTIQUE_ROW_ID, isVirtualPlanningRow, type Employee } from "@/lib/types";
 
 /** Salariés placés visuellement sous la ligne Thermolaquage. */
 export const EMPLOYEE_ORDER_AFTER_LOGISTICS = 1000;
@@ -25,7 +25,7 @@ export function persistEmployeeOrdersFromVisualRowIds(visualIds: string[]): {
   let before = 1;
   let after = EMPLOYEE_ORDER_AFTER_LOGISTICS;
   visualIds.forEach((id, index) => {
-    if (id === LOGISTIQUE_ROW_ID) return;
+    if (isVirtualPlanningRow(id)) return;
     if (logiIdx >= 0 && index > logiIdx) {
       updates.push({ id, ordre_affichage: after });
       after += 1;

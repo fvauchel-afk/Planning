@@ -6,7 +6,7 @@ import {
   slotsFromExistingPhase,
   type Half,
 } from "@/lib/engine/slots";
-import { LOGISTIQUE_ROW_ID, type PhasePatch, type PlanningSnapshot } from "@/lib/types";
+import { isVirtualPlanningRow, type PhasePatch, type PlanningSnapshot } from "@/lib/types";
 
 export type OccupiedHalf = { date: string; half: Half };
 
@@ -67,7 +67,7 @@ function isWorkHalf(
   half: Half,
 ): boolean {
   if (hoursForSlot(snapshot, rowId, date, half) <= 0) return false;
-  if (rowId !== LOGISTIQUE_ROW_ID && isEmployeeAbsent(snapshot, rowId, date)) {
+  if (!isVirtualPlanningRow(rowId) && isEmployeeAbsent(snapshot, rowId, date)) {
     return false;
   }
   return true;
@@ -233,7 +233,7 @@ function cellHasBlockingAbsence(
   rowId: string,
   date: string,
 ): boolean {
-  if (rowId === LOGISTIQUE_ROW_ID) return isCompanyHoliday(snapshot, date);
+  if (isVirtualPlanningRow(rowId)) return isCompanyHoliday(snapshot, date);
   return isEmployeeAbsent(snapshot, rowId, date) || isCompanyHoliday(snapshot, date);
 }
 
@@ -473,10 +473,7 @@ export function shiftOrMoveChantierBlock(input: {
   const intendedPreview = origin
     ? previewCellsForHalves(input.toRowId, previewHalves(origin, delta))
     : previewCellsForHalves(input.toRowId, [input.drop]);
-  if (
-    input.toRowId === LOGISTIQUE_ROW_ID ||
-    input.fromRowId === LOGISTIQUE_ROW_ID
-  ) {
+  if (isVirtualPlanningRow(input.toRowId) || isVirtualPlanningRow(input.fromRowId)) {
     return { ...emptyDragShift(intendedPreview), blocked: true };
   }
   const destEmployee = input.snapshot.employees.find(
