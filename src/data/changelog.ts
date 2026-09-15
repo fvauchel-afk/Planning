@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-15-ligne-transport-livraison",
+    title: "Ligne Transport / Livraison sur le planning",
+    items: [
+      "Le planning équipe a une ligne dédiée Transport / Livraison (vue d’ensemble, semaine et jour détaillé).",
+      "Chaque livraison s’y affiche (nom du chantier et adresse), en plus du bloc déjà présent sur la ligne du salarié responsable.",
+      "Un clic sur un bloc de cette ligne ouvre la même fiche qu’à partir de la ligne du salarié.",
+    ],
+  },  {
     id: "2026-09-15-semaine-heures",
     title: "Heures plus visibles en vue Semaine",
     items: [

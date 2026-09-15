@@ -1,5 +1,10 @@
 import { addDays, isSunday, toISODate } from "@/lib/dates";
-import { LOGISTIQUE_ROW_ID, type PlanningSnapshot, type TypePhase } from "@/lib/types";
+import {
+  LOGISTIQUE_ROW_ID,
+  isVirtualPlanningRow,
+  type PlanningSnapshot,
+  type TypePhase,
+} from "@/lib/types";
 import {
   employeeWorksOnDate,
   formatClock,
@@ -135,7 +140,7 @@ export function isSlotBlockedForRow(
   half?: Half,
 ): boolean {
   if (isSunday(date) || isCompanyHoliday(snapshot, date)) return true;
-  if (rowId === LOGISTIQUE_ROW_ID) {
+  if (isVirtualPlanningRow(rowId)) {
     return half !== undefined && hoursForSlot(snapshot, rowId, date, half) <= 0;
   }
   if (isEmployeeAbsent(snapshot, rowId, date)) return true;

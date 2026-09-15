@@ -2,6 +2,7 @@
 
 import {
   LOGISTIQUE_ROW_ID,
+  TRANSPORT_ROW_ID,
   PHASE_LABELS,
   absenceLabel,
   type Absence,
@@ -17,6 +18,8 @@ import { phaseIsEstimative } from "@/lib/dates-estimatives";
 import {
   LOGISTIQUE_ROW_LABEL,
   LOGISTIQUE_ROW_ORDRE,
+  TRANSPORT_ROW_LABEL,
+  TRANSPORT_ROW_ORDRE,
 } from "@/lib/display-order";
 import { employeeOrdreForPlanning } from "@/lib/employee-row-order";
 import { formatHoursLabel, hoursForSlot } from "@/lib/engine/hours";
@@ -69,6 +72,11 @@ export function assignmentIndex(snapshot: PlanningSnapshot): AssignmentIndex {
   );
   for (const phase of snapshot.phases) {
     const slots = slotsFromExistingPhase(snapshot, phase);
+    if (phase.type_phase === "livraison") {
+      for (const slot of slots.slice()) {
+        slots.push({ ...slot, rowId: TRANSPORT_ROW_ID });
+      }
+    }
     slotsByPhase.set(phase.id, slots);
     const element = elementById.get(phase.element_id);
     if (!element) continue;
@@ -111,6 +119,13 @@ export function planningRows(employees: Employee[]): CalendarRow[] {
       employee: null,
       ordre: LOGISTIQUE_ROW_ORDRE,
     },
+    {
+      id: TRANSPORT_ROW_ID,
+      label: TRANSPORT_ROW_LABEL,
+      subtitle: "véhicule",
+      employee: null,
+      ordre: TRANSPORT_ROW_ORDRE,
+    },
   ];
   rows.sort((left, right) => {
     if (left.ordre !== right.ordre) return left.ordre - right.ordre;
@@ -138,6 +153,7 @@ export function firstChantierOccurrence(
     if (!assignments.some((item) => item.chantier.id === chantierId)) continue;
     const [rowId, date, halfRaw] = key.split("|");
     if (!rowId || !date) continue;
+    if (rowId === TRANSPORT_ROW_ID) continue;
     const half = halfRaw === "1" ? 1 : 0;
     const order = rowOrder.get(rowId) ?? 999;
     if (
@@ -234,24 +250,39 @@ export function absencesForCell(
 export function AssignmentChip({
   assignment,
   compact,
+  showLivraisonAddress,
 }: {
   assignment: CalendarAssignment;
   compact?: boolean;
+  showLivraisonAddress?: boolean;
 }) {
   const color = colorForChantier(assignment.chantier.id);
+  const address =
+    assignment.chantier.adresse_livraison?.trim() ||
+    assignment.chantier.adresse?.trim() ||
+    "";
+  const detail =
+    showLivraisonAddress && assignment.phase.type_phase === "livraison"
+      ? address || assignment.element.nom_element
+      : assignment.element.nom_element;
   return (
     <div
       className={`overflow-hidden rounded px-1.5 py-0.5 ${compact ? "text-[10px] leading-tight" : "text-xs"}`}
       style={{ backgroundColor: color.bg, color: color.fg }}
-      title={`${assignment.chantier.nom_client} — ${assignment.element.nom_element} (${PHASE_LABELS[assignment.phase.type_phase]}) · ${formatHoursLabel(assignment.phase.duree_estimee_heures)}`}
+      title={`${assignment.chantier.nom_client} — ${detail} (${PHASE_LABELS[assignment.phase.type_phase]}) · ${formatHoursLabel(assignment.phase.duree_estimee_heures)}`}
     >
       <span className="font-semibold">{assignment.chantier.nom_client}</span>
-      {!compact && (
-        <span className="opacity-90">
-          {" "}
-          · {assignment.element.nom_element}
-        </span>
-      )}
+      {showLivraisonAddress && assignment.phase.type_phase === "livraison" ? (
+        address ? (
+          <span className={`opacity-90 ${compact ? "block truncate" : ""}`}>
+            {compact ? address : ` · ${address}`}
+          </span>
+        ) : !compact ? (
+          <span className="opacity-90"> · {assignment.element.nom_element}</span>
+        ) : null
+      ) : !compact ? (
+        <span className="opacity-90"> · {assignment.element.nom_element}</span>
+      ) : null}
       {Number(assignment.phase.duree_estimee_heures) > 0 && !compact ? (
         <span className="ml-1 rounded bg-black/35 px-1 text-[11px] font-bold tabular-nums tracking-wide">
           {formatHoursLabel(assignment.phase.duree_estimee_heures)}

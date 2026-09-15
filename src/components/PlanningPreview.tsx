@@ -8,7 +8,7 @@ import {
 } from "@/lib/calendar";
 import { colorForChantier } from "@/lib/colors";
 import { previewSolutionSnapshot } from "@/lib/engine/preview-solution";
-import { LOGISTIQUE_ROW_ID, type PlanningSnapshot, type PlanningSolution } from "@/lib/types";
+import { LOGISTIQUE_ROW_ID, TRANSPORT_ROW_ID, type PlanningSnapshot, type PlanningSolution } from "@/lib/types";
 
 function previewWindow(snapshot: PlanningSnapshot, solution: PlanningSolution): string[] {
   const dates = solution.repercussions.flatMap((row) => [
@@ -65,8 +65,12 @@ export function PlanningPreview({
     }
   }
   const rows = planningRows(preview.employees).filter(
-    (row) => row.id === LOGISTIQUE_ROW_ID || employeeIds.has(row.id) || employeeIds.size === 0,
-  ).slice(0, 8);
+    (row) =>
+      row.id === LOGISTIQUE_ROW_ID ||
+      row.id === TRANSPORT_ROW_ID ||
+      employeeIds.has(row.id) ||
+      employeeIds.size === 0,
+  ).slice(0, 9);
 
   return (
     <div className="mt-2 overflow-x-auto rounded border border-stone-200 bg-white">
