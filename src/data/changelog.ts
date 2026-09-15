@@ -11,6 +11,13 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-15-horaires-presets-saison",
+    title: "Préréglages d’horaires et bascule été / hiver",
+    items: [
+      "Sur Ajouter ou Modifier un employé, trois boutons (28 h, 35 h et 39 h / semaine) remplissent été et hiver ; vous pouvez ensuite corriger les cases.",
+      "À côté des dates Saisons été / hiver, vous voyez la saison active (calcul automatique ou forcée), avec Forcer été, Forcer hiver, et Revenir au calcul automatique. Les dates ne changent pas.",
+    ],
+  },  {
     id: "2026-09-15-lancement-a-valider",
     title: "Ne pas oublier de valider le lancement",
     items: [
