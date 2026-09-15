@@ -11,19 +11,19 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
-<<<<<<< HEAD
-    id: "2026-09-15-laquage-ral-finition",
-    title: "Couleur et finition du thermolaquage",
-    items: [
-      "Sur un chantier avec thermolaquage, vous pouvez indiquer la couleur RAL et la finition (Mat, Satin, Brillant, Texturé fin), à la création ou plus tard.",
-      "Ces informations s’enregistrent toutes seules sur la fiche, et elles figurent sur le bon de commande PDF envoyé au sous-traitant.",
-=======
     id: "2026-09-15-semaine-heures",
     title: "Heures plus visibles en vue Semaine",
     items: [
       "Sur chaque bloc de la semaine, le nombre d’heures de la phase s’affiche clairement.",
       "À côté du nom du salarié, le total d’heures de la semaine affichée permet de voir la charge d’un coup d’œil.",
->>>>>>> acfdb91 (Rendre les heures visibles en vue Semaine, avec un total par salarié.)
+    ],
+  },
+  {
+    id: "2026-09-15-laquage-ral-finition",
+    title: "Couleur et finition du thermolaquage",
+    items: [
+      "Sur un chantier avec thermolaquage, vous pouvez indiquer la couleur RAL et la finition (Mat, Satin, Brillant, Texturé fin), à la création ou plus tard.",
+      "Ces informations s’enregistrent toutes seules sur la fiche, et elles figurent sur le bon de commande PDF envoyé au sous-traitant.",
     ],
   },
   {
