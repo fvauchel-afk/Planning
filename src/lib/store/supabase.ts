@@ -1170,6 +1170,12 @@ export async function supabaseUpdateDemande(
   if (error) throw wrapSupabaseError(error);
 }
 
+export async function supabaseDeleteDemande(id: string): Promise<void> {
+  const supabase = createSupabaseServerClient();
+  const { error } = await supabase.from("demandes").delete().eq("id", id);
+  if (error) throw wrapSupabaseError(error);
+}
+
 export async function supabaseSetSignalementStatut(
   id: string,
   statut: StatutSignalement,

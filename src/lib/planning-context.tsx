@@ -26,6 +26,7 @@ import {
   localCreateSignalement,
   localCreateDemande,
   localUpdateDemande,
+  localDeleteDemande,
   localDeleteAbsence,
   localReplaceHoraires,
   localSetChantierOnedriveLink,
@@ -114,6 +115,7 @@ type PlanningContextValue = {
   createReception: (input: NewReceptionInput) => Promise<void>;
   createDemande: (input: NewDemandeInput) => Promise<void>;
   updateDemande: (input: DemandeUpdateInput) => Promise<void>;
+  deleteDemande: (id: string) => Promise<void>;
   sendDemandeMail: (id: string, templateId: string) => Promise<void>;
   confirmPhaseDates: (ids: string[]) => Promise<void>;
   saveHoraires: (rows: HoraireSaison[]) => Promise<void>;
@@ -671,6 +673,19 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
     [useShared, refresh, assertWritable, mutate],
   );
 
+  const deleteDemande = useCallback(
+    async (id: string) => {
+      assertWritable();
+      if (useShared) {
+        await mutate({ action: "deleteDemande", id });
+        await refresh({ throwOnError: true });
+        return;
+      }
+      setSnapshot((current) => localDeleteDemande(current, id));
+    },
+    [useShared, refresh, assertWritable, mutate],
+  );
+
   const sendDemandeMail = useCallback(
     async (id: string, templateId: string) => {
       assertWritable();
@@ -775,6 +790,7 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
       createReception,
       createDemande,
       updateDemande,
+      deleteDemande,
       sendDemandeMail,
       confirmPhaseDates,
       saveHoraires,
@@ -810,6 +826,7 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
       createReception,
       createDemande,
       updateDemande,
+      deleteDemande,
       sendDemandeMail,
       confirmPhaseDates,
       saveHoraires,
