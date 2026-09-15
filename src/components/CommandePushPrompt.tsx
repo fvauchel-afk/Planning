@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useSession } from "@/lib/auth/session-context";
 
-const STORAGE_ASKED = "vauchel_push_commandes_asked";
+const STORAGE_ASKED = "vauchel_push_asked_v2";
 
 function urlBase64ToUint8Array(base64: string): Uint8Array {
   const padding = "=".repeat((4 - (base64.length % 4)) % 4);
@@ -42,9 +42,7 @@ export function CommandePushPrompt() {
   const [error, setError] = useState<string | null>(null);
 
   const eligible =
-    ready &&
-    Boolean(session?.canReceiveCommandes) &&
-    pathname !== "/connexion";
+    ready && Boolean(session) && pathname !== "/connexion";
 
   useEffect(() => {
     if (!eligible) {
@@ -140,23 +138,27 @@ export function CommandePushPrompt() {
     }
   }
 
+  const commande = Boolean(session?.canReceiveCommandes);
   if (!eligible || status === "hidden" || status === "ok") return null;
 
   if (status === "denied") {
     return (
-      <div className="fixed bottom-24 left-4 right-4 z-40 mx-auto max-w-lg rounded-lg border border-stone-300 bg-white px-4 py-3 text-sm text-stone-800 shadow-lg md:left-auto md:right-6 md:w-96">
-        Les notifications commandes sont bloquées dans le navigateur. Autorisez-les
+      <div className="fixed bottom-24 left-4 right-4 z-30 mx-auto max-w-lg rounded-lg border border-stone-300 bg-white px-4 py-3 text-sm text-stone-800 shadow-lg md:left-auto md:right-24 md:w-96">
+        Les notifications sont bloquées dans le navigateur. Autorisez-les
         dans les réglages du site, ou ajoutez l’app à l’écran d’accueil sur iPhone.
       </div>
     );
   }
 
   return (
-    <div className="fixed bottom-24 left-4 right-4 z-40 mx-auto max-w-lg rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950 shadow-lg md:left-auto md:right-6 md:w-96">
-      <p className="font-medium">Notifications commandes</p>
+    <div className="fixed bottom-24 left-4 right-4 z-30 mx-auto max-w-lg rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950 shadow-lg md:left-auto md:right-24 md:w-96">
+      <p className="font-medium">
+        {commande ? "Notifications commandes" : "Notifications congés"}
+      </p>
       <p className="mt-1 text-amber-900">
-        Pour être prévenu même si l’application est fermée. Sur iPhone, ajoutez
-        d’abord Planning à l’écran d’accueil.
+        {commande
+          ? "Pour être prévenu même si l’application est fermée. Sur iPhone, ajoutez d’abord Planning à l’écran d’accueil."
+          : "Pour être prévenu quand une demande de congé est acceptée ou refusée. Sur iPhone, ajoutez d’abord Planning à l’écran d’accueil."}
       </p>
       {error ? <p className="mt-1 text-red-800">{error}</p> : null}
       <button

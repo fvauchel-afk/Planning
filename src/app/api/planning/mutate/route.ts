@@ -52,7 +52,15 @@ import type {
 } from "@/lib/types";
 import { CATEGORIES_DEMANDE, STATUTS_DEMANDE } from "@/lib/types";
 import { canReceiveCommandes } from "@/lib/auth/commande-access";
-import { sendCommandePush, sendSignalementPush } from "@/lib/push/send";
+import {
+  sendCommandePush,
+  sendEmployeePush,
+  sendSignalementPush,
+} from "@/lib/push/send";
+import {
+  syntheseMessageConge,
+  validateDemandeCongeInput,
+} from "@/lib/demandes";
 import {
   hasPendingSignalements,
   PENDING_CHANTIER_MESSAGE,
@@ -309,7 +317,31 @@ export async function POST(request: NextRequest) {
       }
       await supabaseCreateReception(body.input);
     } else if (body.action === "createDemande") {
-      const message = body.input.message?.trim() ?? "";
+      if (
+        !CATEGORIES_DEMANDE.includes(
+          body.input.categorie as (typeof CATEGORIES_DEMANDE)[number],
+        )
+      ) {
+        return NextResponse.json(
+          { error: "Catégorie invalide." },
+          { status: 400 },
+        );
+      }
+      let message = body.input.message?.trim() ?? "";
+      if (body.input.categorie === "conge") {
+        const invalid = validateDemandeCongeInput(body.input);
+        if (invalid) {
+          return NextResponse.json({ error: invalid }, { status: 400 });
+        }
+        if (!message && body.input.type_absence && body.input.date_debut && body.input.date_fin) {
+          message = syntheseMessageConge({
+            type_absence: body.input.type_absence,
+            date_debut: body.input.date_debut,
+            date_fin: body.input.date_fin,
+            motif_precision: body.input.motif_precision,
+          });
+        }
+      }
       if (!message) {
         return NextResponse.json(
           { error: "Écrivez un message avant d’envoyer." },
@@ -322,20 +354,14 @@ export async function POST(request: NextRequest) {
           { status: 400 },
         );
       }
-      if (
-        !CATEGORIES_DEMANDE.includes(
-          body.input.categorie as (typeof CATEGORIES_DEMANDE)[number],
-        )
-      ) {
-        return NextResponse.json(
-          { error: "Catégorie invalide." },
-          { status: 400 },
-        );
-      }
       await supabaseCreateDemande({
         categorie: body.input.categorie,
         message,
         employe_id: session.employeeId,
+        date_debut: body.input.date_debut,
+        date_fin: body.input.date_fin,
+        type_absence: body.input.type_absence,
+        motif_precision: body.input.motif_precision,
       });
       if (body.input.categorie === "commande") {
         const snapshot = await fetchSupabaseSnapshot();
@@ -375,11 +401,45 @@ export async function POST(request: NextRequest) {
       ) {
         return forbidden("Seuls Alexis et Mika traitent les commandes.");
       }
+      if (
+        demande?.categorie === "conge" &&
+        body.input.statut === "refusee" &&
+        !body.input.motif_refus?.trim()
+      ) {
+        return NextResponse.json(
+          { error: "Indiquez un motif de refus." },
+          { status: 400 },
+        );
+      }
       await supabaseUpdateDemande({
         id: body.input.id,
         statut: body.input.statut,
         archivee: body.input.archivee,
+        motif_refus: body.input.motif_refus,
+        absence_id: body.input.absence_id,
       });
+      if (
+        demande?.categorie === "conge" &&
+        (body.input.statut === "acceptee" || body.input.statut === "refusee")
+      ) {
+        const push = await sendEmployeePush({
+          employeeId: demande.employe_id,
+          title:
+            body.input.statut === "acceptee"
+              ? "Demande de congé acceptée"
+              : "Demande de congé refusée",
+          body:
+            body.input.statut === "acceptee"
+              ? "Votre demande de congé a été acceptée. Consultez Mes congés."
+              : `Votre demande de congé a été refusée${
+                  body.input.motif_refus?.trim()
+                    ? ` : ${body.input.motif_refus.trim().slice(0, 120)}`
+                    : "."
+                }`,
+          url: "/moi/conges",
+        });
+        if (push.warning) console.warn("[conge-push]", push.warning);
+      }
     } else if (body.action === "sendDemandeMail") {
       if (!canReceiveCommandes(session.nom)) {
         return forbidden("Seuls Alexis et Mika envoient ces messages.");

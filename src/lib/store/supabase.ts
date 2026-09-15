@@ -46,8 +46,6 @@ import type {
   PlanningSnapshot,
   ReceptionChantier,
   Demande,
-  CategorieDemande,
-  StatutDemande,
   Role,
   Signalement,
   StatutSignalement,
@@ -55,6 +53,11 @@ import type {
   SousTraitant,
 } from "@/lib/types";
 import { TYPES_PHASE } from "@/lib/types";
+import {
+  parseCategorieDemande,
+  parseStatutDemande,
+  parseTypeAbsence,
+} from "@/lib/demandes";
 
 type EmployeeRow = {
   id: string;
@@ -250,22 +253,24 @@ async function fetchSupabaseSnapshotOnce(): Promise<PlanningSnapshot> {
     })),
     demandes: optionalTable<Demande>(demandes)
       .map((row) => {
-        const categorie: CategorieDemande =
-          row.categorie === "suggestion_entreprise"
-            ? "suggestion_entreprise"
-            : row.categorie === "suggestion_site"
-              ? "suggestion_site"
-              : "commande";
-        const statut: StatutDemande =
-          row.statut === "traite" ? "traite" : "en_attente";
+        const raw = row as Demande & Record<string, unknown>;
         return {
           id: row.id,
           employe_id: row.employe_id,
-          categorie,
+          categorie: parseCategorieDemande(row.categorie),
           message: row.message ?? "",
           date_creation: row.date_creation,
-          statut,
+          statut: parseStatutDemande(row.statut),
           archivee: Boolean(row.archivee),
+          date_debut: asIsoDate(raw.date_debut) ?? null,
+          date_fin: asIsoDate(raw.date_fin) ?? null,
+          type_absence: parseTypeAbsence(raw.type_absence),
+          motif_precision:
+            typeof raw.motif_precision === "string" ? raw.motif_precision : null,
+          motif_refus:
+            typeof raw.motif_refus === "string" ? raw.motif_refus : null,
+          absence_id:
+            typeof raw.absence_id === "string" ? raw.absence_id : null,
         };
       })
       .sort(
@@ -1097,8 +1102,33 @@ export async function supabaseCreateDemande(
     message,
     statut: "en_attente" as const,
     archivee: false,
+    date_debut: input.date_debut?.slice(0, 10) || null,
+    date_fin: input.date_fin?.slice(0, 10) || null,
+    type_absence: input.type_absence ?? null,
+    motif_precision: input.motif_precision?.trim() || null,
   };
   const { error } = await supabase.from("demandes").insert(payload);
+  if (error && isMissingColumnError(error, "date_debut")) {
+    const withoutDates = {
+      employe_id: payload.employe_id,
+      categorie: payload.categorie,
+      message: payload.message,
+      statut: payload.statut,
+      archivee: payload.archivee,
+    };
+    const retryDates = await supabase.from("demandes").insert(withoutDates);
+    if (!retryDates.error) return;
+    if (retryDates.error && isMissingColumnError(retryDates.error, "statut")) {
+      const retry = await supabase.from("demandes").insert({
+        employe_id: payload.employe_id,
+        categorie: payload.categorie,
+        message: payload.message,
+      });
+      if (retry.error) throw wrapSupabaseError(retry.error);
+      return;
+    }
+    throw wrapSupabaseError(retryDates.error);
+  }
   if (error && isMissingColumnError(error, "statut")) {
     const retry = await supabase.from("demandes").insert({
       employe_id: payload.employe_id,
@@ -1125,9 +1155,16 @@ export async function supabaseUpdateDemande(
   input: DemandeUpdateInput,
 ): Promise<void> {
   const supabase = createSupabaseServerClient();
-  const patch: { statut?: StatutDemande; archivee?: boolean } = {};
+  const patch: {
+    statut?: DemandeUpdateInput["statut"];
+    archivee?: boolean;
+    motif_refus?: string | null;
+    absence_id?: string | null;
+  } = {};
   if (input.statut) patch.statut = input.statut;
   if (input.archivee !== undefined) patch.archivee = input.archivee;
+  if (input.motif_refus !== undefined) patch.motif_refus = input.motif_refus;
+  if (input.absence_id !== undefined) patch.absence_id = input.absence_id;
   if (Object.keys(patch).length === 0) return;
   const { error } = await supabase.from("demandes").update(patch).eq("id", input.id);
   if (error) throw wrapSupabaseError(error);

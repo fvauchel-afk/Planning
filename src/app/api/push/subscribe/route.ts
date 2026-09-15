@@ -1,11 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import {
-  forbidden,
-  getSession,
-  resolveSession,
-  unauthorized,
-} from "@/lib/auth/guard";
-import { canReceiveCommandes } from "@/lib/auth/commande-access";
+import { getSession, resolveSession, unauthorized } from "@/lib/auth/guard";
 import {
   deletePushSubscription,
   upsertPushSubscription,
@@ -22,9 +16,6 @@ type Body = {
 export async function POST(request: NextRequest) {
   const session = await resolveSession(await getSession());
   if (!session) return unauthorized();
-  if (!canReceiveCommandes(session.nom)) {
-    return forbidden("Seuls Alexis et Mika activent ces notifications.");
-  }
   let body: Body;
   try {
     body = (await request.json()) as Body;

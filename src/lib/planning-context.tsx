@@ -43,6 +43,7 @@ import {
   loadLocalSnapshot,
 } from "@/lib/store/local";
 import { fetchPlanningSnapshot, planningMutate } from "@/lib/planning/api";
+import { syntheseMessageConge } from "@/lib/demandes";
 import { shouldUseSharedDatabase } from "@/lib/supabase/client";
 import { DATABASE_UNAVAILABLE_MESSAGE, formatSaveError } from "@/lib/supabase/errors";
 import type {
@@ -616,7 +617,21 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
   const createDemande = useCallback(
     async (input: NewDemandeInput) => {
       assertWritable();
-      const message = input.message.trim();
+      let message = input.message.trim();
+      if (
+        !message &&
+        input.categorie === "conge" &&
+        input.type_absence &&
+        input.date_debut &&
+        input.date_fin
+      ) {
+        message = syntheseMessageConge({
+          type_absence: input.type_absence,
+          date_debut: input.date_debut,
+          date_fin: input.date_fin,
+          motif_precision: input.motif_precision,
+        });
+      }
       if (!message) {
         throw new Error("Écrivez un message avant d’envoyer.");
       }

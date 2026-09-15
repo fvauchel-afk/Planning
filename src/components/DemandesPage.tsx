@@ -4,7 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import { usePlanning } from "@/lib/planning-context";
 import { useSession } from "@/lib/auth/session-context";
 import { markCommandesSeen } from "@/components/CommandeAlert";
+import { DemandeCongeAdmin, DemandeCongeDetails } from "@/components/DemandeCongeAdmin";
 import { COMMANDE_MAIL_TEMPLATE_CHOICES } from "@/lib/mail/commande-templates";
+import { demandeEstOuverte } from "@/lib/demandes";
 import {
   CATEGORIES_DEMANDE,
   CATEGORIE_DEMANDE_LABELS,
@@ -41,7 +43,17 @@ export function DemandesPage() {
       (snapshot.demandes ?? []).filter(
         (row) =>
           row.categorie === "commande" &&
-          row.statut !== "traite" &&
+          demandeEstOuverte(row) &&
+          !row.archivee,
+      ).length,
+    [snapshot.demandes],
+  );
+  const nouveauConges = useMemo(
+    () =>
+      (snapshot.demandes ?? []).filter(
+        (row) =>
+          row.categorie === "conge" &&
+          demandeEstOuverte(row) &&
           !row.archivee,
       ).length,
     [snapshot.demandes],
@@ -62,9 +74,9 @@ export function DemandesPage() {
     list.sort((left, right) => {
       if (canMail && activeFiltre === "tout") {
         const leftNew =
-          left.categorie === "commande" && left.statut !== "traite" ? 1 : 0;
+          left.categorie === "commande" && demandeEstOuverte(left) ? 1 : 0;
         const rightNew =
-          right.categorie === "commande" && right.statut !== "traite" ? 1 : 0;
+          right.categorie === "commande" && demandeEstOuverte(right) ? 1 : 0;
         if (leftNew !== rightNew) return rightNew - leftNew;
       }
       return Date.parse(right.date_creation) - Date.parse(left.date_creation);
@@ -174,6 +186,19 @@ export function DemandesPage() {
                   : "nouveau"}
               </span>
             ) : null}
+            {id === "conge" && nouveauConges > 0 ? (
+              <span
+                className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase ${
+                  activeFiltre === id
+                    ? "bg-amber-400 text-stone-900"
+                    : "bg-amber-200 text-amber-950"
+                }`}
+              >
+                {nouveauConges > 1
+                  ? `${nouveauConges} nouveau`
+                  : "nouveau"}
+              </span>
+            ) : null}
           </button>
         ))}
       </div>
@@ -202,8 +227,14 @@ export function DemandesPage() {
               snapshot.employees.find(
                 (employee) => employee.id === demande.employe_id,
               )?.nom ?? "Salarié";
-            const waiting = demande.statut !== "traite";
+            const waiting = demandeEstOuverte(demande);
             const busy = busyId === demande.id;
+            const statusClass =
+              demande.statut === "refusee"
+                ? "bg-red-100 text-red-900"
+                : waiting
+                  ? "bg-amber-100 text-amber-900"
+                  : "bg-green-100 text-green-800";
             return (
               <li
                 key={demande.id}
@@ -220,11 +251,7 @@ export function DemandesPage() {
                     {CATEGORIE_DEMANDE_LABELS[demande.categorie]}
                   </p>
                   <span
-                    className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
-                      waiting
-                        ? "bg-amber-100 text-amber-900"
-                        : "bg-green-100 text-green-800"
-                    }`}
+                    className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${statusClass}`}
                   >
                     {STATUT_DEMANDE_LABELS[demande.statut]}
                   </span>
@@ -237,11 +264,24 @@ export function DemandesPage() {
                     </span>
                   ) : null}
                 </div>
+                <DemandeCongeDetails demande={demande} />
+                {demande.categorie !== "conge" ? (
                 <p className="mt-2 whitespace-pre-wrap text-sm text-stone-700">
                   {demande.message}
                 </p>
+                ) : demande.message &&
+                  !demande.date_debut ? (
+                <p className="mt-2 whitespace-pre-wrap text-sm text-stone-700">
+                  {demande.message}
+                </p>
+                ) : null}
+                {demande.statut === "refusee" && demande.motif_refus ? (
+                  <p className="mt-2 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-900">
+                    Motif de refus : {demande.motif_refus}
+                  </p>
+                ) : null}
                 <div className="mt-3 flex flex-wrap gap-2">
-                  {waiting ? (
+                  {waiting && demande.categorie !== "conge" ? (
                     <button
                       type="button"
                       disabled={busy}
@@ -299,6 +339,14 @@ export function DemandesPage() {
                       ))
                     : null}
                 </div>
+                {waiting && demande.categorie === "conge" ? (
+                  <DemandeCongeAdmin
+                    demande={demande}
+                    busy={busy}
+                    onBusy={setBusyId}
+                    onError={setError}
+                  />
+                ) : null}
               </li>
             );
           })}

@@ -212,6 +212,7 @@ export type NewReceptionInput = {
 
 export const CATEGORIES_DEMANDE = [
   "commande",
+  "conge",
   "suggestion_site",
   "suggestion_entreprise",
 ] as const;
@@ -219,16 +220,24 @@ export type CategorieDemande = (typeof CATEGORIES_DEMANDE)[number];
 
 export const CATEGORIE_DEMANDE_LABELS: Record<CategorieDemande, string> = {
   commande: "Commande",
+  conge: "Demande de congé",
   suggestion_site: "Suggestion amélioration site",
   suggestion_entreprise: "Suggestion amélioration entreprise",
 };
 
-export const STATUTS_DEMANDE = ["en_attente", "traite"] as const;
+export const STATUTS_DEMANDE = [
+  "en_attente",
+  "traite",
+  "acceptee",
+  "refusee",
+] as const;
 export type StatutDemande = (typeof STATUTS_DEMANDE)[number];
 
 export const STATUT_DEMANDE_LABELS: Record<StatutDemande, string> = {
   en_attente: "En attente",
   traite: "Traité",
+  acceptee: "Acceptée",
+  refusee: "Refusée",
 };
 
 export type Demande = {
@@ -239,18 +248,30 @@ export type Demande = {
   date_creation: string;
   statut: StatutDemande;
   archivee: boolean;
+  date_debut?: string | null;
+  date_fin?: string | null;
+  type_absence?: TypeAbsence | null;
+  motif_precision?: string | null;
+  motif_refus?: string | null;
+  absence_id?: string | null;
 };
 
 export type NewDemandeInput = {
   categorie: CategorieDemande;
   message: string;
   employe_id?: string;
+  date_debut?: string;
+  date_fin?: string;
+  type_absence?: TypeAbsence;
+  motif_precision?: string | null;
 };
 
 export type DemandeUpdateInput = {
   id: string;
   statut?: StatutDemande;
   archivee?: boolean;
+  motif_refus?: string | null;
+  absence_id?: string | null;
 };
 
 export type PlanningSnapshot = {

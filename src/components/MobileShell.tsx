@@ -52,6 +52,16 @@ export function MobileShell({
             Mon planning
           </Link>
           <Link
+            href="/moi/conges"
+            className={`rounded-md px-3 py-1.5 text-sm ${
+              pathname.startsWith("/moi/conges")
+                ? "bg-amber-700 text-amber-50"
+                : "text-stone-300 hover:bg-stone-800"
+            }`}
+          >
+            Mes congés
+          </Link>
+          <Link
             href="/moi/retard"
             className={`rounded-md px-3 py-1.5 text-sm ${
               pathname.startsWith("/moi/retard")
