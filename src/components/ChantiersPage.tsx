@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ChantierEditModal } from "@/components/ChantierEditModal";
 import {
   STATUT_CHANTIER_COLORS,
@@ -20,14 +21,37 @@ export function ChantiersPage() {
   const { snapshot, loading } = usePlanning();
   const { reopen, clearReopen } = useFormDraftReopen();
   const [editing, setEditing] = useState<Chantier | null>(null);
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  function openFiche(chantier: Chantier) {
+    setEditing(chantier);
+    router.replace(`${pathname}?fiche=${encodeURIComponent(chantier.id)}`, {
+      scroll: false,
+    });
+  }
+
+  function closeFiche() {
+    setEditing(null);
+    router.replace(pathname, { scroll: false });
+  }
 
   useEffect(() => {
     if (reopen?.kind !== "chantier") return;
     if (loading) return;
     const found = snapshot.chantiers.find((item) => item.id === reopen.id);
-    if (found) setEditing(found);
+    if (found) openFiche(found);
     clearReopen();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reopen, loading, snapshot.chantiers, clearReopen]);
+
+  useEffect(() => {
+    const fiche = searchParams.get("fiche");
+    if (!fiche || loading) return;
+    const found = snapshot.chantiers.find((item) => item.id === fiche);
+    if (found) setEditing(found);
+  }, [searchParams, loading, snapshot.chantiers]);
   const pendingBlock = hasPendingSignalements(snapshot);
 
   const rows = useMemo(() => {
@@ -94,7 +118,7 @@ export function ChantiersPage() {
                   <tr
                     key={chantier.id}
                     className="cursor-pointer border-t border-stone-200 hover:bg-amber-50/60"
-                    onClick={() => setEditing(chantier)}
+                    onClick={() => openFiche(chantier)}
                   >
                     <td className="px-3 py-2 font-medium text-stone-900">
                       {chantier.nom_client}
@@ -117,20 +141,29 @@ export function ChantiersPage() {
                       </span>
                     </td>
                     <td className="px-3 py-2 text-stone-600">
-                      {info.rangeLabel ? (
-                        <span className="inline-flex flex-wrap items-center gap-1.5">
+                      <span className="inline-flex flex-wrap items-center gap-1.5">
+                        {info.rangeLabel ? (
                           <span className={info.estimatif ? "italic text-violet-800" : ""}>
                             {info.rangeLabel}
                           </span>
-                          {info.estimatif ? (
-                            <span className="rounded border border-dashed border-violet-400 bg-violet-50 px-1.5 py-px text-[10px] font-semibold uppercase tracking-wide text-violet-800">
-                              Estimatif
-                            </span>
-                          ) : null}
+                        ) : (
+                          <span>—</span>
+                        )}
+                        {info.estimatif ? (
+                          <span className="rounded border border-dashed border-violet-400 bg-violet-50 px-1.5 py-px text-[10px] font-semibold uppercase tracking-wide text-violet-800">
+                            Estimatif
+                          </span>
+                        ) : null}
+                        <span
+                          className={`rounded border px-1.5 py-px text-[10px] font-semibold uppercase tracking-wide ${
+                            chantier.plan_valide
+                              ? "border-emerald-400 bg-emerald-50 text-emerald-800"
+                              : "border-dashed border-violet-400 bg-violet-50 text-violet-800"
+                          }`}
+                        >
+                          {chantier.plan_valide ? "Plan validé" : "Plan à faire"}
                         </span>
-                      ) : (
-                        "—"
-                      )}
+                      </span>
                     </td>
                   </tr>
                 );
@@ -143,7 +176,7 @@ export function ChantiersPage() {
       {editing && (
         <ChantierEditModal
           chantier={editing}
-          onClose={() => setEditing(null)}
+          onClose={closeFiche}
         />
       )}
     </section>

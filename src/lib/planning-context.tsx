@@ -41,6 +41,7 @@ import {
   localPatchEmployee,
   localReorderEmployees,
   localConfirmPhaseDates,
+  localValidateChantierPlan,
   loadLocalSnapshot,
 } from "@/lib/store/local";
 import { fetchPlanningSnapshot, planningMutate } from "@/lib/planning/api";
@@ -118,6 +119,7 @@ type PlanningContextValue = {
   deleteDemande: (id: string) => Promise<void>;
   sendDemandeMail: (id: string, templateId: string) => Promise<void>;
   confirmPhaseDates: (ids: string[]) => Promise<void>;
+  validateChantierPlan: (chantierId: string) => Promise<void>;
   saveHoraires: (rows: HoraireSaison[]) => Promise<void>;
   ensureChantierOnedriveFolder: (chantierId: string) => Promise<void>;
 };
@@ -714,6 +716,27 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
     [useShared, refresh, assertWritable, mutate],
   );
 
+  const validateChantierPlan = useCallback(
+    async (chantierId: string) => {
+      assertWritable();
+      if (!chantierId) return;
+      if (useShared) {
+        await mutate({ action: "validateChantierPlan", chantierId });
+        await refresh({ throwOnError: true });
+        return;
+      }
+      setSnapshot(() => {
+        const current = loadLocalSnapshot();
+        const employeId =
+          current.employees.find((row) => row.is_admin)?.id ??
+          current.employees[0]?.id ??
+          "";
+        return localValidateChantierPlan(current, chantierId, employeId);
+      });
+    },
+    [useShared, refresh, assertWritable, mutate],
+  );
+
   const saveHoraires = useCallback(
     async (rows: HoraireSaison[]) => {
       assertWritable();
@@ -793,6 +816,7 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
       deleteDemande,
       sendDemandeMail,
       confirmPhaseDates,
+      validateChantierPlan,
       saveHoraires,
       ensureChantierOnedriveFolder,
     }),
@@ -829,6 +853,7 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
       deleteDemande,
       sendDemandeMail,
       confirmPhaseDates,
+      validateChantierPlan,
       saveHoraires,
       ensureChantierOnedriveFolder,
     ],

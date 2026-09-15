@@ -24,6 +24,29 @@ function formatDemandeWhen(iso: string) {
   });
 }
 
+function DemandeMessage({ text }: { text: string }) {
+  const parts = text.split(/(https?:\/\/[^\s]+)/gi);
+  return (
+    <p className="mt-2 whitespace-pre-wrap text-sm text-stone-700">
+      {parts.map((part, index) =>
+        /^https?:\/\//i.test(part) ? (
+          <a
+            key={`${part}-${index}`}
+            href={part}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="break-all text-sky-800 underline"
+          >
+            {part}
+          </a>
+        ) : (
+          <span key={index}>{part}</span>
+        ),
+      )}
+    </p>
+  );
+}
+
 export function DemandesPage() {
   const { snapshot, loading, updateDemande, deleteDemande, sendDemandeMail } =
     usePlanning();
@@ -286,14 +309,10 @@ export function DemandesPage() {
                 </div>
                 <DemandeCongeDetails demande={demande} />
                 {demande.categorie !== "conge" ? (
-                <p className="mt-2 whitespace-pre-wrap text-sm text-stone-700">
-                  {demande.message}
-                </p>
+                <DemandeMessage text={demande.message} />
                 ) : demande.message &&
                   !demande.date_debut ? (
-                <p className="mt-2 whitespace-pre-wrap text-sm text-stone-700">
-                  {demande.message}
-                </p>
+                <DemandeMessage text={demande.message} />
                 ) : null}
                 {demande.statut === "refusee" && demande.motif_refus ? (
                   <p className="mt-2 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-900">

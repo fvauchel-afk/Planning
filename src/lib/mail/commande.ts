@@ -79,6 +79,19 @@ export function commandeNotifyEmails(): string[] {
   return [DEFAULT_COMMANDE_MAILBOX];
 }
 
+function commandeMailHtml(text: string): string {
+  const escaped = text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+  const linked = escaped.replace(
+    /(https?:\/\/[^\s<&]+)/gi,
+    '<a href="$1">$1</a>',
+  );
+  return linked.replace(/\n/g, "<br/>");
+}
+
 export async function sendCommandeMailboxMessage(input: {
   templateId: CommandeMailTemplateId | string;
   auteur: string;
@@ -104,10 +117,12 @@ export async function sendCommandeMailboxMessage(input: {
       ? CATEGORIE_DEMANDE_LABELS[input.categorie]
       : "Commande";
   try {
+    const text = `${categorie}\n\n${template.body(input.auteur, input.message)}`;
     await sendGraphMail({
       to: unique,
       subject: template.subject(input.auteur),
-      text: `${categorie}\n\n${template.body(input.auteur, input.message)}`,
+      text,
+      html: commandeMailHtml(text),
     });
     return { sent: true };
   } catch (err) {

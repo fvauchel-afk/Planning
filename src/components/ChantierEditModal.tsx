@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { BonCommandeModal } from "@/components/BonCommandeModal";
 import { SousTraitantSelect } from "@/components/SousTraitantSelect";
+import { FournituresEditor } from "@/components/FournituresEditor";
 import { canGenerateBonCommande } from "@/lib/bon-commande/active-phase";
 import { chantierVisibleOnGrid } from "@/lib/calendar";
 import { estimativePhaseIdsForChantier, chantierHasEstimativeDates } from "@/lib/dates-estimatives";
@@ -43,6 +44,9 @@ import {
 } from "@/lib/form-draft";
 import { formatSaveError } from "@/lib/supabase/errors";
 import {
+  type LigneFourniture,
+} from "@/lib/fournitures";
+import {
   LOGISTIQUE_ROW_ID,
   PRIORITES,
   PRIORITE_LABELS,
@@ -79,6 +83,7 @@ export function ChantierEditModal({
     scheduleChantierDay,
     applyPhaseEdits,
     confirmPhaseDates,
+    validateChantierPlan,
     ensureChantierOnedriveFolder,
     refresh,
   } = usePlanning();
@@ -101,6 +106,10 @@ export function ChantierEditModal({
   );
   const [error, setError] = useState<string | null>(null);
   const [creatingFolder, setCreatingFolder] = useState(false);
+  const [fournitures, setFournitures] = useState<LigneFourniture[]>(
+    chantier.fournitures?.length ? chantier.fournitures : [],
+  );
+  const [validatingPlan, setValidatingPlan] = useState(false);
   const currentOptions = useMemo(
     () => chantierPhaseOptions(snapshot, chantier.id),
     [snapshot, chantier.id],
@@ -144,6 +153,7 @@ export function ChantierEditModal({
       lien_dossier_onedrive?: string | null;
       adresse_livraison?: string | null;
       telephone_livraison?: string | null;
+      fournitures?: LigneFourniture[];
     }) => {
       try {
         await patchChantier({ id: chantier.id, ...payload });
@@ -233,6 +243,7 @@ export function ChantierEditModal({
     setToleranceMois(toleranceJoursToMois(chantier.tolerance_deplacement_jours));
     setAdresseLivraison(chantier.adresse_livraison ?? "");
     setTelephoneLivraison(chantier.telephone_livraison ?? "");
+    setFournitures(chantier.fournitures?.length ? chantier.fournitures : []);
     applyCascadeFromSnapshot();
     const draft = readFormDraft();
     if (draft?.kind === "chantier" && draft.id === chantier.id) {
@@ -261,6 +272,9 @@ export function ChantierEditModal({
     if (!dirtySimple.current.has("telephone_livraison")) {
       setTelephoneLivraison(latest.telephone_livraison ?? "");
     }
+    if (!dirtySimple.current.has("fournitures")) {
+      setFournitures(latest.fournitures?.length ? latest.fournitures : []);
+    }
     const remoteFp = chantierCascadeFingerprint(snapshot, chantier.id);
     if (!cascadeDirty.current) {
       applyCascadeFromSnapshot();
@@ -274,6 +288,9 @@ export function ChantierEditModal({
     () => chantierPlanningInfo(snapshot, chantier.id),
     [snapshot, chantier.id],
   );
+  const latestChantier =
+    snapshot.chantiers.find((item) => item.id === chantier.id) ?? chantier;
+  const planValide = Boolean(latestChantier.plan_valide);
   const isPlanned = Boolean(info.firstDate && info.lastDate);
   const visibleOnGrid = useMemo(
     () => chantierVisibleOnGrid(snapshot, chantier.id),
@@ -417,7 +434,7 @@ export function ChantierEditModal({
   }
 
   const onedriveUrl = onedriveHref(lien || chantier.lien_dossier_onedrive || "");
-  const busy = saving || scheduling || deleting;
+  const busy = saving || scheduling || deleting || validatingPlan;
 
   function onChangeStart(next: string) {
     setDatesDirty(true);
@@ -638,6 +655,20 @@ export function ChantierEditModal({
     }
   }
 
+  async function onValidatePlan() {
+    setValidatingPlan(true);
+    setError(null);
+    try {
+      await live.flush();
+      await patchChantier({ id: chantier.id, fournitures });
+      await validateChantierPlan(chantier.id);
+    } catch (err) {
+      setError(formatSaveError(err, "la validation du plan a échoué"));
+    } finally {
+      setValidatingPlan(false);
+    }
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/50 p-4">
       <form
@@ -649,6 +680,7 @@ export function ChantierEditModal({
           {STATUT_CHANTIER_LABELS[info.statut]}
           {info.rangeLabel ? ` · ${info.rangeLabel}` : ""}
           {datesEstimatives ? " · Estimatif" : ""}
+          {planValide ? " · Plan validé" : " · Plan à faire"}
         </p>
         <p className="mt-2 text-xs text-stone-500">
           Nom, adresse, priorité et lien OneDrive s’enregistrent tout seuls. Les
@@ -785,6 +817,47 @@ export function ChantierEditModal({
               {creatingFolder ? "Création…" : "Créer le dossier OneDrive"}
             </button>
           )}
+
+          <fieldset className="rounded-lg border border-violet-200 bg-violet-50/50 p-3">
+            <legend className="px-1 text-sm font-medium text-stone-800">
+              Plan
+              <span
+                className={`ml-2 rounded border px-1.5 py-px text-[10px] font-semibold uppercase tracking-wide ${
+                  planValide
+                    ? "border-emerald-400 bg-emerald-50 text-emerald-800"
+                    : "border-dashed border-violet-400 bg-white text-violet-800"
+                }`}
+              >
+                {planValide ? "Plan validé" : "Plan à faire"}
+              </span>
+            </legend>
+            <p className="mt-1 text-xs text-stone-600">
+              Liste des fournitures à remplir avec le plan. La validation crée une
+              commande pour Alexis (bandeau, badge, e-mail et lien OneDrive).
+            </p>
+            <div className="mt-3">
+              <FournituresEditor
+                rows={fournitures}
+                onChange={(next) => {
+                  setFournitures(next);
+                  markSimple("fournitures");
+                  live.schedule({
+                    fournitures: next,
+                  });
+                }}
+              />
+            </div>
+            {planValide ? null : (
+              <button
+                type="button"
+                disabled={busy || validatingPlan}
+                onClick={() => void onValidatePlan()}
+                className="mt-3 rounded bg-violet-800 px-3 py-2 text-sm text-violet-50 disabled:opacity-60"
+              >
+                {validatingPlan ? "Validation…" : "Plan validé"}
+              </button>
+            )}
+          </fieldset>
 
           <fieldset className="rounded-lg border border-stone-300 bg-stone-50/60 p-3 text-sm">
             <legend className="px-1 font-medium text-stone-800">

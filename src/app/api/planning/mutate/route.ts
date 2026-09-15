@@ -26,6 +26,7 @@ import {
   supabaseReorderEmployees,
   fetchSupabaseSnapshot,
   supabaseConfirmPhaseDates,
+  supabaseValidateChantierPlan,
 } from "@/lib/store/supabase";
 import {
   DATABASE_UNAVAILABLE_MESSAGE,
@@ -71,10 +72,35 @@ import {
   COMMANDE_MAIL_TEMPLATES,
   sendCommandeMailboxMessage,
 } from "@/lib/mail/commande";
+import { sendPlanPourMikaEmail } from "@/lib/mail/plan";
+import { chantierPlanningInfo } from "@/lib/chantier-status";
+import { publicOrigin } from "@/lib/onedrive/oauth-state";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
+
+async function notifyPlanPourMika(request: NextRequest, chantierId: string) {
+  try {
+    const snapshot = await fetchSupabaseSnapshot();
+    const chantier = snapshot.chantiers.find((row) => row.id === chantierId);
+    if (!chantier) return;
+    const info = chantierPlanningInfo(snapshot, chantierId);
+    const mail = await sendPlanPourMikaEmail({
+      nomClient: chantier.nom_client,
+      adresse: chantier.adresse,
+      datesLabel: info.rangeLabel,
+      onedriveUrl: chantier.lien_dossier_onedrive?.trim() || null,
+      ficheUrl: `${publicOrigin(request)}/chantiers?fiche=${encodeURIComponent(chantierId)}`,
+    });
+    if (mail.warning) console.warn("[plan-mail]", mail.warning);
+  } catch (err) {
+    console.warn(
+      "[plan-mail]",
+      err instanceof Error ? err.message : String(err),
+    );
+  }
+}
 
 type MutateBody =
   | { action: "createChantier"; input: NewChantierInput }
@@ -108,7 +134,8 @@ type MutateBody =
       templateId: string;
     }
   | { action: "saveHoraires"; rows: HoraireSaison[] }
-  | { action: "confirmPhaseDates"; ids: string[] };
+  | { action: "confirmPhaseDates"; ids: string[] }
+  | { action: "validateChantierPlan"; chantierId: string };
 
 export async function POST(request: NextRequest) {
   const session = await resolveSession(await getSession());
@@ -154,6 +181,7 @@ export async function POST(request: NextRequest) {
     "deleteDemande",
     "sendDemandeMail",
     "saveHoraires",
+    "validateChantierPlan",
   ]);
 
   if (adminOnly.has(body.action) && !session.isAdmin) {
@@ -162,6 +190,7 @@ export async function POST(request: NextRequest) {
 
   try {
     let chantierId: string | undefined;
+    let createdForPlanId: string | undefined;
 
     if (body.action === "createChantier") {
       const current = await fetchSupabaseSnapshot();
@@ -169,6 +198,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: PENDING_CHANTIER_MESSAGE }, { status: 400 });
       }
       chantierId = await supabaseCreateChantier(body.input);
+      createdForPlanId = chantierId;
     } else if (body.action === "updateChantier") {
       await supabaseUpdateChantier(body.input);
       chantierId = body.input.id;
@@ -199,6 +229,7 @@ export async function POST(request: NextRequest) {
       }
       if (body.patches?.length) await supabaseApplyPhasePatches(body.patches);
       chantierId = await supabaseCreateChantier(body.input);
+      createdForPlanId = chantierId;
     } else if (body.action === "upsertEmployee") {
       const pin = body.input.pin?.trim();
       if (pin && !/^\d{4}$/.test(pin)) {
@@ -299,7 +330,8 @@ export async function POST(request: NextRequest) {
         })) {
           return NextResponse.json({ error: PENDING_CHANTIER_MESSAGE }, { status: 400 });
         }
-        await supabaseCreateChantier(toCreate);
+        createdForPlanId = await supabaseCreateChantier(toCreate);
+        chantierId = createdForPlanId;
       }
       await supabaseSetSignalementStatut(body.id, "valide");
     } else if (body.action === "createReception") {
@@ -508,8 +540,41 @@ export async function POST(request: NextRequest) {
         }
       }
       await supabaseConfirmPhaseDates(current, ids);
+    } else if (body.action === "validateChantierPlan") {
+      if (!body.chantierId) {
+        return NextResponse.json({ error: "Chantier inconnu." }, { status: 400 });
+      }
+      const result = await supabaseValidateChantierPlan({
+        chantierId: body.chantierId,
+        employeId: session.employeeId,
+      });
+      chantierId = body.chantierId;
+      if (result.created) {
+        const auteur = session.nom;
+        const mail = await sendCommandeMailboxMessage({
+          templateId: "nouvelle",
+          auteur,
+          message: result.message,
+          categorie: "commande",
+        });
+        if (mail.warning) {
+          console.warn("[commande-mail]", mail.warning);
+        }
+        const push = await sendCommandePush({
+          auteur,
+          message: result.message,
+        });
+        if (push.warning) {
+          console.warn("[commande-push]", push.warning);
+        }
+      }
     } else {
       return NextResponse.json({ error: "Action inconnue." }, { status: 400 });
+    }
+
+    if (createdForPlanId) {
+      invalidateSupabaseSnapshotCache();
+      await notifyPlanPourMika(request, createdForPlanId);
     }
 
     invalidateSupabaseSnapshotCache();
