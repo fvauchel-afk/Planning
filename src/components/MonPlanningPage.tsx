@@ -21,6 +21,7 @@ import { PHASE_LABELS } from "@/lib/types";
 import { useSession } from "@/lib/auth/session-context";
 import { useSalarieId } from "@/lib/use-salarie";
 import { WelcomeBanner } from "@/components/WelcomeBanner";
+import { LaunchValidateButton } from "@/components/LaunchValidateButton";
 import { PhaseFicheModal } from "@/components/PhaseFicheModal";
 import { fabricationAwaitingLaunch, phaseIsEstimative } from "@/lib/dates-estimatives";
 
@@ -250,6 +251,7 @@ function SlotBlock({
                   : ""}
               </p>
             </button>
+            <LaunchValidateButton phaseId={assignment.phase.id} compact />
             {assignment.phase.type_phase === "pose" &&
               assignment.phase.statut !== "termine" && (
                 <Link

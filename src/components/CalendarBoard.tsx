@@ -17,6 +17,7 @@ import {
 } from "@/lib/calendar";
 import { AbsenceImprevueModal } from "@/components/AbsenceImprevueModal";
 import { ChantierEditModal } from "@/components/ChantierEditModal";
+import { LaunchValidateButton } from "@/components/LaunchValidateButton";
 import { PhaseFicheModal } from "@/components/PhaseFicheModal";
 import { colorForChantier } from "@/lib/colors";
 import {
@@ -607,6 +608,7 @@ export function CalendarBoard() {
                             />
                           ))}
                           {assignments.map((assignment) => (
+                            <div key={`${assignment.phase.id}-${slot}`}>
                             <PhaseChipButton
                               key={`${assignment.phase.id}-${slot}`}
                               assignment={assignment}
@@ -651,6 +653,11 @@ export function CalendarBoard() {
                                 void finishDrag(event.clientX, event.clientY, phaseId);
                               }}
                             />
+                            <LaunchValidateButton
+                              phaseId={assignment.phase.id}
+                              compact
+                            />
+                            </div>
                           ))}
                         </div>
                       </td>
@@ -811,6 +818,13 @@ function DayDetail({
                     Absence imprévue
                   </button>
                 )}
+                {assignments
+                  .filter((item) => fabricationAwaitingLaunch(item.phase))
+                  .map((item) => (
+                    <div key={`launch-${item.phase.id}`} className="mt-2">
+                      <LaunchValidateButton phaseId={item.phase.id} compact />
+                    </div>
+                  ))}
               </div>
               <div className="relative min-h-[96px] border-l border-stone-200 p-3">
                 {absences.map((absence) => (

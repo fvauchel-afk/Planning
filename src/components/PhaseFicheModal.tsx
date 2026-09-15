@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { BonCommandeModal } from "@/components/BonCommandeModal";
 import { ConflictModal } from "@/components/ConflictModal";
+import { LaunchValidateButton } from "@/components/LaunchValidateButton";
 import { canGenerateBonCommande } from "@/lib/bon-commande/active-phase";
 import { idsEqual } from "@/lib/auth/ids";
 import { useSession } from "@/lib/auth/session-context";
@@ -31,7 +32,7 @@ export function PhaseFicheModal({
   phaseId: string;
   onClose: () => void;
 }) {
-  const { snapshot, applyPhasePatches, createSignalement, confirmPhaseDates } =
+  const { snapshot, applyPhasePatches, createSignalement } =
     usePlanning();
   const { session } = useSession();
   const [mode, setMode] = useState<"fiche" | "decaler">("fiche");
@@ -49,7 +50,6 @@ export function PhaseFicheModal({
     halfDays: number;
   } | null>(null);
   const [bonCommande, setBonCommande] = useState(false);
-  const [confirming, setConfirming] = useState(false);
 
   const phase = snapshot.phases.find((item) => item.id === phaseId);
   const element = snapshot.elements.find((item) => item.id === phase?.element_id);
@@ -190,24 +190,6 @@ export function PhaseFicheModal({
     ? new Date(reception.date_signature).toLocaleString("fr-FR")
     : null;
 
-  const canValidateLaunch =
-    phaseIsEstimative(phase) &&
-    Boolean(
-      session?.isAdmin || idsEqual(phase.employe_id, session?.employeeId),
-    );
-
-  async function validateLaunch() {
-    setConfirming(true);
-    setError(null);
-    try {
-      await confirmPhaseDates([phaseId]);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Confirmation impossible.");
-    } finally {
-      setConfirming(false);
-    }
-  }
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/50 p-4">
       <div className="max-h-[90vh] w-full max-w-lg overflow-auto rounded-xl bg-white p-5 shadow-xl">
@@ -279,16 +261,7 @@ export function PhaseFicheModal({
               </div>
             )}
             <div className="mt-5 flex flex-wrap gap-2">
-              {canValidateLaunch ? (
-                <button
-                  type="button"
-                  disabled={confirming}
-                  className="rounded-lg bg-violet-800 px-4 py-2 text-sm text-violet-50 disabled:opacity-60"
-                  onClick={() => void validateLaunch()}
-                >
-                  {confirming ? "Validation…" : "Je valide le lancement"}
-                </button>
-              ) : null}
+              <LaunchValidateButton phaseId={phase.id} />
               {session?.isAdmin &&
               (phase.type_phase === "logistique" ||
                 phase.type_phase === "fabrication") &&

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useSession } from "@/lib/auth/session-context";
+import { LaunchValidateButton } from "@/components/LaunchValidateButton";
 import { lancementsEnAttente } from "@/lib/dates-estimatives";
 import { usePlanning } from "@/lib/planning-context";
 
@@ -25,8 +26,17 @@ export function LancementAlert() {
           : `${rows.length} lancements à valider : ${names}${extra}.`}
       </p>
       <p className="mt-1 text-xs">
-        Ouvrez le bloc fabrication et cliquez « Je valide le lancement ».
+        Cliquez « Je valide le lancement » ci-dessous, ou ouvrez le bloc fabrication /
+        la fiche chantier.
       </p>
+      <ul className="mt-2 space-y-2">
+        {rows.map((row) => (
+          <li key={row.phaseId} className="flex flex-wrap items-center gap-2">
+            <span className="font-medium">{row.nomClient}</span>
+            <LaunchValidateButton phaseId={row.phaseId} />
+          </li>
+        ))}
+      </ul>
       <Link href="/" className="mt-1 inline-block font-medium underline">
         Ouvrir le planning
       </Link>
