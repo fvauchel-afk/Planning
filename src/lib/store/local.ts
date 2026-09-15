@@ -156,6 +156,10 @@ export function localCreateChantier(
     sous_traitant_id: input.avec_thermolaquage
       ? input.sous_traitant_id || null
       : null,
+    couleur_ral: input.avec_thermolaquage
+      ? input.couleur_ral?.trim() || null
+      : null,
+    finition: input.avec_thermolaquage ? input.finition ?? null : null,
     tolerance_deplacement_jours:
       input.priorite === "pas_presse"
         ? Math.min(180, Math.max(1, Number(input.tolerance_deplacement_jours) || 30))
@@ -647,6 +651,12 @@ export function localPatchChantier(
             ? null
             : chantier.tolerance_deplacement_jours,
       fournitures: input.fournitures ?? chantier.fournitures,
+      couleur_ral:
+        input.couleur_ral !== undefined
+          ? input.couleur_ral
+          : chantier.couleur_ral,
+      finition:
+        input.finition !== undefined ? input.finition : chantier.finition,
     };
   });
   saveLocalSnapshot(next);

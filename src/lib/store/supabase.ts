@@ -53,6 +53,7 @@ import type {
   SousTraitant,
 } from "@/lib/types";
 import { formatFournituresMessage, normalizeFournitures, parseFournitures } from "@/lib/fournitures";
+import { parseFinitionLaquage } from "@/lib/thermolaquage";
 import { TYPES_PHASE } from "@/lib/types";
 import {
   parseCategorieDemande,
@@ -221,6 +222,14 @@ async function fetchSupabaseSnapshotOnce(): Promise<PlanningSnapshot> {
           .plan_demande_id === "string"
           ? (chantier as Chantier).plan_demande_id ?? null
           : null,
+      couleur_ral:
+        typeof (chantier as Chantier & { couleur_ral?: unknown }).couleur_ral ===
+        "string"
+          ? (chantier as Chantier).couleur_ral?.trim() || null
+          : null,
+      finition: parseFinitionLaquage(
+        (chantier as Chantier & { finition?: unknown }).finition,
+      ),
     })),
     elements: (elements.data ?? []) as ElementChantier[],
     phases: normalizePhasesForPlanning(
@@ -354,12 +363,32 @@ export async function supabaseCreateChantier(
     sous_traitant_id: input.avec_thermolaquage
       ? input.sous_traitant_id || null
       : null,
+    couleur_ral: input.avec_thermolaquage
+      ? input.couleur_ral?.trim() || null
+      : null,
+    finition: input.avec_thermolaquage
+      ? parseFinitionLaquage(input.finition)
+      : null,
   };
   let inserted = await supabase
     .from("chantiers")
     .insert(payload)
     .select("id")
     .single();
+  if (
+    inserted.error &&
+    (isMissingColumnError(inserted.error, "couleur_ral") ||
+      isMissingColumnError(inserted.error, "finition"))
+  ) {
+    const withoutColor = { ...payload } as Record<string, unknown>;
+    delete withoutColor.couleur_ral;
+    delete withoutColor.finition;
+    inserted = await supabase
+      .from("chantiers")
+      .insert(withoutColor)
+      .select("id")
+      .single();
+  }
   if (inserted.error && isMissingColumnError(inserted.error, "sous_traitant_id")) {
     const withoutSt = { ...payload, sous_traitant_id: undefined };
     delete withoutSt.sous_traitant_id;
@@ -621,6 +650,8 @@ const CHANTIER_OPTIONAL_COLUMNS = [
   "plan_valide",
   "fournitures",
   "plan_demande_id",
+  "couleur_ral",
+  "finition",
 ] as const;
 
 async function updateChantierPayload(
@@ -668,6 +699,12 @@ export async function supabasePatchChantier(
   }
   if (input.fournitures !== undefined) {
     payload.fournitures = normalizeFournitures(input.fournitures);
+  }
+  if (input.couleur_ral !== undefined) {
+    payload.couleur_ral = input.couleur_ral?.trim() || null;
+  }
+  if (input.finition !== undefined) {
+    payload.finition = parseFinitionLaquage(input.finition);
   }
   if (Object.keys(payload).length === 0) return;
   await updateChantierPayload(input.id, payload);

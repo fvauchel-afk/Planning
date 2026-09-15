@@ -26,6 +26,12 @@ import { SousTraitantSelect } from "@/components/SousTraitantSelect";
 import { formatSaveError } from "@/lib/supabase/errors";
 import { useSession } from "@/lib/auth/session-context";
 import {
+  FINITION_LAQUAGE_LABELS,
+  FINITIONS_LAQUAGE,
+  parseFinitionLaquage,
+  type FinitionLaquage,
+} from "@/lib/thermolaquage";
+import {
   hasPendingSignalements,
   PENDING_CHANTIER_MESSAGE,
   propositionFromDelay,
@@ -95,6 +101,8 @@ export function ChantierForm() {
   const [dateLaquageDebut, setDateLaquageDebut] = useState("");
   const [dateLaquageFin, setDateLaquageFin] = useState("");
   const [sousTraitantId, setSousTraitantId] = useState("");
+  const [couleurRal, setCouleurRal] = useState("");
+  const [finition, setFinition] = useState<FinitionLaquage | "">("");
   const [elements, setElements] = useState<ElementForm[]>([
     { key: "el-1", nom_element: "", phases: emptyPhases() },
   ]);
@@ -202,6 +210,8 @@ export function ChantierForm() {
       date_laquage_debut: avecThermolaquage ? dateLaquageDebut || null : null,
       date_laquage_fin: avecThermolaquage ? dateLaquageFin || null : null,
       sous_traitant_id: avecThermolaquage ? sousTraitantId || null : null,
+      couleur_ral: avecThermolaquage ? couleurRal.trim() || null : null,
+      finition: avecThermolaquage ? parseFinitionLaquage(finition) : null,
       elements: namedElements.map((element) => ({
         nom_element: element.nom_element.trim(),
         phases: element.phases.map((phase) => ({
@@ -808,6 +818,34 @@ export function ChantierForm() {
                   rows={snapshot.sousTraitants ?? []}
                 />
               </div>
+              <label className="block">
+                <span className="mb-1 block font-medium">Couleur RAL</span>
+                <input
+                  value={couleurRal}
+                  onChange={(event) => setCouleurRal(event.target.value)}
+                  placeholder="ex. RAL 7016"
+                  className="w-full rounded border border-stone-300 bg-white px-3 py-2"
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1 block font-medium">Finition</span>
+                <select
+                  value={finition}
+                  onChange={(event) =>
+                    setFinition(
+                      parseFinitionLaquage(event.target.value) ?? "",
+                    )
+                  }
+                  className="w-full rounded border border-stone-300 bg-white px-3 py-2"
+                >
+                  <option value="">Non renseignée</option>
+                  {FINITIONS_LAQUAGE.map((value) => (
+                    <option key={value} value={value}>
+                      {FINITION_LAQUAGE_LABELS[value]}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <p className="text-xs text-stone-500 sm:col-span-3">
                 Sans dates précises, le thermolaquage n’est plus calé à la
                 création. Le délai officiel de 5 jours ouvrés démarre à l’envoi

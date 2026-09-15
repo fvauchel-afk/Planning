@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-15-laquage-ral-finition",
+    title: "Couleur et finition du thermolaquage",
+    items: [
+      "Sur un chantier avec thermolaquage, vous pouvez indiquer la couleur RAL et la finition (Mat, Satin, Brillant, Texturé fin), à la création ou plus tard.",
+      "Ces informations s’enregistrent toutes seules sur la fiche, et elles figurent sur le bon de commande PDF envoyé au sous-traitant.",
+    ],
+  },
+  {
     id: "2026-09-15-chantier-plan-fournitures",
     title: "Plan et fournitures sur la fiche chantier",
     items: [

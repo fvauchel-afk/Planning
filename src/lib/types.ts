@@ -1,4 +1,5 @@
 import type { LigneFourniture } from "@/lib/fournitures";
+import type { FinitionLaquage } from "@/lib/thermolaquage";
 
 export const ROLES = [
   "administratif",
@@ -101,6 +102,8 @@ export type Chantier = {
   date_bon_commande?: string | null;
   sous_traitant_id?: string | null;
   delai_sous_traitance_jours?: number | null;
+  couleur_ral?: string | null;
+  finition?: FinitionLaquage | null;
   adresse_livraison?: string | null;
   telephone_livraison?: string | null;
   plan_valide?: boolean;
@@ -326,6 +329,8 @@ export type NewChantierInput = {
   date_laquage_debut?: string | null;
   date_laquage_fin?: string | null;
   sous_traitant_id?: string | null;
+  couleur_ral?: string | null;
+  finition?: FinitionLaquage | null;
   elements: NewElementInput[];
 };
 
@@ -354,6 +359,8 @@ export type ChantierSimplePatch = {
   adresse_livraison?: string | null;
   telephone_livraison?: string | null;
   fournitures?: LigneFourniture[];
+  couleur_ral?: string | null;
+  finition?: FinitionLaquage | null;
 };
 
 export type EmployeePatch = {
