@@ -245,6 +245,7 @@ export function AssignmentChip({
       className={`overflow-hidden rounded px-1.5 py-0.5 ${compact ? "text-[10px] leading-tight" : "text-xs"} ${
         needsLaunch ? "ring-2 ring-orange-500" : ""
       }`}
+      style={{ backgroundColor: color.bg, color: color.fg }}
       title={`${assignment.chantier.nom_client} — ${assignment.element.nom_element} (${PHASE_LABELS[assignment.phase.type_phase]}) · ${formatHoursLabel(assignment.phase.duree_estimee_heures)}${
         needsLaunch ? " — à valider" : ""
       }`}

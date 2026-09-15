@@ -21,7 +21,7 @@ export function LancementAlert() {
     <div className="mb-4 rounded-lg border border-orange-300 bg-orange-50 px-4 py-3 text-sm text-orange-950">
       <p className="font-medium">
         {rows.length === 1
-          ? `Lancement à valider : ${names} (fabrication estimative déjà commencée).`
+          ? `Lancement à valider : ${names} (fabrication déjà commencée).`
           : `${rows.length} lancements à valider : ${names}${extra}.`}
       </p>
       <p className="mt-1 text-xs">

@@ -33,7 +33,12 @@ export function phaseIdsStartedToday(
   today = toISODate(new Date()),
 ): string[] {
   return snapshot.phases
-    .filter((phase) => phaseIsEstimative(phase) && phaseContainsDate(phase, today))
+    .filter(
+      (phase) =>
+        phase.type_phase !== "fabrication" &&
+        phaseIsEstimative(phase) &&
+        phaseContainsDate(phase, today),
+    )
     .map((phase) => phase.id);
 }
 
@@ -44,7 +49,9 @@ export function withConfirmedPhases(
   const set = new Set(ids);
   if (set.size === 0) return snapshot;
   const phases = snapshot.phases.map((phase) =>
-    set.has(phase.id) ? { ...phase, dates_estimatives: false } : phase,
+    set.has(phase.id)
+      ? { ...phase, dates_estimatives: false, lancement_valide: true }
+      : phase,
   );
   const next: PlanningSnapshot = { ...snapshot, phases };
   return {
@@ -143,8 +150,10 @@ function runEstimatifSelfCheck() {
   if (!chantierHasEstimativeDates(snapshot, "c1")) {
     throw new Error("dates-estimatives: le chantier doit rester estimatif");
   }
-  if (!phaseIdsStartedToday(snapshot, "2026-09-13").includes("p1")) {
-    throw new Error("dates-estimatives: aujourd’hui dans la phase → confirmer");
+  if (phaseIdsStartedToday(snapshot, "2026-09-13").includes("p1")) {
+    throw new Error(
+      "dates-estimatives: la fabrication ne doit plus se confirmer toute seule",
+    );
   }
   if (phaseIdsStartedToday(snapshot, "2026-09-12").length) {
     throw new Error("dates-estimatives: avant le début, rester estimatif");
@@ -162,6 +171,19 @@ function runEstimatifSelfCheck() {
   if (fabricationAwaitingLaunch(snapshot.phases[0]!, "2026-09-12")) {
     throw new Error("dates-estimatives: avant le début, pas d’alerte lancement");
   }
+  if (fabricationAwaitingLaunch(confirmed.phases[0]!, "2026-09-13")) {
+    throw new Error("dates-estimatives: après Je valide, plus d’alerte");
+  }
+  const alreadySilent = {
+    ...snapshot.phases[0]!,
+    dates_estimatives: false,
+    lancement_valide: false,
+  };
+  if (!fabricationAwaitingLaunch(alreadySilent, "2026-09-13")) {
+    throw new Error(
+      "dates-estimatives: même sans Estimatif, alerter si le clic n’a pas eu lieu",
+    );
+  }
   if (lancementsEnAttente(snapshot, "2026-09-14")[0]?.nomClient !== "Test") {
     throw new Error("dates-estimatives: l’alerte doit citer le chantier");
   }
@@ -172,7 +194,8 @@ export function fabricationAwaitingLaunch(
   today = toISODate(new Date()),
 ): boolean {
   if (phase.type_phase !== "fabrication") return false;
-  if (!phaseIsEstimative(phase)) return false;
+  if (phase.statut === "termine") return false;
+  if (phase.lancement_valide) return false;
   const start = phase.date_debut?.slice(0, 10);
   if (!start) return false;
   return start <= today;

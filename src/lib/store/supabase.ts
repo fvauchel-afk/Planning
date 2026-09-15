@@ -246,6 +246,7 @@ async function fetchSupabaseSnapshotOnce(): Promise<PlanningSnapshot> {
             ? phase.heure_debut.trim().slice(0, 5)
             : null,
         dates_estimatives: Boolean(phase.dates_estimatives),
+      lancement_valide: Boolean(phase.lancement_valide),
       })),
     ),
     absences: ((absences.data ?? []) as Absence[]).map((absence) => ({
@@ -1426,10 +1427,31 @@ export async function supabaseConfirmPhaseDates(
   const supabase = createSupabaseServerClient();
   const { error } = await supabase
     .from("phases_planning")
-    .update({ dates_estimatives: false })
+    .update({ dates_estimatives: false, lancement_valide: true })
     .in("id", unique);
-  if (error && isMissingColumnError(error, "dates_estimatives")) return;
-  if (error) throw wrapSupabaseError(error);
+  if (error && isMissingColumnError(error, "lancement_valide")) {
+    const retry = await supabase
+      .from("phases_planning")
+      .update({ dates_estimatives: false })
+      .in("id", unique);
+    if (retry.error && isMissingColumnError(retry.error, "dates_estimatives")) {
+      return;
+    }
+    if (retry.error) throw wrapSupabaseError(retry.error);
+  } else if (error && isMissingColumnError(error, "dates_estimatives")) {
+    const retryLaunch = await supabase
+      .from("phases_planning")
+      .update({ lancement_valide: true })
+      .in("id", unique);
+    if (
+      retryLaunch.error &&
+      !isMissingColumnError(retryLaunch.error, "lancement_valide")
+    ) {
+      throw wrapSupabaseError(retryLaunch.error);
+    }
+  } else if (error) {
+    throw wrapSupabaseError(error);
+  }
   const next = withConfirmedPhases(snapshot, unique);
   const chantierIds = Array.from(
     new Set(
