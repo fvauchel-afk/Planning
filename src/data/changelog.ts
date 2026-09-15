@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-15-notifications-conges-vapid",
+    title: "Notifications congés",
+    items: [
+      "Le bandeau « Activer les notifications » fonctionne aussi pour les salariés (congés), plus seulement pour Alexis et Mika.",
+      "Les clés de notification sont en place : le message « clés VAPID manquantes » ne s’affiche plus.",
+    ],
+  },
+  {
     id: "2026-09-15-supprimer-demande-traitee",
     title: "Supprimer une demande déjà traitée",
     items: [

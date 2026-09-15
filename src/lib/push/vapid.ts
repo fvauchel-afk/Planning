@@ -1,8 +1,8 @@
 import "server-only";
 
 const PROJECT_VAPID_PUBLIC =
-  "BIQ8HsSpjG0Cq42JK_i7wSZvTxhMjqLR-zSEjsx51jsNLZdElBf7VcAjDD5MGoGiUzxDKUGyfuxdNQ4NU6hX4WQ";
-const PROJECT_VAPID_PRIVATE = "dkdUDLdNA_itb0aMS4jxSHPmtfN_JVYXd490zb1rjjI";
+  "BCP15mfWbDFeAfylXQG8drV_0YeJdFPkNgt3YmmzCtAkwoNBNAKp6YgfYeYENMl9RDglyIjt1c-OO1y6M2wRma0";
+const PROJECT_VAPID_PRIVATE = "WSgcLu8GN4FsUJMhMjBdwCm5wc_x2RsLHsU1QAzmFpI";
 
 export function vapidPublicKey(): string {
   return (
