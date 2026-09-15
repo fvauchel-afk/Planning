@@ -294,6 +294,8 @@ export type PlanningSnapshot = {
   receptions: ReceptionChantier[];
   demandes: Demande[];
   horaires: HoraireSaison[];
+  /** null = dates été / hiver ; ete | hiver = forcée jusqu’à nouvel ordre. */
+  saison_forcee?: "ete" | "hiver" | null;
   sousTraitants?: SousTraitant[];
 };
 
