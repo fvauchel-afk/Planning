@@ -5,6 +5,8 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { OnedriveBanner } from "@/components/OnedriveBanner";
 import { CommandeAlert } from "@/components/CommandeAlert";
+import { LancementAlert } from "@/components/LancementAlert";
+import { lancementsEnAttente } from "@/lib/dates-estimatives";
 import { useSession } from "@/lib/auth/session-context";
 import { usePlanning } from "@/lib/planning-context";
 
@@ -52,6 +54,9 @@ export function AppShell({
             !row.archivee,
         ).length
       : 0;
+  const pendingLancements = session?.canReceiveLancementAlerts
+    ? lancementsEnAttente(snapshot).length
+    : 0;
 
   useEffect(() => {
     setMenuOpen(false);
@@ -104,6 +109,11 @@ export function AppShell({
                   {link.href === "/demandes" && pendingCommandes > 0 ? (
                     <span className="ml-1 rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-semibold text-stone-900">
                       {pendingCommandes}
+                    </span>
+                  ) : null}
+                  {link.href === "/" && pendingLancements > 0 ? (
+                    <span className="ml-1 rounded-full bg-orange-500 px-1.5 py-0.5 text-[10px] font-semibold text-stone-900">
+                      {pendingLancements}
                     </span>
                   ) : null}
                 </Link>
@@ -163,6 +173,11 @@ export function AppShell({
                         {pendingCommandes}
                       </span>
                     ) : null}
+                    {link.href === "/" && pendingLancements > 0 ? (
+                      <span className="ml-2 rounded-full bg-orange-500 px-1.5 py-0.5 text-[10px] font-semibold text-stone-900">
+                        {pendingLancements}
+                      </span>
+                    ) : null}
                   </Link>
                 );
               })}
@@ -198,6 +213,7 @@ export function AppShell({
           </div>
         ) : null}
         <CommandeAlert />
+        <LancementAlert />
         {children}
       </main>
     </div>

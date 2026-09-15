@@ -17,6 +17,7 @@ import {
 } from "@/lib/calendar";
 import { AbsenceImprevueModal } from "@/components/AbsenceImprevueModal";
 import { ChantierEditModal } from "@/components/ChantierEditModal";
+import { LaunchValidateButton } from "@/components/LaunchValidateButton";
 import { PhaseFicheModal } from "@/components/PhaseFicheModal";
 import { colorForChantier } from "@/lib/colors";
 import {
@@ -52,6 +53,7 @@ import {
   STATUTS_CHANTIER,
   chantierPlanningInfo,
 } from "@/lib/chantier-status";
+import { fabricationAwaitingLaunch } from "@/lib/dates-estimatives";
 
 type ViewMode = "overview" | "week" | "day";
 
@@ -606,6 +608,7 @@ export function CalendarBoard() {
                             />
                           ))}
                           {assignments.map((assignment) => (
+                            <div key={`${assignment.phase.id}-${slot}`}>
                             <PhaseChipButton
                               key={`${assignment.phase.id}-${slot}`}
                               assignment={assignment}
@@ -650,6 +653,11 @@ export function CalendarBoard() {
                                 void finishDrag(event.clientX, event.clientY, phaseId);
                               }}
                             />
+                            <LaunchValidateButton
+                              phaseId={assignment.phase.id}
+                              compact
+                            />
+                            </div>
                           ))}
                         </div>
                       </td>
@@ -810,6 +818,13 @@ function DayDetail({
                     Absence imprévue
                   </button>
                 )}
+                {assignments
+                  .filter((item) => fabricationAwaitingLaunch(item.phase))
+                  .map((item) => (
+                    <div key={`launch-${item.phase.id}`} className="mt-2">
+                      <LaunchValidateButton phaseId={item.phase.id} compact />
+                    </div>
+                  ))}
               </div>
               <div className="relative min-h-[96px] border-l border-stone-200 p-3">
                 {absences.map((absence) => (
@@ -849,7 +864,9 @@ function DayDetail({
                                 focusCell.date === iso &&
                                 focusCell.half === slot.half
                                   ? "ring-2 ring-amber-600"
-                                  : ""
+                                  : fabricationAwaitingLaunch(assignment.phase)
+                                    ? "ring-2 ring-orange-500"
+                                    : ""
                               }`}
                               style={{
                                 left: `${((start - dayStart) / span) * 100}%`,
@@ -868,7 +885,11 @@ function DayDetail({
                               <span className="block truncate">
                                 {assignment.chantier.nom_client}
                               </span>
-                              {assignment.phase.dates_estimatives ? (
+                              {fabricationAwaitingLaunch(assignment.phase) ? (
+                                <span className="mt-0.5 inline-block rounded bg-orange-600 px-1 text-[9px] font-semibold uppercase tracking-wide text-orange-50">
+                                  ⚠ à valider
+                                </span>
+                              ) : assignment.phase.dates_estimatives ? (
                                 <span className="mt-0.5 inline-block rounded bg-violet-900/80 px-1 text-[9px] font-semibold uppercase tracking-wide text-violet-50">
                                   Estimatif
                                 </span>

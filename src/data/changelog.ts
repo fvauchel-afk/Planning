@@ -11,6 +11,15 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-15-lancement-a-valider",
+    title: "Ne pas oublier de valider le lancement",
+    items: [
+      "Un bloc fabrication dont le début est aujourd’hui ou déjà passé, et qui n’a pas encore « Je valide le lancement », s’affiche en orange « à valider ».",
+      "Le bouton « Je valide le lancement » est sur le bandeau, sur le bloc du planning, sur le détail de la phase et sur la fiche chantier — même si le chantier est déjà passé en Confirmé.",
+      "Jonathan et Mika voient un badge sur Planning et un bandeau tant que le lancement n’a pas été cliqué. La fabrication ne passe plus en Confirmé toute seule le jour J.",
+    ],
+  },
+  {
     id: "2026-09-15-semaine-heures",
     title: "Heures plus visibles en vue Semaine",
     items: [

@@ -33,7 +33,12 @@ export function phaseIdsStartedToday(
   today = toISODate(new Date()),
 ): string[] {
   return snapshot.phases
-    .filter((phase) => phaseIsEstimative(phase) && phaseContainsDate(phase, today))
+    .filter(
+      (phase) =>
+        phase.type_phase !== "fabrication" &&
+        phaseIsEstimative(phase) &&
+        phaseContainsDate(phase, today),
+    )
     .map((phase) => phase.id);
 }
 
@@ -44,7 +49,9 @@ export function withConfirmedPhases(
   const set = new Set(ids);
   if (set.size === 0) return snapshot;
   const phases = snapshot.phases.map((phase) =>
-    set.has(phase.id) ? { ...phase, dates_estimatives: false } : phase,
+    set.has(phase.id)
+      ? { ...phase, dates_estimatives: false, lancement_valide: true }
+      : phase,
   );
   const next: PlanningSnapshot = { ...snapshot, phases };
   return {
@@ -143,8 +150,10 @@ function runEstimatifSelfCheck() {
   if (!chantierHasEstimativeDates(snapshot, "c1")) {
     throw new Error("dates-estimatives: le chantier doit rester estimatif");
   }
-  if (!phaseIdsStartedToday(snapshot, "2026-09-13").includes("p1")) {
-    throw new Error("dates-estimatives: aujourd’hui dans la phase → confirmer");
+  if (phaseIdsStartedToday(snapshot, "2026-09-13").includes("p1")) {
+    throw new Error(
+      "dates-estimatives: la fabrication ne doit plus se confirmer toute seule",
+    );
   }
   if (phaseIdsStartedToday(snapshot, "2026-09-12").length) {
     throw new Error("dates-estimatives: avant le début, rester estimatif");
@@ -156,5 +165,106 @@ function runEstimatifSelfCheck() {
   if (confirmed.chantiers[0]?.dates_estimatives) {
     throw new Error("dates-estimatives: le chantier doit suivre les phases");
   }
+  if (!fabricationAwaitingLaunch(snapshot.phases[0]!, "2026-09-13")) {
+    throw new Error("dates-estimatives: fabrication estimative commencée à alerter");
+  }
+  if (fabricationAwaitingLaunch(snapshot.phases[0]!, "2026-09-12")) {
+    throw new Error("dates-estimatives: avant le début, pas d’alerte lancement");
+  }
+  if (fabricationAwaitingLaunch(confirmed.phases[0]!, "2026-09-13")) {
+    throw new Error("dates-estimatives: après Je valide, plus d’alerte");
+  }
+  const alreadySilent = {
+    ...snapshot.phases[0]!,
+    dates_estimatives: false,
+    lancement_valide: false,
+  };
+  if (!fabricationAwaitingLaunch(alreadySilent, "2026-09-13")) {
+    throw new Error(
+      "dates-estimatives: même sans Estimatif, alerter si le clic n’a pas eu lieu",
+    );
+  }
+  if (lancementsEnAttente(snapshot, "2026-09-14")[0]?.nomClient !== "Test") {
+    throw new Error("dates-estimatives: l’alerte doit citer le chantier");
+  }
+  const silentSnap: PlanningSnapshot = {
+    ...snapshot,
+    phases: [alreadySilent],
+    chantiers: [{ ...snapshot.chantiers[0]!, dates_estimatives: false }],
+  };
+  if (fabricationPhaseIdsAwaitingLaunch(silentSnap, "c1", "2026-09-13")[0] !== "p1") {
+    throw new Error("dates-estimatives: Confirmé sans clic doit encore proposer le lancement");
+  }
+  if (fabricationPhaseIdsAwaitingLaunch(confirmed, "c1", "2026-09-13").length) {
+    throw new Error("dates-estimatives: après Je valide, plus d’id à valider");
+  }
+}
+
+export function fabricationAwaitingLaunch(
+  phase: PhasePlanning,
+  today = toISODate(new Date()),
+): boolean {
+  if (phase.type_phase !== "fabrication") return false;
+  if (phase.statut === "termine") return false;
+  if (phase.lancement_valide) return false;
+  const start = phase.date_debut?.slice(0, 10);
+  if (!start) return false;
+  return start <= today;
+}
+
+export function fabricationPhaseIdsAwaitingLaunch(
+  snapshot: PlanningSnapshot,
+  chantierId: string,
+  today = toISODate(new Date()),
+): string[] {
+  const elementIds = new Set(
+    snapshot.elements
+      .filter((element) => element.chantier_id === chantierId)
+      .map((element) => element.id),
+  );
+  return snapshot.phases
+    .filter(
+      (phase) =>
+        elementIds.has(phase.element_id) &&
+        fabricationAwaitingLaunch(phase, today),
+    )
+    .map((phase) => phase.id);
+}
+
+export type LancementEnAttente = {
+  chantierId: string;
+  nomClient: string;
+  phaseId: string;
+  dateDebut: string;
+};
+
+export function lancementsEnAttente(
+  snapshot: PlanningSnapshot,
+  today = toISODate(new Date()),
+): LancementEnAttente[] {
+  const elementById = new Map(
+    snapshot.elements.map((element) => [element.id, element]),
+  );
+  const chantierById = new Map(
+    snapshot.chantiers.map((chantier) => [chantier.id, chantier]),
+  );
+  const rows: LancementEnAttente[] = [];
+  const seen = new Set<string>();
+  for (const phase of snapshot.phases) {
+    if (!fabricationAwaitingLaunch(phase, today)) continue;
+    const element = elementById.get(phase.element_id);
+    if (!element) continue;
+    const chantier = chantierById.get(element.chantier_id);
+    if (!chantier || seen.has(chantier.id)) continue;
+    seen.add(chantier.id);
+    rows.push({
+      chantierId: chantier.id,
+      nomClient: chantier.nom_client,
+      phaseId: phase.id,
+      dateDebut: phase.date_debut!.slice(0, 10),
+    });
+  }
+  rows.sort((a, b) => a.dateDebut.localeCompare(b.dateDebut) || a.nomClient.localeCompare(b.nomClient, "fr"));
+  return rows;
 }
 runEstimatifSelfCheck();
