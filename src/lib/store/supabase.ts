@@ -52,6 +52,7 @@ import type {
   TypePhase,
   SousTraitant,
 } from "@/lib/types";
+import { formatFournituresMessage, normalizeFournitures, parseFournitures } from "@/lib/fournitures";
 import { TYPES_PHASE } from "@/lib/types";
 import {
   parseCategorieDemande,
@@ -208,6 +209,17 @@ async function fetchSupabaseSnapshotOnce(): Promise<PlanningSnapshot> {
       tolerance_deplacement_jours:
         typeof chantier.tolerance_deplacement_jours === "number"
           ? chantier.tolerance_deplacement_jours
+          : null,
+      plan_valide: Boolean(
+        (chantier as Chantier & { plan_valide?: boolean }).plan_valide,
+      ),
+      fournitures: parseFournitures(
+        (chantier as Chantier & { fournitures?: unknown }).fournitures,
+      ),
+      plan_demande_id:
+        typeof (chantier as Chantier & { plan_demande_id?: unknown })
+          .plan_demande_id === "string"
+          ? (chantier as Chantier).plan_demande_id ?? null
           : null,
     })),
     elements: (elements.data ?? []) as ElementChantier[],
@@ -606,6 +618,9 @@ const CHANTIER_OPTIONAL_COLUMNS = [
   "telephone_livraison",
   "delai_sous_traitance_jours",
   "dates_estimatives",
+  "plan_valide",
+  "fournitures",
+  "plan_demande_id",
 ] as const;
 
 async function updateChantierPayload(
@@ -614,7 +629,7 @@ async function updateChantierPayload(
 ): Promise<void> {
   const supabase = createSupabaseServerClient();
   const current = { ...payload };
-  for (let attempt = 0; attempt < 8; attempt += 1) {
+  for (let attempt = 0; attempt < 12; attempt += 1) {
     if (Object.keys(current).length === 0) return;
     const { error } = await supabase.from("chantiers").update(current).eq("id", id);
     if (!error) return;
@@ -651,8 +666,46 @@ export async function supabasePatchChantier(
         ? input.tolerance_deplacement_jours
         : null;
   }
+  if (input.fournitures !== undefined) {
+    payload.fournitures = normalizeFournitures(input.fournitures);
+  }
   if (Object.keys(payload).length === 0) return;
   await updateChantierPayload(input.id, payload);
+}
+
+export async function supabaseValidateChantierPlan(input: {
+  chantierId: string;
+  employeId: string;
+}): Promise<{ created: boolean; message: string; nomClient: string }> {
+  const snapshot = await fetchSupabaseSnapshot();
+  const chantier = snapshot.chantiers.find((row) => row.id === input.chantierId);
+  if (!chantier) throw new Error("Chantier introuvable.");
+  const nomClient = chantier.nom_client;
+  if (chantier.plan_valide) {
+    return { created: false, message: "", nomClient };
+  }
+  const message = formatFournituresMessage(
+    chantier.nom_client,
+    normalizeFournitures(chantier.fournitures ?? []),
+  );
+  await supabaseCreateDemande({
+    categorie: "commande",
+    message,
+    employe_id: input.employeId,
+  });
+  invalidateSupabaseSnapshotCache();
+  const after = await fetchSupabaseSnapshot();
+  const demande = after.demandes.find(
+    (row) =>
+      row.categorie === "commande" &&
+      row.employe_id === input.employeId &&
+      row.message === message,
+  );
+  await updateChantierPayload(input.chantierId, {
+    plan_valide: true,
+    plan_demande_id: demande?.id ?? null,
+  });
+  return { created: true, message, nomClient };
 }
 
 export async function supabaseDeleteChantier(chantierId: string): Promise<void> {

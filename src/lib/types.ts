@@ -1,3 +1,5 @@
+import type { LigneFourniture } from "@/lib/fournitures";
+
 export const ROLES = [
   "administratif",
   "fabrication",
@@ -101,6 +103,9 @@ export type Chantier = {
   delai_sous_traitance_jours?: number | null;
   adresse_livraison?: string | null;
   telephone_livraison?: string | null;
+  plan_valide?: boolean;
+  fournitures?: LigneFourniture[];
+  plan_demande_id?: string | null;
 };
 
 export type ElementChantier = {
@@ -348,6 +353,7 @@ export type ChantierSimplePatch = {
   lien_dossier_onedrive?: string | null;
   adresse_livraison?: string | null;
   telephone_livraison?: string | null;
+  fournitures?: LigneFourniture[];
 };
 
 export type EmployeePatch = {

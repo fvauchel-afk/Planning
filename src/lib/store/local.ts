@@ -34,6 +34,10 @@ import type {
 } from "@/lib/types";
 import { TYPES_PHASE } from "@/lib/types";
 import {
+  formatFournituresMessage,
+  normalizeFournitures,
+} from "@/lib/fournitures";
+import {
   phaseIdsStartedToday,
   withConfirmedPhases,
 } from "@/lib/dates-estimatives";
@@ -156,6 +160,8 @@ export function localCreateChantier(
       input.priorite === "pas_presse"
         ? Math.min(180, Math.max(1, Number(input.tolerance_deplacement_jours) || 30))
         : null,
+    plan_valide: false,
+    fournitures: [],
   });
   for (const element of input.elements) {
     const elementId = newId();
@@ -640,8 +646,43 @@ export function localPatchChantier(
           : input.priorite && input.priorite !== "pas_presse"
             ? null
             : chantier.tolerance_deplacement_jours,
+      fournitures: input.fournitures ?? chantier.fournitures,
     };
   });
+  saveLocalSnapshot(next);
+  return next;
+}
+
+export function localValidateChantierPlan(
+  snapshot: PlanningSnapshot,
+  chantierId: string,
+  employeId: string,
+): PlanningSnapshot {
+  const chantier = snapshot.chantiers.find((row) => row.id === chantierId);
+  if (!chantier || chantier.plan_valide) return snapshot;
+  const message = formatFournituresMessage(
+    chantier.nom_client,
+    normalizeFournitures(chantier.fournitures ?? []),
+  );
+  let next = localCreateDemande(snapshot, {
+    categorie: "commande",
+    message,
+    employe_id: employeId,
+  });
+  const demande = next.demandes.find(
+    (row) =>
+      row.categorie === "commande" &&
+      row.employe_id === employeId &&
+      row.message === message,
+  );
+  next = {
+    ...next,
+    chantiers: next.chantiers.map((row) =>
+      row.id === chantierId
+        ? { ...row, plan_valide: true, plan_demande_id: demande?.id ?? null }
+        : row,
+    ),
+  };
   saveLocalSnapshot(next);
   return next;
 }
