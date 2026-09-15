@@ -143,7 +143,7 @@ export function CommandePushPrompt() {
 
   if (status === "denied") {
     return (
-      <div className="fixed bottom-24 left-4 right-4 z-40 mx-auto max-w-lg rounded-lg border border-stone-300 bg-white px-4 py-3 text-sm text-stone-800 shadow-lg md:left-auto md:right-6 md:w-96">
+      <div className="fixed bottom-24 left-4 right-4 z-30 mx-auto max-w-lg rounded-lg border border-stone-300 bg-white px-4 py-3 text-sm text-stone-800 shadow-lg md:left-auto md:right-24 md:w-96">
         Les notifications sont bloquées dans le navigateur. Autorisez-les
         dans les réglages du site, ou ajoutez l’app à l’écran d’accueil sur iPhone.
       </div>
@@ -151,7 +151,7 @@ export function CommandePushPrompt() {
   }
 
   return (
-    <div className="fixed bottom-24 left-4 right-4 z-40 mx-auto max-w-lg rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950 shadow-lg md:left-auto md:right-6 md:w-96">
+    <div className="fixed bottom-24 left-4 right-4 z-30 mx-auto max-w-lg rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950 shadow-lg md:left-auto md:right-24 md:w-96">
       <p className="font-medium">
         {commande ? "Notifications commandes" : "Notifications congés"}
       </p>

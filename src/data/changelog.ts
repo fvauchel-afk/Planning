@@ -11,6 +11,13 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-15-bulle-envoyer-conge",
+    title: "Envoyer une demande de congé",
+    items: [
+      "Le bouton Envoyer de la bulle n’est plus recouvert par le bandeau de notifications : une demande de congé (dates déjà remplies) part bien et apparaît dans Mes congés.",
+    ],
+  },
+  {
     id: "2026-09-14-demandes-conge",
     title: "Demandes de congé",
     items: [

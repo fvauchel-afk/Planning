@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { useSession } from "@/lib/auth/session-context";
 import { usePlanning } from "@/lib/planning-context";
 import { toISODate } from "@/lib/dates";
@@ -37,9 +37,9 @@ export function DemandesWidget() {
     function onPointerDown(event: PointerEvent) {
       const node = panelRef.current;
       if (!node) return;
-      if (event.target instanceof Node && !node.contains(event.target)) {
-        setOpen(false);
-      }
+      const target = event.target;
+      if (target instanceof Node && node.contains(target)) return;
+      setOpen(false);
     }
     document.addEventListener("pointerdown", onPointerDown);
     return () => document.removeEventListener("pointerdown", onPointerDown);
@@ -59,9 +59,9 @@ export function DemandesWidget() {
     setError(null);
     setSent(false);
     try {
-      if (isConge) {
+      if (categorie === "conge") {
         const input = {
-          categorie,
+          categorie: "conge" as const,
           message: message.trim(),
           employe_id: employeeId,
           date_debut: dateDebut,
@@ -85,7 +85,10 @@ export function DemandesWidget() {
         });
       } else {
         const text = message.trim();
-        if (!text) return;
+        if (!text) {
+          setError("Écrivez un message avant d’envoyer.");
+          return;
+        }
         await createDemande({
           categorie,
           message: text,
@@ -103,8 +106,14 @@ export function DemandesWidget() {
     }
   }
 
+  function onSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+    void send();
+  }
+
   return (
-    <div ref={panelRef} className="fixed bottom-5 right-5 z-40">
+    <div ref={panelRef} className="fixed bottom-5 right-5 z-[60]">
       {open && (
         <div className="mb-3 w-[min(22rem,calc(100vw-2.5rem))] rounded-2xl border border-stone-300 bg-white shadow-xl">
           <div className="flex items-center justify-between border-b border-stone-200 px-4 py-3">
@@ -137,7 +146,7 @@ export function DemandesWidget() {
               </button>
             ))}
           </div>
-          <div className="space-y-3 p-4">
+          <form className="space-y-3 p-4" onSubmit={onSubmit}>
             {isConge ? (
               <>
                 <label className="block text-sm">
@@ -235,14 +244,15 @@ export function DemandesWidget() {
               </p>
             )}
             <button
-              type="button"
+              type="submit"
+              data-demande-submit="1"
               disabled={sending || !canSend}
-              onClick={() => void send()}
+              onPointerDown={(event) => event.stopPropagation()}
               className="w-full rounded-lg bg-stone-900 px-3 py-2.5 text-sm font-medium text-white disabled:opacity-50"
             >
               {sending ? "Envoi…" : "Envoyer"}
             </button>
-          </div>
+          </form>
         </div>
       )}
       <button

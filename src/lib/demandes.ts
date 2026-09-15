@@ -105,6 +105,25 @@ function runDemandesSelfCheck() {
   if (demandeEstOuverte({ statut: "acceptee" })) {
     throw new Error("demandes: une demande acceptée n’est plus ouverte");
   }
+  const synthese = syntheseMessageConge({
+    type_absence: "conge",
+    date_debut: "2026-09-17",
+    date_fin: "2026-09-18",
+  });
+  if (!synthese.trim() || !synthese.includes("2026-09-17")) {
+    throw new Error("demandes: synthèse congé vide");
+  }
+  if (
+    validateDemandeCongeInput({
+      categorie: "conge",
+      message: "",
+      date_debut: "2026-09-17",
+      date_fin: "2026-09-18",
+      type_absence: "conge",
+    })
+  ) {
+    throw new Error("demandes: un congé daté sans commentaire doit être valide");
+  }
 }
 
 runDemandesSelfCheck();
