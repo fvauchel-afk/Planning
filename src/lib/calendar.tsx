@@ -22,7 +22,7 @@ import {
   TRANSPORT_ROW_ORDRE,
 } from "@/lib/display-order";
 import { employeeOrdreForPlanning } from "@/lib/employee-row-order";
-import { formatHoursLabel, hoursForSlot } from "@/lib/engine/hours";
+import { formatHoursLabel, hoursInSlots } from "@/lib/engine/hours";
 import { slotsFromExistingPhase, halfFromLabel, type OccupiedSlot } from "@/lib/engine/slots";
 
 export type CalendarAssignment = {
@@ -71,12 +71,14 @@ export function assignmentIndex(snapshot: PlanningSnapshot): AssignmentIndex {
     snapshot.chantiers.map((chantier) => [chantier.id, chantier]),
   );
   for (const phase of snapshot.phases) {
-    const slots = slotsFromExistingPhase(snapshot, phase);
-    if (phase.type_phase === "livraison") {
-      for (const slot of slots.slice()) {
-        slots.push({ ...slot, rowId: TRANSPORT_ROW_ID });
-      }
-    }
+    const baseSlots = slotsFromExistingPhase(snapshot, phase);
+    const slots =
+      phase.type_phase === "livraison"
+        ? [
+            ...baseSlots,
+            ...baseSlots.map((slot) => ({ ...slot, rowId: TRANSPORT_ROW_ID })),
+          ]
+        : baseSlots;
     slotsByPhase.set(phase.id, slots);
     const element = elementById.get(phase.element_id);
     if (!element) continue;
@@ -199,18 +201,27 @@ export function assignmentsForDay(
   return assignmentIndex(snapshot).byDay.get(dayKey(rowId, iso)) ?? [];
 }
 
-/** Heures occupées sur la plage affichée (créneaux matin / après-midi où il y a un bloc). */
+/** Durée réelle des phases sur la ligne (une fois par phase, même si le bloc est dupliqué ailleurs). */
 export function rowHoursInDays(
   snapshot: PlanningSnapshot,
   rowId: string,
   days: string[],
 ): number {
+  const index = assignmentIndex(snapshot);
+  const daySet = new Set(days);
+  const seen = new Set<string>();
   let total = 0;
   for (const iso of days) {
     for (const half of [0, 1] as const) {
       const slot = half === 0 ? "matin" : "apres_midi";
-      if (assignmentsForCell(snapshot, rowId, iso, slot).length === 0) continue;
-      total += hoursForSlot(snapshot, rowId, iso, half);
+      for (const assignment of assignmentsForCell(snapshot, rowId, iso, slot)) {
+        if (seen.has(assignment.phase.id)) continue;
+        seen.add(assignment.phase.id);
+        const slots = (index.slotsByPhase.get(assignment.phase.id) ?? []).filter(
+          (item) => item.rowId === rowId && daySet.has(item.date),
+        );
+        total += hoursInSlots(snapshot, slots);
+      }
     }
   }
   return total;

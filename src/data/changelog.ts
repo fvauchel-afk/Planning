@@ -17,8 +17,10 @@ export const CHANGELOG: ChangelogEntry[] = [
       "Le planning équipe a une ligne dédiée Transport / Livraison (vue d’ensemble, semaine et jour détaillé).",
       "Chaque livraison s’y affiche (nom du chantier et adresse), en plus du bloc déjà présent sur la ligne du salarié responsable.",
       "Un clic sur un bloc de cette ligne ouvre la même fiche qu’à partir de la ligne du salarié.",
+      "En vue Semaine, le total à côté du nom compte la durée réelle de chaque livraison une seule fois par ligne (2 h restent 2 h, même si le bloc est aussi sur l’autre ligne).",
     ],
-  },  {
+  },
+  {
     id: "2026-09-15-semaine-heures",
     title: "Heures plus visibles en vue Semaine",
     items: [
