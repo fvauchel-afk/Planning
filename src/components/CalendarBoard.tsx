@@ -11,6 +11,7 @@ import {
   uniqueAssignmentsByChantier,
   firstChantierOccurrence,
   planningRows,
+  rowHoursInDays,
   slotsForPhase,
   type CalendarAssignment,
 } from "@/lib/calendar";
@@ -33,7 +34,7 @@ import {
   startOfWeekIso,
   toISODate,
 } from "@/lib/dates";
-import { formatClock, hoursForSlot, workWindowsForRow } from "@/lib/engine/hours";
+import { formatClock, formatHoursLabel, hoursForSlot, workWindowsForRow } from "@/lib/engine/hours";
 import {
   shiftOrMoveChantierBlock,
   type OccupiedHalf,
@@ -535,6 +536,11 @@ export function CalendarBoard() {
                     {...rowHandleProps(row.id)}
                   >
                     <div className="font-medium text-stone-900">{row.label}</div>
+                    {view === "week" ? (
+                      <div className="text-[11px] font-semibold tabular-nums text-amber-900">
+                        {formatHoursLabel(rowHoursInDays(snapshot, row.id, days))}
+                      </div>
+                    ) : null}
                     <div className="text-[11px] font-normal capitalize text-stone-500">
                       {row.subtitle}
                     </div>

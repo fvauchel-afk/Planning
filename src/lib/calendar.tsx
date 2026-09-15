@@ -19,6 +19,7 @@ import {
   LOGISTIQUE_ROW_ORDRE,
 } from "@/lib/display-order";
 import { employeeOrdreForPlanning } from "@/lib/employee-row-order";
+import { formatHoursLabel, hoursForSlot } from "@/lib/engine/hours";
 import { slotsFromExistingPhase, halfFromLabel, type OccupiedSlot } from "@/lib/engine/slots";
 
 export type CalendarAssignment = {
@@ -182,6 +183,23 @@ export function assignmentsForDay(
   return assignmentIndex(snapshot).byDay.get(dayKey(rowId, iso)) ?? [];
 }
 
+/** Heures occupées sur la plage affichée (créneaux matin / après-midi où il y a un bloc). */
+export function rowHoursInDays(
+  snapshot: PlanningSnapshot,
+  rowId: string,
+  days: string[],
+): number {
+  let total = 0;
+  for (const iso of days) {
+    for (const half of [0, 1] as const) {
+      const slot = half === 0 ? "matin" : "apres_midi";
+      if (assignmentsForCell(snapshot, rowId, iso, slot).length === 0) continue;
+      total += hoursForSlot(snapshot, rowId, iso, half);
+    }
+  }
+  return total;
+}
+
 export function chantierVisibleOnGrid(
   snapshot: PlanningSnapshot,
   chantierId: string,
@@ -225,7 +243,7 @@ export function AssignmentChip({
     <div
       className={`overflow-hidden rounded px-1.5 py-0.5 ${compact ? "text-[10px] leading-tight" : "text-xs"}`}
       style={{ backgroundColor: color.bg, color: color.fg }}
-      title={`${assignment.chantier.nom_client} — ${assignment.element.nom_element} (${PHASE_LABELS[assignment.phase.type_phase]})`}
+      title={`${assignment.chantier.nom_client} — ${assignment.element.nom_element} (${PHASE_LABELS[assignment.phase.type_phase]}) · ${formatHoursLabel(assignment.phase.duree_estimee_heures)}`}
     >
       <span className="font-semibold">{assignment.chantier.nom_client}</span>
       {!compact && (
@@ -234,6 +252,11 @@ export function AssignmentChip({
           · {assignment.element.nom_element}
         </span>
       )}
+      {Number(assignment.phase.duree_estimee_heures) > 0 && !compact ? (
+        <span className="ml-1 rounded bg-black/35 px-1 text-[11px] font-bold tabular-nums tracking-wide">
+          {formatHoursLabel(assignment.phase.duree_estimee_heures)}
+        </span>
+      ) : null}
       {phaseIsEstimative(assignment.phase) ? (
         <span
           className={`ml-1 rounded bg-violet-900/80 px-1 font-semibold uppercase tracking-wide text-violet-50 ${compact ? "text-[8px]" : "text-[9px]"}`}
