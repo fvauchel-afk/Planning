@@ -20,6 +20,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     ],
   },
   {
+    id: "2026-09-15-semaine-heures",
     title: "Heures plus visibles en vue Semaine",
     items: [
       "Sur chaque bloc de la semaine, le nombre d’heures de la phase s’affiche clairement.",
