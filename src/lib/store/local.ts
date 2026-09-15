@@ -663,6 +663,7 @@ export function localValidateChantierPlan(
   const message = formatFournituresMessage(
     chantier.nom_client,
     normalizeFournitures(chantier.fournitures ?? []),
+    chantier.lien_dossier_onedrive,
   );
   let next = localCreateDemande(snapshot, {
     categorie: "commande",

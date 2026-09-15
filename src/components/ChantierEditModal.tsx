@@ -833,7 +833,7 @@ export function ChantierEditModal({
             </legend>
             <p className="mt-1 text-xs text-stone-600">
               Liste des fournitures à remplir avec le plan. La validation crée une
-              commande pour Alexis (bandeau, badge et e-mail).
+              commande pour Alexis (bandeau, badge, e-mail et lien OneDrive).
             </p>
             <div className="mt-3">
               <FournituresEditor

@@ -17,7 +17,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       "À la création d’un chantier, Mika reçoit un e-mail « — pour plan » (client, adresse, dates, OneDrive s’il existe, lien vers la fiche).",
       "La fiche affiche Plan à faire, puis Plan validé. Mika ou un admin peut valider le plan.",
       "Un tableau de fournitures (type, désignation, quantité, unité) se remplit sur la fiche.",
-      "Valider le plan crée une demande Commande avec la liste, et prévient Alexis comme d’habitude (badge, bandeau, e-mail).",
+      "Valider le plan crée une demande Commande avec la liste et le lien OneDrive du chantier, et prévient Alexis comme d’habitude (badge, bandeau, e-mail).",
     ],
   },
   {

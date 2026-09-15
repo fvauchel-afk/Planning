@@ -512,6 +512,7 @@ export async function sendGraphMail(input: {
   to: string[];
   subject: string;
   text: string;
+  html?: string;
 }): Promise<void> {
   const recipients = input.to
     .map((item) => item.trim())
@@ -526,7 +527,9 @@ export async function sendGraphMail(input: {
     body: JSON.stringify({
       message: {
         subject: input.subject,
-        body: { contentType: "Text", content: input.text },
+        body: input.html
+          ? { contentType: "HTML", content: input.html }
+          : { contentType: "Text", content: input.text },
         toRecipients: recipients,
       },
       saveToSentItems: true,

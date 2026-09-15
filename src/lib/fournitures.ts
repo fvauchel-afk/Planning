@@ -51,9 +51,20 @@ export function normalizeFournitures(rows: LigneFourniture[]): LigneFourniture[]
     .filter((row) => row.designation || row.unite || row.quantite);
 }
 
+export function chantierOnedriveHref(
+  raw: string | null | undefined,
+): string | null {
+  const value = (raw ?? "").trim();
+  if (!value) return null;
+  if (/^https?:\/\//i.test(value)) return value;
+  if (/^[a-z][a-z0-9+.-]*:/i.test(value)) return null;
+  return `https://${value}`;
+}
+
 export function formatFournituresMessage(
   nomClient: string,
   rows: LigneFourniture[],
+  onedriveRaw?: string | null,
 ): string {
   const filled = normalizeFournitures(rows);
   const lines = filled.length
@@ -62,15 +73,36 @@ export function formatFournituresMessage(
           `- ${TYPE_FOURNITURE_LABELS[row.type]} / ${row.designation || "—"} / ${row.quantite} ${row.unite || ""}`.trim(),
       )
     : ["Aucune fourniture renseignée."];
-  return [`Plan validé — ${nomClient}`, "", "Fournitures :", ...lines].join("\n");
+  const href = chantierOnedriveHref(onedriveRaw);
+  const dossier = href
+    ? `Dossier OneDrive : ${href}`
+    : "Dossier OneDrive : non renseigné";
+  return [
+    `Plan validé — ${nomClient}`,
+    "",
+    dossier,
+    "",
+    "Fournitures :",
+    ...lines,
+  ].join("\n");
 }
 
 function runFournituresSelfCheck() {
-  const text = formatFournituresMessage("Portail Dupont", [
-    { type: "acier", designation: "Tube 40x40", quantite: 12, unite: "ml" },
-  ]);
-  if (!text.includes("Portail Dupont") || !text.includes("Acier")) {
-    throw new Error("fournitures: le message commande doit citer le chantier et le type");
+  const text = formatFournituresMessage(
+    "Portail Dupont",
+    [{ type: "acier", designation: "Tube 40x40", quantite: 12, unite: "ml" }],
+    "https://onedrive.example/dupont",
+  );
+  if (
+    !text.includes("Portail Dupont") ||
+    !text.includes("Acier") ||
+    !text.includes("https://onedrive.example/dupont")
+  ) {
+    throw new Error("fournitures: le message commande doit citer le chantier, le type et OneDrive");
+  }
+  const sansLien = formatFournituresMessage("Test", [], null);
+  if (!sansLien.includes("non renseigné")) {
+    throw new Error("fournitures: sans lien OneDrive, indiquer non renseigné");
   }
 }
 
