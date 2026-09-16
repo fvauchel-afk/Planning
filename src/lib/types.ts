@@ -130,6 +130,8 @@ export type PhasePlanning = {
   urgent: boolean;
   heures_supplementaires_par_jour?: number;
   dates_estimatives?: boolean;
+  /** True seulement après « Je valide le lancement ». */
+  lancement_valide?: boolean;
 };
 
 export type Absence = {

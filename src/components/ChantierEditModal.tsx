@@ -7,7 +7,12 @@ import { SousTraitantSelect } from "@/components/SousTraitantSelect";
 import { FournituresEditor } from "@/components/FournituresEditor";
 import { canGenerateBonCommande } from "@/lib/bon-commande/active-phase";
 import { chantierVisibleOnGrid } from "@/lib/calendar";
-import { estimativePhaseIdsForChantier, chantierHasEstimativeDates } from "@/lib/dates-estimatives";
+import {
+  chantierHasEstimativeDates,
+  estimativePhaseIdsForChantier,
+  fabricationPhaseIdsAwaitingLaunch,
+} from "@/lib/dates-estimatives";
+import { LaunchValidateButton } from "@/components/LaunchValidateButton";
 import {
   STATUT_CHANTIER_LABELS,
   chantierDateRange,
@@ -598,9 +603,13 @@ export function ChantierEditModal({
         datesDirty &&
         (planDate !== startBefore || (planEnd || planDate) !== endBefore);
       await persistPlanning(false);
-      const confirmIds = estimativePhaseIdsForChantier(
-        latestSnap.current,
-        chantier.id,
+      const confirmIds = Array.from(
+        new Set([
+          ...estimativePhaseIdsForChantier(latestSnap.current, chantier.id),
+          ...(!datesEstimatives
+            ? fabricationPhaseIdsAwaitingLaunch(latestSnap.current, chantier.id)
+            : []),
+        ]),
       );
       const confirmNow = (datesChanged || !datesEstimatives) && confirmIds.length > 0;
       if (confirmNow) {
@@ -1237,6 +1246,13 @@ export function ChantierEditModal({
               Modifier le début ou la fin confirme les dates. Un chantier déjà
               commencé, un bon de commande, ou « Je valide le lancement » aussi.
             </p>
+            <div className="mt-3">
+              {fabricationPhaseIdsAwaitingLaunch(snapshot, chantier.id).map(
+                (phaseId) => (
+                  <LaunchValidateButton key={phaseId} phaseId={phaseId} />
+                ),
+              )}
+            </div>
             {visibleOnGrid ? (
               <p className="mt-2 text-xs text-stone-500">
                 Modifier le début décale toutes les phases. Modifier la fin ajoute

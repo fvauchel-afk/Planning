@@ -76,6 +76,7 @@ export function loadLocalSnapshot(): PlanningSnapshot {
             phase.heures_supplementaires_par_jour ?? 0,
           heure_debut: phase.heure_debut ?? null,
           dates_estimatives: Boolean(phase.dates_estimatives),
+          lancement_valide: Boolean(phase.lancement_valide),
         })),
       ),
       employees: (parsed.employees ?? []).map((employee) => ({
