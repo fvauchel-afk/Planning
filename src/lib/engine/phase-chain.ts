@@ -193,6 +193,7 @@ export function applyPhaseChainOnCreate(
   const laquageFin = input.date_laquage_fin || null;
   const chainStart =
     input.date_debut || earliestAvailableWorkDate(snapshot);
+  const busyUntil = new Map<string, string>();
 
   return { ...input, elements: input.elements.map((element) => {
       const phases = element.phases.map((phase) => ({ ...phase }));
@@ -268,16 +269,34 @@ export function applyPhaseChainOnCreate(
           end = laterDate(end, current.date_fin);
         }
 
-        current.date_debut = start;
-        current.date_fin = end < start ? start : end;
         if (type !== "logistique") {
           current.employe_id = pickEmployeeForPhase(
             snapshot,
             type,
-            current.date_debut,
-            current.date_fin,
+            start,
+            end,
             current.employe_id,
           );
+          const lastBusy = current.employe_id
+            ? busyUntil.get(current.employe_id)
+            : undefined;
+          if (lastBusy) {
+            start = laterDate(start, nextWorkingDayAfter(lastBusy));
+            end = rangeEnd(start, workingDays);
+          }
+          if (current.employe_id) {
+            const previous = busyUntil.get(current.employe_id);
+            busyUntil.set(
+              current.employe_id,
+              previous ? laterDate(previous, end) : end,
+            );
+          }
+        }
+
+        current.date_debut = start;
+        current.date_fin = end < start ? start : end;
+        if (type === "logistique") {
+          current.employe_id = null;
         }
         if (
           waitingOnBonCommande &&
@@ -1652,6 +1671,52 @@ function runPhaseChainSelfCheck() {
   );
   if (!missingRequiredAssignee(nobody)) {
     throw new Error("phase-chain: sans salarié, un message d’erreur est attendu");
+  }
+
+  const twins = applyPhaseChainOnCreate(snapshot, {
+    nom_client: "Multi",
+    adresse: "",
+    lien_dossier_onedrive: null,
+    priorite: "normal",
+    date_debut: "2026-09-14",
+    avec_pose: false,
+    avec_thermolaquage: false,
+    elements: [
+      {
+        nom_element: "Table",
+        phases: [
+          {
+            ...basePhase,
+            type_phase: "fabrication",
+            duree_estimee_heures: 16,
+            employe_id: "emp-a",
+          },
+        ],
+      },
+      {
+        nom_element: "Pergola",
+        phases: [
+          {
+            ...basePhase,
+            type_phase: "fabrication",
+            duree_estimee_heures: 16,
+            date_debut: "2026-09-14",
+            date_fin: "2026-09-15",
+            employe_id: "emp-a",
+          },
+        ],
+      },
+    ],
+  });
+  const firstFab = twins.elements[0]?.phases.find((item) => item.type_phase === "fabrication");
+  const secondFab = twins.elements[1]?.phases.find((item) => item.type_phase === "fabrication");
+  if (!firstFab?.date_fin || !secondFab?.date_debut) {
+    throw new Error("phase-chain: les deux fabrications du même salarié doivent être datées");
+  }
+  if (secondFab.date_debut <= firstFab.date_fin) {
+    throw new Error(
+      `phase-chain: le 2e élément ne doit pas chevaucher le 1er sur le même salarié (${firstFab.date_debut}→${firstFab.date_fin} / ${secondFab.date_debut}→${secondFab.date_fin})`,
+    );
   }
 }
 
