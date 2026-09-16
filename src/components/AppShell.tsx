@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { AuthOpenBanner } from "@/components/AuthOpenBanner";
 import { OnedriveBanner } from "@/components/OnedriveBanner";
 import { CommandeAlert } from "@/components/CommandeAlert";
 import { LancementAlert } from "@/components/LancementAlert";
@@ -78,6 +79,7 @@ export function AppShell({
 
   return (
     <div className="min-h-screen">
+      <AuthOpenBanner />
       <header className="sticky top-0 z-30 border-b border-stone-800 bg-stone-900 text-stone-100">
         <div className="mx-auto flex max-w-[1600px] items-center justify-between gap-3 px-4 py-3">
           <div className="min-w-0">
