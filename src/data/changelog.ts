@@ -15,6 +15,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     title: "Retard : décalage au plus juste",
     items: [
       "Un retard ne recalcule plus tout le planning : seules les phases vraiment bloquées en aval bougent (même salarié s’il y a chevauchement, ou étape suivante du même élément si le délai logistique n’est plus respecté).",
+      "Le thermolaquage partagé n’enchaîne plus les autres chantiers : un petit retard admin ne décale plus des poses / laquages qui n’étaient pas bloqués.",
       "Un chantier à plusieurs éléments indépendants ne reçoit plus plusieurs décalages incohérents pour un seul retard.",
       "Un signalement de retard n’envoie plus plusieurs propositions alternatives contradictoires : une seule proposition minimale.",
       "Un retard signalé réapparaît bien dans l’écran Signalements (en attente), pour qu’un admin puisse le valider.",
