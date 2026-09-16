@@ -386,6 +386,91 @@ for (let i = 0; i < 10; i += 1) {
   });
 }
 
+// Synthèse : plannedHours = somme des occupancySpans (clés rowId|date|start|end).
+// Deux phases qui se chevauchent avec le même créneau (ex. tout l’après-midi
+// 13:00–16:00) ne comptent qu’une fois. Le dénominateur est la capacité de
+// TOUS les salariés actifs (TEST-CHK + atelier réel). Il faut donc des plages
+// distinctes, sur toute l’équipe TEST, pour dépasser réellement 110 %.
+const overflowMark = {
+  chantiers: chantiers.length,
+  elements: elements.length,
+  phases: phases.length,
+};
+const OVERFLOW_DAYS = [
+  "2026-10-12",
+  "2026-10-13",
+  "2026-10-14",
+  "2026-10-15",
+  "2026-10-16",
+];
+const OVERFLOW_LAYERS = [
+  { heure: "08:10", hours: 3 },
+  { heure: "08:40", hours: 3 },
+  { heure: "13:05", hours: 3 },
+  { heure: "13:35", hours: 3 },
+];
+for (const emp of employees) {
+  const type = emp.roles.includes("fabrication")
+    ? "fabrication"
+    : emp.roles.includes("pose")
+      ? "pose"
+      : "administratif";
+  for (let li = 0; li < OVERFLOW_LAYERS.length; li += 1) {
+    const layer = OVERFLOW_LAYERS[li];
+    for (const day of OVERFLOW_DAYS) {
+      const id = uuid(2, chN);
+      const ville = VILLES[(chN - 1) % VILLES.length];
+      chantiers.push({
+        id,
+        nom_client: `TEST-CHK Surcharge 110 ${String(emp.n).padStart(2, "0")} L${li + 1} ${day.slice(5)}`,
+        adresse: `${ville[0]}, ${ville[1]}`,
+        priorite: "prioritaire",
+        date_creation: "2026-10-01",
+        dates_estimatives: false,
+        sous_traitant_id: null,
+        delai: 5,
+        tolerance: null,
+        couleur_ral: null,
+        finition: null,
+        adresse_livraison: null,
+        telephone_livraison: null,
+        plan_valide: true,
+      });
+      const elId = uuid(3, elN++);
+      elements.push({
+        id: elId,
+        chantier_id: id,
+        nom_element: `Surcharge ${layer.heure}`,
+      });
+      const extra = {
+        statut: "a_faire",
+        urgent: true,
+        heure_debut: layer.heure,
+        lancement_valide: false,
+        dates_estimatives: false,
+      };
+      if (type === "administratif") {
+        pushPhase(elId, "administratif", layer.hours, day, day, emp.id, extra);
+      } else {
+        pushPhase(elId, "administratif", 0, null, null, null);
+      }
+      if (type === "fabrication") {
+        pushPhase(elId, "fabrication", layer.hours, day, day, emp.id, extra);
+      } else {
+        pushPhase(elId, "fabrication", 0, null, null, null);
+      }
+      pushPhase(elId, "logistique", 0, null, null, null);
+      pushPhase(elId, "livraison", 0, null, null, null);
+      if (type === "pose") {
+        pushPhase(elId, "pose", layer.hours, day, day, emp.id, extra);
+      } else {
+        pushPhase(elId, "pose", 0, null, null, null);
+      }
+      chN += 1;
+    }
+  }
+}
+
 const absences = [];
 let abN = 1;
 function addAbsence(employeId, debut, fin, type, motif = null) {
@@ -553,6 +638,37 @@ const sql = [
 
 mkdirSync(ROOT, { recursive: true });
 writeFileSync(join(ROOT, "seed.sql"), sql);
+
+const overflowChantiers = chantiers.slice(overflowMark.chantiers);
+const overflowElements = elements.slice(overflowMark.elements);
+const overflowPhases = phases.slice(overflowMark.phases);
+const overflowSql = [
+  "-- Patch : plages distinctes semaine du 12 oct 2026 (Synthèse > 110 %).",
+  "-- N’ajoute que les chantiers TEST-CHK Surcharge 110. Sans wipe.",
+  "begin;",
+  `insert into public.chantiers (
+  id, nom_client, adresse, priorite, date_creation, dates_estimatives,
+  sous_traitant_id, delai_sous_traitance_jours, tolerance_deplacement_jours,
+  couleur_ral, finition, adresse_livraison, telephone_livraison, plan_valide, fournitures
+) values
+${values(overflowChantiers, (c) => `(${sqlUuid(c.id)}, ${sqlStr(c.nom_client)}, ${sqlStr(c.adresse)}, ${sqlStr(c.priorite)}::priorite_chantier, ${sqlDate(c.date_creation)}, ${c.dates_estimatives}, ${c.sous_traitant_id ? sqlUuid(c.sous_traitant_id) : "null"}, ${c.delai}, ${c.tolerance == null ? "null" : c.tolerance}, ${c.couleur_ral ? sqlStr(c.couleur_ral) : "null"}, ${c.finition ? sqlStr(c.finition) : "null"}, ${c.adresse_livraison ? sqlStr(c.adresse_livraison) : "null"}, ${c.telephone_livraison ? sqlStr(c.telephone_livraison) : "null"}, ${c.plan_valide}, '[]'::jsonb)`)}
+;`,
+  `insert into public.elements_chantier (id, chantier_id, nom_element) values
+${values(overflowElements, (e) => `(${sqlUuid(e.id)}, ${sqlUuid(e.chantier_id)}, ${sqlStr(e.nom_element)})`)}
+;`,
+  phaseInsert(overflowPhases),
+  "commit;\n",
+].join("\n");
+writeFileSync(join(ROOT, "overflow-110.sql"), overflowSql);
+writeFileSync(
+  join(ROOT, "overflow-110.json"),
+  JSON.stringify({
+    chantiers: overflowChantiers,
+    elements: overflowElements,
+    phases: overflowPhases,
+  }),
+);
+
 writeFileSync(
   join(ROOT, "manifest.json"),
   JSON.stringify(
@@ -564,6 +680,13 @@ writeFileSync(
       absences: absences.length,
       demandes: demandes.length,
       signalements: signalements.length,
+      overflow110: {
+        weekStart: "2026-10-12",
+        chantiers: overflowChantiers.length,
+        elements: overflowElements.length,
+        phases: overflowPhases.length,
+        note: "Plages 08:10/08:40/13:05/13:35 × 32 salariés × 5 jours, pour que la Synthèse dépasse 110 % malgré le dénominateur équipe complète.",
+      },
       pins: employees.map((e) => ({ nom: e.nom, pin: e.pin, roles: e.roles })),
     },
     null,
@@ -573,6 +696,7 @@ writeFileSync(
 console.log(
   JSON.stringify({
     bytes: sql.length,
+    overflowBytes: overflowSql.length,
     employees: employees.length,
     chantiers: chantiers.length,
     elements: elements.length,
@@ -580,5 +704,6 @@ console.log(
     absences: absences.length,
     demandes: demandes.length,
     signalements: signalements.length,
+    overflowChantiers: overflowChantiers.length,
   }),
 );

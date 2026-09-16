@@ -39,3 +39,5 @@ supabase/.temp/
 
 # SQL généré (npm run stress-chk:generate)
 scripts/stress-chk/seed.sql
+scripts/stress-chk/overflow-110.sql
+scripts/stress-chk/overflow-110.json

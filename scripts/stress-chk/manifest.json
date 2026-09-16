@@ -1,11 +1,18 @@
 {
   "employees": 32,
-  "chantiers": 96,
-  "elements": 102,
-  "phases": 422,
+  "chantiers": 736,
+  "elements": 742,
+  "phases": 3622,
   "absences": 46,
   "demandes": 3,
   "signalements": 6,
+  "overflow110": {
+    "weekStart": "2026-10-12",
+    "chantiers": 640,
+    "elements": 640,
+    "phases": 3200,
+    "note": "Plages 08:10/08:40/13:05/13:35 × 32 salariés × 5 jours, pour que la Synthèse dépasse 110 % malgré le dénominateur équipe complète."
+  },
   "pins": [
     {
       "nom": "TEST-CHK Adrien Fab 01",
