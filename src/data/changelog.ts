@@ -11,6 +11,15 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-16-onedrive-statut-partage",
+    title: "Statut OneDrive et copie des documents",
+    items: [
+      "L’onglet OneDrive vérifie le même accès que Sauvegarde (liste du dossier Sauvegarde), plus seulement un GET /me/drive. Si Microsoft refuse, le statut n’est plus vert « connecté ».",
+      "Le message affiché est le même que sur Sauvegarde ou à la copie d’une réception.",
+      "Si le lien de partage d’un chantier est refusé, la copie du PDF retente dans le dossier du client sur le OneDrive du compte.",
+    ],
+  },
+  {
     id: "2026-09-16-reception-pose-pdf",
     title: "Clôturer une pose et générer la réception",
     items: [

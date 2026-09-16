@@ -84,6 +84,7 @@ export async function POST(request: NextRequest) {
       shareUrl: lien,
       fileName,
       pngBytes: dataUrlToBuffer(body.pngDataUrl),
+      folderName: nomClient,
     });
     try {
       await setReceptionOnedriveErreur(receptionId, phaseId, null);

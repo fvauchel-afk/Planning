@@ -127,6 +127,7 @@ export async function POST(request: NextRequest) {
         fileName: pdf.fileName,
         bytes: pdf.bytes,
         contentType: "application/pdf",
+        folderName: chantier?.nom_client,
       });
       await setReceptionOnedriveErreur(receptionId, phaseId, null);
     } catch (err) {
