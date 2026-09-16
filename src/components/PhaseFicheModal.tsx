@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { BonCommandeModal } from "@/components/BonCommandeModal";
 import { ConflictModal } from "@/components/ConflictModal";
@@ -19,6 +19,7 @@ import {
   type DelayScope,
 } from "@/lib/engine/delay";
 import { usePlanning } from "@/lib/planning-context";
+import { delayWindowFlexDays } from "@/lib/priorite";
 import {
   PHASE_LABELS,
   PRIORITE_LABELS,
@@ -32,16 +33,16 @@ export function PhaseFicheModal({
   phaseId: string;
   onClose: () => void;
 }) {
-  const { snapshot, applyPhasePatches, createSignalement } =
+  const { snapshot, applyPhasePatches, createSignalement, patchChantier } =
     usePlanning();
   const { session } = useSession();
   const [mode, setMode] = useState<"fiche" | "decaler">("fiche");
-  const [delayKind, setDelayKind] = useState<"fixe" | "cible">("fixe");
+  const [delayKind, setDelayKind] = useState<"fixe" | "cible">("cible");
   const [quantite, setQuantite] = useState("1");
   const [unite, setUnite] = useState<"jours" | "demi">("jours");
   const [targetDate, setTargetDate] = useState("");
   const [flex, setFlex] = useState("3");
-  const [scope, setScope] = useState<DelayScope>("dependances");
+  const [scope, setScope] = useState<DelayScope>("chantier");
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -69,6 +70,11 @@ export function PhaseFicheModal({
         elementIds.includes(item.element_id) && item.statut !== "termine",
     ).length;
   }, [chantier, snapshot.elements, snapshot.phases]);
+
+  useEffect(() => {
+    if (!chantier) return;
+    setFlex(String(delayWindowFlexDays(chantier)));
+  }, [chantier]);
 
   if (!phase || !element || !chantier) {
     return null;
@@ -108,6 +114,13 @@ export function PhaseFicheModal({
               .filter(Boolean)
               .join(" · ")
           : note.trim();
+      if (delayKind === "cible") {
+        const flexDays = Math.max(0, Number(flex) || 0);
+        await patchChantier({
+          id: chantier.id,
+          tolerance_deplacement_jours: Math.min(180, Math.max(1, flexDays || 1)),
+        });
+      }
       if (needsAlgoValidation(result)) {
         if (!employeId) {
           throw new Error("Aucun salarié pour enregistrer la proposition.");
@@ -289,9 +302,15 @@ export function PhaseFicheModal({
               <button
                 type="button"
                 className="rounded-lg bg-stone-900 px-4 py-2 text-sm text-white"
-                onClick={() => setMode("decaler")}
+                onClick={() => {
+                  setDelayKind("cible");
+                  setScope("chantier");
+                  setFlex(String(delayWindowFlexDays(chantier)));
+                  if (phase.date_debut) setTargetDate(phase.date_debut);
+                  setMode("decaler");
+                }}
               >
-                Décaler
+                Décaler (date cible ± marge)
               </button>
               ) : null}
               <button
@@ -310,17 +329,13 @@ export function PhaseFicheModal({
               {chantier.nom_client} — {element.nom_element} ·{" "}
               {PHASE_LABELS[phase.type_phase]}
             </p>
+            <p className="text-xs text-stone-500">
+              En date cible, l’algorithme choisit le meilleur jour dans la
+              fourchette, en respectant le délai logistique incompressible et
+              les chantiers prioritaires.
+            </p>
             <fieldset className="space-y-1 text-sm">
               <legend className="mb-1 font-medium">Mode</legend>
-              <label className="flex items-center gap-2">
-                <input
-                  type="radio"
-                  name="delayKind"
-                  checked={delayKind === "fixe"}
-                  onChange={() => setDelayKind("fixe")}
-                />
-                Durée fixe
-              </label>
               <label className="flex items-center gap-2">
                 <input
                   type="radio"
@@ -328,10 +343,20 @@ export function PhaseFicheModal({
                   checked={delayKind === "cible"}
                   onChange={() => {
                     setDelayKind("cible");
+                    setScope("chantier");
                     if (!targetDate && phase.date_debut) setTargetDate(phase.date_debut);
                   }}
                 />
-                Date cible approximative
+                Date cible ± marge
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="delayKind"
+                  checked={delayKind === "fixe"}
+                  onChange={() => setDelayKind("fixe")}
+                />
+                Durée fixe (avancer / reculer d’un nombre de jours)
               </label>
             </fieldset>
             {delayKind === "fixe" ? (
@@ -371,7 +396,7 @@ export function PhaseFicheModal({
               </label>
               <label className="block text-sm">
                 <span className="mb-1 block font-medium">
-                  Flexibilité (± jours ouvrés)
+                  Marge (± jours ouvrés)
                 </span>
                 <input
                   type="number"
@@ -382,8 +407,9 @@ export function PhaseFicheModal({
                   className="w-24 rounded border border-stone-300 px-3 py-2"
                 />
                 <p className="mt-1 text-xs text-stone-500">
-                  Le moteur choisit le meilleur jour dans [cible − {flex || 0}, cible
-                  + {flex || 0}], en limitant les décalages collatéraux.
+                  Exemple : 15 novembre à 3 jours près → cible le 15, marge 3.
+                  Le moteur place au mieux dans [cible − {flex || 0}, cible +{" "}
+                  {flex || 0}]. Cette marge est enregistrée sur le chantier.
                 </p>
               </label>
             </div>

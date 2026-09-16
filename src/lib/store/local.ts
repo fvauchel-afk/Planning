@@ -163,9 +163,17 @@ export function localCreateChantier(
       : null,
     finition: input.avec_thermolaquage ? input.finition ?? null : null,
     tolerance_deplacement_jours:
-      input.priorite === "pas_presse"
-        ? Math.min(180, Math.max(1, Number(input.tolerance_deplacement_jours) || 30))
-        : null,
+      input.priorite === "prioritaire"
+        ? null
+        : input.tolerance_deplacement_jours == null ||
+            input.tolerance_deplacement_jours === undefined
+          ? input.priorite === "pas_presse"
+            ? 30
+            : null
+          : Math.min(
+              180,
+              Math.max(1, Number(input.tolerance_deplacement_jours) || 1),
+            ),
     plan_valide: false,
     fournitures: [],
   });
@@ -622,9 +630,9 @@ export function localUpdateChantier(
           tolerance_deplacement_jours:
             input.tolerance_deplacement_jours !== undefined
               ? input.tolerance_deplacement_jours
-              : input.priorite === "pas_presse"
-                ? chantier.tolerance_deplacement_jours
-                : null,
+              : input.priorite === "prioritaire"
+                ? null
+                : chantier.tolerance_deplacement_jours,
         }
       : chantier,
   );
@@ -659,7 +667,7 @@ export function localPatchChantier(
       tolerance_deplacement_jours:
         input.tolerance_deplacement_jours !== undefined
           ? input.tolerance_deplacement_jours
-          : input.priorite && input.priorite !== "pas_presse"
+          : input.priorite === "prioritaire"
             ? null
             : chantier.tolerance_deplacement_jours,
       fournitures: input.fournitures ?? chantier.fournitures,

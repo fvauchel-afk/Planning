@@ -368,9 +368,17 @@ export async function supabaseCreateChantier(
       Math.max(1, Number(input.delai_laquage_jours) || 5),
     ),
     tolerance_deplacement_jours:
-      input.priorite === "pas_presse"
-        ? Math.min(180, Math.max(1, Number(input.tolerance_deplacement_jours) || 30))
-        : null,
+      input.priorite === "prioritaire"
+        ? null
+        : input.tolerance_deplacement_jours == null ||
+            input.tolerance_deplacement_jours === undefined
+          ? input.priorite === "pas_presse"
+            ? 30
+            : null
+          : Math.min(
+              180,
+              Math.max(1, Number(input.tolerance_deplacement_jours) || 1),
+            ),
     adresse_livraison: input.avec_livraison ? input.adresse_livraison ?? null : null,
     telephone_livraison: input.avec_livraison
       ? input.telephone_livraison ?? null
@@ -574,9 +582,9 @@ export async function supabaseUpdateChantier(
   }
   if (input.tolerance_deplacement_jours !== undefined) {
     payload.tolerance_deplacement_jours =
-      input.priorite === "pas_presse"
-        ? Math.min(180, Math.max(1, Number(input.tolerance_deplacement_jours) || 30))
-        : null;
+      input.priorite === "prioritaire"
+        ? null
+        : Math.min(180, Math.max(1, Number(input.tolerance_deplacement_jours) || 1));
   }
   let { error } = await supabase
     .from("chantiers")
@@ -708,9 +716,9 @@ export async function supabasePatchChantier(
   }
   if (input.tolerance_deplacement_jours !== undefined) {
     payload.tolerance_deplacement_jours =
-      input.priorite === "pas_presse" || input.priorite === undefined
-        ? input.tolerance_deplacement_jours
-        : null;
+      input.priorite === "prioritaire"
+        ? null
+        : input.tolerance_deplacement_jours;
   }
   if (input.fournitures !== undefined) {
     payload.fournitures = normalizeFournitures(input.fournitures);

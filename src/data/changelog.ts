@@ -11,6 +11,15 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-16-decalage-date-cible-marge",
+    title: "Décalage vers une date cible ± marge",
+    items: [
+      "Sur la fiche d’une phase, Décaler ouvre d’abord « Date cible ± marge » : vous indiquez par exemple le 15 novembre et 3 jours.",
+      "L’algorithme choisit le meilleur jour dans cette fourchette (délai logistique, chantiers prioritaires, absences).",
+      "La marge est enregistrée sur le chantier et ressort la prochaine fois.",
+    ],
+  },
+  {
     id: "2026-09-15-horaires-presets-saison",
     title: "Préréglages d’horaires et bascule été / hiver",
     items: [
