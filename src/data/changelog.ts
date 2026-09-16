@@ -11,6 +11,23 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-16-avance-rapproche",
+    title: "Avance : les dates se rapprochent vraiment",
+    items: [
+      "Signaler une avance ne fait plus comme un retard : les phases suivantes sont rapprochées, pas poussées plus tard.",
+      "Le délai de thermolaquage (10 à 11 jours ouvrés) reste un plancher : une pose ne peut pas remonter en dessous.",
+    ],
+  },  {
+    id: "2026-09-16-cascade-retard-minimale",
+    title: "Retard : décalage au plus juste",
+    items: [
+      "Un retard ne recalcule plus tout le planning : seules les phases vraiment bloquées en aval bougent (même salarié s’il y a chevauchement, ou étape suivante du même élément si le délai logistique n’est plus respecté).",
+      "Le thermolaquage partagé n’enchaîne plus les autres chantiers : un petit retard admin ne décale plus des poses / laquages qui n’étaient pas bloqués.",
+      "Un chantier à plusieurs éléments indépendants ne reçoit plus plusieurs décalages incohérents pour un seul retard.",
+      "Un signalement de retard n’envoie plus plusieurs propositions alternatives contradictoires : une seule proposition minimale.",
+    ],
+  },
+  {
     id: "2026-09-15-horaires-presets-saison",
     title: "Préréglages d’horaires et bascule été / hiver",
     items: [

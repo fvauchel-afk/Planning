@@ -1,5 +1,5 @@
 import type { DelayPlanResult } from "@/lib/engine/delay";
-import { planBestDelayInWindow, planDelayCascade } from "@/lib/engine/delay";
+import { planBestDelayInWindow } from "@/lib/engine/delay";
 import {
   mergePlanIntoInput,
   planChantier,
@@ -217,9 +217,9 @@ export function generateDelaySolutions(
     : undefined;
   const flex =
     options?.flex ??
-    (chantier ? chantierToleranceWorkingDays(chantier) : 10);
-  if (origin?.date_debut && flex > 0) {
-    const target = options?.target ?? origin.date_debut;
+    (options?.target && chantier ? chantierToleranceWorkingDays(chantier) : 0);
+  if (origin?.date_debut && options?.target && flex >= 0) {
+    const target = options.target;
     const windowed = planBestDelayInWindow(snapshot, phaseId, target, flex, {
       scope: options?.scope,
     });
@@ -231,18 +231,6 @@ export function generateDelaySolutions(
           windowed,
           `Meilleur créneau dans la marge (± ${flex} j. ouvrés)`,
         ),
-      );
-    }
-  }
-
-  if (origin?.date_debut && halfDays !== 0) {
-    const lighter = planDelayCascade(snapshot, phaseId, halfDays, {
-      scope: options?.scope ?? "dependances",
-    });
-    if (lighter.status === "ok" && lighter.patches.length) {
-      pushUnique(
-        solutions,
-        solutionFromDelay(snapshot, lighter, "Cascade sans toucher un prioritaire"),
       );
     }
   }
