@@ -30,7 +30,15 @@ function isVroomAuthError(message: string | undefined): boolean {
 
 function graphErrorMessage(json: GraphErrorBody, status: number): string {
   const raw = json.error?.message || `Erreur Microsoft Graph (${status}).`;
-  if (isJwtAuthError(raw) || isVroomAuthError(raw)) {
+  const code = json.error?.code ?? "";
+  const combined = `${code} ${raw}`;
+  if (
+    isJwtAuthError(raw) ||
+    isVroomAuthError(raw) ||
+    /accessDenied|access denied|acc[eè]s refus[eé]/i.test(combined) ||
+    status === 401 ||
+    status === 403
+  ) {
     return "Microsoft a refusé l’accès au OneDrive personnel. Réessayez, ou ouvrez l’onglet OneDrive puis « Connecter OneDrive ».";
   }
   return raw;
@@ -163,9 +171,35 @@ export async function probeOnedriveConnection(): Promise<OnedriveProbeResult> {
   try {
     const token = await getValidAccessToken();
     await graphFetch<{ id?: string }>(token, "/me/drive?$select=id");
+    // Dossier racine (sauvegarde, création chantier) : /me/drive seul ne suffit pas.
+    await getRootFolder();
+    let shareWarning: string | undefined;
+    try {
+      const cfg = getOnedriveConfig();
+      const shared = await resolveShareItem(token, cfg.rootShareUrl);
+      await graphFetch<{ id?: string }>(
+        token,
+        `${meItemPath(shared.itemId)}?$select=id`,
+      );
+    } catch (shareErr) {
+      const shareMessage =
+        shareErr instanceof Error
+          ? shareErr.message
+          : "Accès dossier partagé impossible.";
+      if (needsOnedriveReconnect(shareMessage)) {
+        shareWarning =
+          "Microsoft refuse les dossiers partagés. La copie d’une réception ou d’un bon de commande peut échouer : reconnectez OneDrive.";
+      }
+    }
     const label =
       (await fetchOnedriveAccountLabel(token)) || row.account_label || null;
-    return { ...base, connected: true, expired: false, account: label };
+    return {
+      ...base,
+      connected: true,
+      expired: false,
+      account: label,
+      error: shareWarning,
+    };
   } catch (err) {
     const message =
       err instanceof Error ? err.message : "Accès OneDrive impossible.";
@@ -466,26 +500,22 @@ export async function uploadJsonToBackupFolder(input: {
   return { name: json.name || safeName, webUrl: json.webUrl };
 }
 
-export async function uploadBytesToShareFolder(input: {
-  shareUrl: string;
-  fileName: string;
-  bytes: Buffer | Uint8Array;
-  contentType: string;
-}): Promise<void> {
-  const token = await getValidAccessToken();
-  const folder = await resolveShareItem(token, input.shareUrl);
-  const safeName = sanitizeOnedriveName(input.fileName, "document.bin");
+async function uploadToMeDriveItem(
+  token: string,
+  itemId: string,
+  fileName: string,
+  bytes: Buffer | Uint8Array,
+  contentType: string,
+): Promise<void> {
+  const safeName = sanitizeOnedriveName(fileName, "document.bin");
   const encodedName = encodeURIComponent(safeName);
-  const raw =
-    input.bytes instanceof Uint8Array
-      ? input.bytes
-      : new Uint8Array(input.bytes);
+  const raw = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
   const res = await graphRequest(
     token,
-    `${meItemPath(folder.itemId)}:/${encodedName}:/content`,
+    `${meItemPath(itemId)}:/${encodedName}:/content`,
     {
       method: "PUT",
-      headers: { "Content-Type": input.contentType },
+      headers: { "Content-Type": contentType },
       body: raw as unknown as BodyInit,
     },
   );
@@ -495,16 +525,50 @@ export async function uploadBytesToShareFolder(input: {
   }
 }
 
+export async function uploadBytesToShareFolder(input: {
+  shareUrl: string;
+  fileName: string;
+  bytes: Buffer | Uint8Array;
+  contentType: string;
+  folderName?: string;
+}): Promise<void> {
+  const token = await getValidAccessToken();
+  try {
+    const folder = await resolveShareItem(token, input.shareUrl);
+    await uploadToMeDriveItem(
+      token,
+      folder.itemId,
+      input.fileName,
+      input.bytes,
+      input.contentType,
+    );
+    return;
+  } catch (err) {
+    const folderName = input.folderName?.trim();
+    if (!folderName) throw err;
+    const child = await ensureChildFolder(folderName);
+    await uploadToMeDriveItem(
+      token,
+      child.itemId,
+      input.fileName,
+      input.bytes,
+      input.contentType,
+    );
+  }
+}
+
 export async function uploadPngToShareFolder(input: {
   shareUrl: string;
   fileName: string;
   pngBytes: Buffer;
+  folderName?: string;
 }): Promise<void> {
   await uploadBytesToShareFolder({
     shareUrl: input.shareUrl,
     fileName: input.fileName,
     bytes: input.pngBytes,
     contentType: "image/png",
+    folderName: input.folderName,
   });
 }
 

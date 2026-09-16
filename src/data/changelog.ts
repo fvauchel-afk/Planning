@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-16-onedrive-statut-partage",
+    title: "Statut OneDrive et copie des documents",
+    items: [
+      "L’onglet OneDrive ne reste plus « connecté » en vert si Microsoft refuse les dossiers partagés (copie d’une réception ou d’un bon de commande) : le bandeau passe en avertissement et demande de reconnecter.",
+      "Si le lien de partage d’un chantier est refusé, la copie du PDF retente dans le dossier du client sur le OneDrive du compte.",
+    ],
+  },
+  {
     id: "2026-09-16-reception-pose-pdf",
     title: "Clôturer une pose et générer la réception",
     items: [

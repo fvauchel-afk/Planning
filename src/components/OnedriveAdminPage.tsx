@@ -48,17 +48,25 @@ export function OnedriveAdminPage() {
       ) : (
         <div
           className={`rounded-lg border px-4 py-3 text-sm ${
-            connected
+            connected && !status.error
               ? "border-emerald-200 bg-emerald-50 text-emerald-900"
               : "border-amber-200 bg-amber-50 text-amber-950"
           }`}
         >
-          {connected ? (
+          {connected && !status.error ? (
             <>
               <p className="font-medium">OneDrive est connecté.</p>
               {status.account && (
                 <p className="mt-1">Compte : {status.account}</p>
               )}
+            </>
+          ) : connected && status.error ? (
+            <>
+              <p className="font-medium">OneDrive est partiellement connecté.</p>
+              {status.account && (
+                <p className="mt-1">Compte : {status.account}</p>
+              )}
+              <p className="mt-2 text-amber-900">{status.error}</p>
             </>
           ) : expired ? (
             <>
