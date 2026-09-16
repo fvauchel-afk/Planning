@@ -334,11 +334,12 @@ function packCascade(
         }
         if (!relocatable.has(phase.id)) continue;
         const current = dates.get(phase.id)!;
-        const prevPhase = i === 0 ? null : list[i - 1];
+        const prevPhase = i === 0 ? undefined : list[i - 1];
         const prev = prevPhase ? dates.get(prevPhase.id) : undefined;
-        const prevMoved =
-          Boolean(prevPhase) &&
-          (prevPhase.id === origin.id || phaseDatesMoved(prevPhase, dates));
+        const prevMoved = Boolean(
+          prevPhase &&
+            (prevPhase.id === origin.id || phaseDatesMoved(prevPhase, dates)),
+        );
         let start = current.debut;
         if (
           !isVirtualPlanningRow(rowId) &&
@@ -957,7 +958,9 @@ function runDelayCascadeSelfCheck() {
   }
 
   const adminDelay = planDelayCascade(snapshot, "admin-a", 1);
-  const adminIds = [...new Set(adminDelay.patches.map((item) => item.id))];
+  const adminIds = Array.from(
+    new Set(adminDelay.patches.map((item) => item.id)),
+  );
   if (adminIds.some((id) => id !== "admin-a")) {
     throw new Error(
       `delay-cascade: un retard admin sans chevauchement ni fab bougée ne doit pas entraîner la file aval (${adminIds.join(", ")})`,
