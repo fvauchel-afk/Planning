@@ -39,6 +39,7 @@ export function PhaseFicheModal({
   const [delayKind, setDelayKind] = useState<"fixe" | "cible">("fixe");
   const [quantite, setQuantite] = useState("1");
   const [unite, setUnite] = useState<"jours" | "demi">("jours");
+  const [sens, setSens] = useState<"retard" | "avance">("retard");
   const [targetDate, setTargetDate] = useState("");
   const [flex, setFlex] = useState("3");
   const [scope, setScope] = useState<DelayScope>("dependances");
@@ -77,7 +78,7 @@ export function PhaseFicheModal({
   function halfDaysFromForm(): number {
     const raw = Number(quantite);
     if (!raw || raw <= 0) return 0;
-    return unite === "jours" ? raw * 2 : raw;
+    return (unite === "jours" ? raw * 2 : raw) * (sens === "avance" ? -1 : 1);
   }
 
   function reporterId(): string | null {
@@ -335,6 +336,29 @@ export function PhaseFicheModal({
               </label>
             </fieldset>
             {delayKind === "fixe" ? (
+            <>
+            <fieldset className="grid grid-cols-2 gap-2 text-sm">
+              <legend className="mb-1 font-medium">Sens</legend>
+              {(["retard", "avance"] as const).map((value) => (
+                <label
+                  key={value}
+                  className={`flex min-h-11 items-center justify-center rounded-lg border ${
+                    sens === value
+                      ? "border-stone-900 bg-stone-900 text-white"
+                      : "border-stone-300 bg-white"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    className="sr-only"
+                    name="sens"
+                    checked={sens === value}
+                    onChange={() => setSens(value)}
+                  />
+                  {value === "retard" ? "Retard" : "Avance"}
+                </label>
+              ))}
+            </fieldset>
             <label className="block text-sm">
               <span className="mb-1 block font-medium">Durée</span>
               <div className="flex gap-2">
@@ -358,6 +382,7 @@ export function PhaseFicheModal({
                 </select>
               </div>
             </label>
+            </>
             ) : (
             <div className="space-y-3">
               <label className="block text-sm">
