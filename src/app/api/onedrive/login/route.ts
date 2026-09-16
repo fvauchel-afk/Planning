@@ -9,9 +9,25 @@ import {
   requestIsHttps,
 } from "@/lib/onedrive/oauth-state";
 
-export async function GET(request: NextRequest) {
+const NO_STORE = { "Cache-Control": "private, no-store, max-age=0" };
+
+/** GET ne doit jamais 302 vers Microsoft : prefetch / SW / préchargement Chrome. */
+export async function GET() {
+  return NextResponse.json(
+    {
+      error:
+        "La connexion OneDrive se lance uniquement depuis le bouton de l’onglet OneDrive.",
+    },
+    { status: 405, headers: NO_STORE },
+  );
+}
+
+export async function POST(request: NextRequest) {
   const { response } = await requireAdmin(request);
-  if (response) return response;
+  if (response) {
+    response.headers.set("Cache-Control", NO_STORE["Cache-Control"]);
+    return response;
+  }
   try {
     const cfg = getOnedriveConfig();
     const state = crypto.randomUUID();
@@ -27,10 +43,11 @@ export async function GET(request: NextRequest) {
     url.searchParams.set("scope", ONEDRIVE_SCOPES);
     url.searchParams.set("state", state);
     url.searchParams.set("prompt", "select_account");
-    const response = NextResponse.redirect(url.toString());
+    const oauth = NextResponse.redirect(url.toString());
     const cookieOptions = oauthStateCookieOptions(secure);
-    response.cookies.set(ONEDRIVE_OAUTH_STATE_COOKIE, state, cookieOptions);
-    response.cookies.set(ONEDRIVE_OAUTH_REDIRECT_COOKIE, redirectUri, cookieOptions);
+    oauth.cookies.set(ONEDRIVE_OAUTH_STATE_COOKIE, state, cookieOptions);
+    oauth.cookies.set(ONEDRIVE_OAUTH_REDIRECT_COOKIE, redirectUri, cookieOptions);
+    oauth.headers.set("Cache-Control", NO_STORE["Cache-Control"]);
     console.info("[onedrive-oauth] login", {
       host: request.headers.get("host"),
       forwardedProto: request.headers.get("x-forwarded-proto"),
@@ -42,14 +59,16 @@ export async function GET(request: NextRequest) {
       envRedirectUri: cfg.redirectUri,
       statePrefix: state.slice(0, 8),
     });
-    return response;
+    return oauth;
   } catch (err) {
     const message = err instanceof Error ? err.message : "Connexion OneDrive impossible.";
     const origin =
-      process.env.ONEDRIVE_REDIRECT_URI?.replace(/\/api\/onedrive\/callback\/?$/, "") ||
+      process.env.ONEDRIVE_REDIRECT_URI?.replace(/\/api\/onedrive/callback\/?$/, "") ||
       request.nextUrl.origin;
-    return NextResponse.redirect(
+    const fail = NextResponse.redirect(
       `${origin}/admin/onedrive?error=${encodeURIComponent(message)}`,
     );
+    fail.headers.set("Cache-Control", NO_STORE["Cache-Control"]);
+    return fail;
   }
 }

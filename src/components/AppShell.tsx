@@ -101,6 +101,7 @@ export function AppShell({
                 <Link
                   key={link.href}
                   href={link.href}
+                  prefetch={link.href === "/admin/onedrive" ? false : undefined}
                   className={`rounded-md px-3 py-1.5 text-sm ${
                     active
                       ? "bg-amber-700 text-amber-50"
@@ -163,6 +164,7 @@ export function AppShell({
                   <Link
                     key={link.href}
                     href={link.href}
+                    prefetch={link.href === "/admin/onedrive" ? false : undefined}
                     className={`rounded-md px-3 py-3 text-base ${
                       active
                         ? "bg-amber-700 text-amber-50"
