@@ -507,3 +507,8 @@ export const ORIGINE_LABELS: Record<OrigineSignalement, string> = {
 };
 
 export const LOGISTIQUE_ROW_ID = "logistique-sous-traitance";
+export const TRANSPORT_ROW_ID = "transport-livraison";
+
+export function isVirtualPlanningRow(rowId: string): boolean {
+  return rowId === LOGISTIQUE_ROW_ID || rowId === TRANSPORT_ROW_ID;
+}

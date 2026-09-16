@@ -2,6 +2,7 @@
 
 import {
   LOGISTIQUE_ROW_ID,
+  TRANSPORT_ROW_ID,
   PHASE_LABELS,
   absenceLabel,
   type Absence,
@@ -17,9 +18,11 @@ import { phaseIsEstimative, fabricationAwaitingLaunch } from "@/lib/dates-estima
 import {
   LOGISTIQUE_ROW_LABEL,
   LOGISTIQUE_ROW_ORDRE,
+  TRANSPORT_ROW_LABEL,
+  TRANSPORT_ROW_ORDRE,
 } from "@/lib/display-order";
 import { employeeOrdreForPlanning } from "@/lib/employee-row-order";
-import { formatHoursLabel, hoursForSlot } from "@/lib/engine/hours";
+import { formatHoursLabel, hoursInSlots } from "@/lib/engine/hours";
 import { slotsFromExistingPhase, halfFromLabel, type OccupiedSlot } from "@/lib/engine/slots";
 
 export type CalendarAssignment = {
@@ -68,7 +71,14 @@ export function assignmentIndex(snapshot: PlanningSnapshot): AssignmentIndex {
     snapshot.chantiers.map((chantier) => [chantier.id, chantier]),
   );
   for (const phase of snapshot.phases) {
-    const slots = slotsFromExistingPhase(snapshot, phase);
+    const baseSlots = slotsFromExistingPhase(snapshot, phase);
+    const slots =
+      phase.type_phase === "livraison"
+        ? [
+            ...baseSlots,
+            ...baseSlots.map((slot) => ({ ...slot, rowId: TRANSPORT_ROW_ID })),
+          ]
+        : baseSlots;
     slotsByPhase.set(phase.id, slots);
     const element = elementById.get(phase.element_id);
     if (!element) continue;
@@ -111,6 +121,13 @@ export function planningRows(employees: Employee[]): CalendarRow[] {
       employee: null,
       ordre: LOGISTIQUE_ROW_ORDRE,
     },
+    {
+      id: TRANSPORT_ROW_ID,
+      label: TRANSPORT_ROW_LABEL,
+      subtitle: "véhicule",
+      employee: null,
+      ordre: TRANSPORT_ROW_ORDRE,
+    },
   ];
   rows.sort((left, right) => {
     if (left.ordre !== right.ordre) return left.ordre - right.ordre;
@@ -138,6 +155,7 @@ export function firstChantierOccurrence(
     if (!assignments.some((item) => item.chantier.id === chantierId)) continue;
     const [rowId, date, halfRaw] = key.split("|");
     if (!rowId || !date) continue;
+    if (rowId === TRANSPORT_ROW_ID) continue;
     const half = halfRaw === "1" ? 1 : 0;
     const order = rowOrder.get(rowId) ?? 999;
     if (
@@ -183,18 +201,27 @@ export function assignmentsForDay(
   return assignmentIndex(snapshot).byDay.get(dayKey(rowId, iso)) ?? [];
 }
 
-/** Heures occupées sur la plage affichée (créneaux matin / après-midi où il y a un bloc). */
+/** Durée réelle des phases sur la ligne (une fois par phase, même si le bloc est dupliqué ailleurs). */
 export function rowHoursInDays(
   snapshot: PlanningSnapshot,
   rowId: string,
   days: string[],
 ): number {
+  const index = assignmentIndex(snapshot);
+  const daySet = new Set(days);
+  const seen = new Set<string>();
   let total = 0;
   for (const iso of days) {
     for (const half of [0, 1] as const) {
       const slot = half === 0 ? "matin" : "apres_midi";
-      if (assignmentsForCell(snapshot, rowId, iso, slot).length === 0) continue;
-      total += hoursForSlot(snapshot, rowId, iso, half);
+      for (const assignment of assignmentsForCell(snapshot, rowId, iso, slot)) {
+        if (seen.has(assignment.phase.id)) continue;
+        seen.add(assignment.phase.id);
+        const slots = (index.slotsByPhase.get(assignment.phase.id) ?? []).filter(
+          (item) => item.rowId === rowId && daySet.has(item.date),
+        );
+        total += hoursInSlots(snapshot, slots);
+      }
     }
   }
   return total;
@@ -234,29 +261,44 @@ export function absencesForCell(
 export function AssignmentChip({
   assignment,
   compact,
+  showLivraisonAddress,
 }: {
   assignment: CalendarAssignment;
   compact?: boolean;
+  showLivraisonAddress?: boolean;
 }) {
   const color = colorForChantier(assignment.chantier.id);
   const needsLaunch = fabricationAwaitingLaunch(assignment.phase);
+  const address =
+    assignment.chantier.adresse_livraison?.trim() ||
+    assignment.chantier.adresse?.trim() ||
+    "";
+  const detail =
+    showLivraisonAddress && assignment.phase.type_phase === "livraison"
+      ? address || assignment.element.nom_element
+      : assignment.element.nom_element;
   return (
     <div
       className={`overflow-hidden rounded px-1.5 py-0.5 ${compact ? "text-[10px] leading-tight" : "text-xs"} ${
         needsLaunch ? "ring-2 ring-orange-500" : ""
       }`}
       style={{ backgroundColor: color.bg, color: color.fg }}
-      title={`${assignment.chantier.nom_client} — ${assignment.element.nom_element} (${PHASE_LABELS[assignment.phase.type_phase]}) · ${formatHoursLabel(assignment.phase.duree_estimee_heures)}${
+      title={`${assignment.chantier.nom_client} — ${detail} (${PHASE_LABELS[assignment.phase.type_phase]}) · ${formatHoursLabel(assignment.phase.duree_estimee_heures)}${
         needsLaunch ? " — à valider" : ""
       }`}
     >
       <span className="font-semibold">{assignment.chantier.nom_client}</span>
-      {!compact && (
-        <span className="opacity-90">
-          {" "}
-          · {assignment.element.nom_element}
-        </span>
-      )}
+      {showLivraisonAddress && assignment.phase.type_phase === "livraison" ? (
+        address ? (
+          <span className={`opacity-90 ${compact ? "block truncate" : ""}`}>
+            {compact ? address : ` · ${address}`}
+          </span>
+        ) : !compact ? (
+          <span className="opacity-90"> · {assignment.element.nom_element}</span>
+        ) : null
+      ) : !compact ? (
+        <span className="opacity-90"> · {assignment.element.nom_element}</span>
+      ) : null}
       {Number(assignment.phase.duree_estimee_heures) > 0 && !compact ? (
         <span className="ml-1 rounded bg-black/35 px-1 text-[11px] font-bold tabular-nums tracking-wide">
           {formatHoursLabel(assignment.phase.duree_estimee_heures)}

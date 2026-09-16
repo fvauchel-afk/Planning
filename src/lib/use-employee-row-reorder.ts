@@ -10,7 +10,7 @@ import {
 } from "react";
 import { planningRows, type CalendarRow } from "@/lib/calendar";
 import { persistEmployeeOrdersFromVisualRowIds } from "@/lib/employee-row-order";
-import { LOGISTIQUE_ROW_ID, type Employee } from "@/lib/types";
+import { isVirtualPlanningRow, type Employee } from "@/lib/types";
 
 type RowOrderUpdate = { id: string; ordre_affichage: number };
 
@@ -115,7 +115,7 @@ export function useEmployeeRowReorder({
 
   const rowHandleProps = useCallback(
     (rowId: string) => {
-      const canDrag = enabled && rowId !== LOGISTIQUE_ROW_ID;
+      const canDrag = enabled && !isVirtualPlanningRow(rowId);
       return {
         onPointerDown: (event: ReactPointerEvent<HTMLElement>) => {
           if (!canDrag) return;

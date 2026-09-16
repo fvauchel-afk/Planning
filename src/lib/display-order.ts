@@ -1,6 +1,9 @@
 /** Ordre de la ligne Thermolaquage (ex-Logistique) dans le planning équipe. */
 export const LOGISTIQUE_ROW_ORDRE = 8;
 export const LOGISTIQUE_ROW_LABEL = "Thermolaquage";
+/** Juste sous Thermolaquage : résumé visuel des livraisons. */
+export const TRANSPORT_ROW_ORDRE = 8.5;
+export const TRANSPORT_ROW_LABEL = "Transport / Livraison";
 
 const ORDRE_PAR_PRENOM: Record<string, number> = {
   jonathan: 1,
