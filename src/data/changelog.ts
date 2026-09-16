@@ -11,6 +11,13 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-16-ferie-toute-equipe",
+    title: "Jour férié pour toute l’équipe",
+    items: [
+      "Sur une absence « Jour férié entreprise », une case « Appliquer à toute l’équipe » crée l’absence pour tous les salariés actifs d’un coup.",
+    ],
+  },
+  {
     id: "2026-09-16-synthese-seuil-110",
     title: "Couleurs de la Synthèse de charge",
     items: [
