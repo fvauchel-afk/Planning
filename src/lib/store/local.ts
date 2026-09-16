@@ -5,7 +5,7 @@ import {
   schedulePhaseInserts,
 } from "@/lib/engine/schedule-chantier";
 import { ordreAffichageFromNom } from "@/lib/display-order";
-import { defaultHoraires, normalizeHoraire, normalizeHorairesEmploye } from "@/lib/engine/hours";
+import { defaultHoraires, normalizeHoraire, normalizeHorairesEmploye, parseSaisonForcee } from "@/lib/engine/hours";
 import { normalizePhasesForPlanning } from "@/lib/engine/normalize-phases";
 import { createSeedSnapshot } from "@/lib/seed";
 import type {
@@ -93,6 +93,7 @@ export function loadLocalSnapshot(): PlanningSnapshot {
         parsed.horaires && parsed.horaires.length > 0
           ? parsed.horaires.map((row) => normalizeHoraire(row))
           : defaultHoraires(),
+      saison_forcee: parseSaisonForcee(parsed.saison_forcee),
       absences: (parsed.absences ?? []).map((absence) => ({
         ...absence,
         motif_precision: absence.motif_precision ?? null,
@@ -573,6 +574,16 @@ export function localReplaceHoraires(
       ordre: index,
     }),
   );
+  saveLocalSnapshot(next);
+  return next;
+}
+
+export function localSetSaisonForcee(
+  snapshot: PlanningSnapshot,
+  saison: "ete" | "hiver" | null,
+): PlanningSnapshot {
+  const next = clone(snapshot);
+  next.saison_forcee = saison;
   saveLocalSnapshot(next);
   return next;
 }

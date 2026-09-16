@@ -2,11 +2,14 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  activeSaisonStatus,
   defaultHoraires,
   defaultHorairesEmploye,
   dayHoursFromJour,
   formatHoursLabel,
   formatMmddInput,
+  horairesFromPreset,
+  HORAIRE_PRESETS,
   horairesOf,
   mmddFromInput,
   normalizeHorairesEmploye,
@@ -153,12 +156,13 @@ function HorairesTable({
 }
 
 export function EmployeesPage() {
-  const { snapshot, upsertEmployee, patchEmployee, saveHoraires, loading } =
+  const { snapshot, upsertEmployee, patchEmployee, saveHoraires, setSaisonForcee, loading } =
     usePlanning();
   const [saisons, setSaisons] = useState<HoraireSaison[]>(() =>
     horairesOf(snapshot),
   );
   const [savingSaisons, setSavingSaisons] = useState(false);
+  const [savingSaisonForcee, setSavingSaisonForcee] = useState(false);
   const [saisonInfo, setSaisonInfo] = useState<string | null>(null);
   const [saisonError, setSaisonError] = useState<string | null>(null);
 
@@ -268,6 +272,25 @@ export function EmployeesPage() {
       setSaisonError(formatSaveError(err, "les saisons n’ont pas été enregistrées"));
     } finally {
       setSavingSaisons(false);
+    }
+  }
+
+  async function onForceSaison(saison: "ete" | "hiver" | null) {
+    setSaisonError(null);
+    setSavingSaisonForcee(true);
+    try {
+      await setSaisonForcee(saison);
+      setSaisonInfo(
+        saison === null
+          ? "Retour au calcul automatique des saisons."
+          : saison === "ete"
+            ? "Été forcé manuellement."
+            : "Hiver forcé manuellement.",
+      );
+    } catch (err) {
+      setSaisonError(formatSaveError(err, "la saison n’a pas été enregistrée"));
+    } finally {
+      setSavingSaisonForcee(false);
     }
   }
 
@@ -383,6 +406,52 @@ export function EmployeesPage() {
             Réinitialiser été / hiver
           </button>
         </div>
+        {(() => {
+          const status = activeSaisonStatus(snapshot);
+          const nom = status.kind === "ete" ? "Été" : "Hiver";
+          const source =
+            status.source === "auto"
+              ? "calcul automatique"
+              : "forcée manuellement";
+          return (
+            <div className="space-y-2 border-t border-stone-200 pt-3">
+              <p className="text-sm font-medium text-stone-900">
+                Saison active : {nom} ({source})
+              </p>
+              <p className="text-xs text-stone-600">
+                Les dates ci-dessus restent le calcul par défaut. Une bascule
+                manuelle s’applique partout (planning, heures) jusqu’à nouvel
+                ordre.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  disabled={savingSaisonForcee}
+                  className="rounded border border-stone-300 bg-white px-3 py-2 text-sm disabled:opacity-60"
+                  onClick={() => void onForceSaison("ete")}
+                >
+                  Forcer été
+                </button>
+                <button
+                  type="button"
+                  disabled={savingSaisonForcee}
+                  className="rounded border border-stone-300 bg-white px-3 py-2 text-sm disabled:opacity-60"
+                  onClick={() => void onForceSaison("hiver")}
+                >
+                  Forcer hiver
+                </button>
+                <button
+                  type="button"
+                  disabled={savingSaisonForcee || status.source === "auto"}
+                  className="rounded border border-stone-300 px-3 py-2 text-sm disabled:opacity-60"
+                  onClick={() => void onForceSaison(null)}
+                >
+                  Revenir au calcul automatique
+                </button>
+              </div>
+            </div>
+          );
+        })()}
       </form>
 
       <div className="grid gap-6 lg:grid-cols-[1fr_minmax(22rem,32rem)]">
@@ -485,6 +554,30 @@ export function EmployeesPage() {
               </label>
             ))}
           </fieldset>
+          <div className="space-y-2">
+            <p className="text-sm font-medium text-stone-900">Préréglage horaires</p>
+            <p className="text-xs text-stone-600">
+              Remplit été et hiver d’un coup. Vous pouvez ensuite modifier chaque
+              case.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {HORAIRE_PRESETS.map((preset) => (
+                <button
+                  key={preset.id}
+                  type="button"
+                  className="rounded border border-amber-700 bg-amber-50 px-3 py-2 text-sm text-amber-950"
+                  onClick={() => {
+                    const next = horairesFromPreset(preset.id);
+                    setHoraires(next);
+                    dirty.current.add("horaires");
+                    if (editing) live.schedule({ horaires: next });
+                  }}
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+          </div>
           <HorairesTable
             title="Horaires été"
             saison="ete"

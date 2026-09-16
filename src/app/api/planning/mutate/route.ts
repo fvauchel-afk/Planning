@@ -20,6 +20,7 @@ import {
   supabaseDeleteAbsence,
   supabasePatchAbsence,
   supabaseReplaceHoraires,
+  supabaseSetSaisonForcee,
   supabaseSetSignalementStatut,
   supabaseUpsertEmployee,
   supabasePatchEmployee,
@@ -134,6 +135,7 @@ type MutateBody =
       templateId: string;
     }
   | { action: "saveHoraires"; rows: HoraireSaison[] }
+  | { action: "setSaisonForcee"; saison: "ete" | "hiver" | null }
   | { action: "confirmPhaseDates"; ids: string[] }
   | { action: "validateChantierPlan"; chantierId: string };
 
@@ -181,6 +183,7 @@ export async function POST(request: NextRequest) {
     "deleteDemande",
     "sendDemandeMail",
     "saveHoraires",
+    "setSaisonForcee",
     "validateChantierPlan",
   ]);
 
@@ -521,6 +524,12 @@ export async function POST(request: NextRequest) {
       }
     } else if (body.action === "saveHoraires") {
       await supabaseReplaceHoraires(body.rows);
+    } else if (body.action === "setSaisonForcee") {
+      const saison = body.saison;
+      if (saison !== null && saison !== "ete" && saison !== "hiver") {
+        return NextResponse.json({ error: "Saison inconnue." }, { status: 400 });
+      }
+      await supabaseSetSaisonForcee(saison);
     } else if (body.action === "confirmPhaseDates") {
       const ids = (body.ids ?? []).filter(Boolean);
       if (ids.length === 0) {

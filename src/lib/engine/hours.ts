@@ -1,4 +1,4 @@
-import { addDays, isoWeekday, isSunday } from "@/lib/dates";
+import { addDays, isoWeekday, isSunday, toISODate } from "@/lib/dates";
 import {
   JOURS_OUVRES,
   type Employee,
@@ -83,6 +83,87 @@ export function defaultHorairesEmploye(options?: {
     hiver: defaultHorairesSaisonEmploye("hiver", options),
   };
 }
+
+export const HORAIRE_PRESETS = [
+  { id: "28", label: "28 h/semaine", weekDebouche: "14:15" },
+  { id: "35", label: "35 h/semaine", weekDebouche: "16:00" },
+  { id: "39", label: "39 h/semaine", weekDebouche: "17:00" },
+] as const;
+
+export type HorairePresetId = (typeof HORAIRE_PRESETS)[number]["id"];
+
+function saisonFromWeekDebouche(weekDebouche: string): HorairesSaisonEmploye {
+  const week = jourSemaine("07:30", "12:00", "13:00", weekDebouche);
+  const friday = jourSemaine("07:00", "12:00", "", "");
+  const jours: Record<string, HorairesJour> = {};
+  for (const day of JOURS_OUVRES) {
+    if (day === 6) {
+      jours[String(day)] = emptyHorairesJour();
+    } else if (day === 5) {
+      jours[String(day)] = { ...friday };
+    } else {
+      jours[String(day)] = { ...week };
+    }
+  }
+  return { jours };
+}
+
+function cloneSaisonJours(jours: Record<string, HorairesJour>): Record<string, HorairesJour> {
+  const next: Record<string, HorairesJour> = {};
+  for (const day of JOURS_OUVRES) {
+    const key = String(day);
+    next[key] = { ...(jours[key] ?? emptyHorairesJour()) };
+  }
+  return next;
+}
+
+export function horairesFromPreset(id: HorairePresetId): HorairesEmploye {
+  const preset = HORAIRE_PRESETS.find((item) => item.id === id);
+  const saison = saisonFromWeekDebouche(preset?.weekDebouche ?? "16:00");
+  return {
+    ete: { jours: cloneSaisonJours(saison.jours) },
+    hiver: { jours: cloneSaisonJours(saison.jours) },
+  };
+}
+
+function weekHours(horaires: HorairesSaisonEmploye): number {
+  const sum = JOURS_OUVRES.reduce((total, day) => {
+    return total + dayHoursFromJour(horaires.jours[String(day)] ?? emptyHorairesJour());
+  }, 0);
+  return Math.round(sum * 100) / 100;
+}
+
+function runHorairePresetSelfCheck() {
+  const twentyEight = horairesFromPreset("28");
+  twentyEight.ete.jours["1"] = { ...twentyEight.ete.jours["1"]!, debouche: "99:00" };
+  if (twentyEight.hiver.jours["1"]?.debouche !== "14:15") {
+    throw new Error("horaires: été et hiver du préréglage doivent être indépendants");
+  }
+  for (const [id, expected] of [
+    ["28", 28],
+    ["35", 35],
+    ["39", 39],
+  ] as const) {
+    const horaires = horairesFromPreset(id);
+    if (weekHours(horaires.ete) !== expected || weekHours(horaires.hiver) !== expected) {
+      throw new Error(`horaires: préréglage ${id} h attendu ${expected}`);
+    }
+    const friday = horaires.ete.jours["5"];
+    if (
+      friday?.embauche !== "07:00" ||
+      friday.pause_debut !== "12:00" ||
+      friday.pause_reprise ||
+      friday.debouche
+    ) {
+      throw new Error(`horaires: vendredi du préréglage ${id} h`);
+    }
+    const saturday = horaires.ete.jours["6"];
+    if (saturday?.embauche || saturday?.pause_debut) {
+      throw new Error(`horaires: samedi du préréglage ${id} h doit être vide`);
+    }
+  }
+}
+runHorairePresetSelfCheck();
 
 export function emptyHorairesEmploye(): HorairesEmploye {
   return {
@@ -173,11 +254,37 @@ function inYearlyRange(md: string, start: string, end: string): boolean {
   return md >= start || md <= end;
 }
 
+export function parseSaisonForcee(value: unknown): "ete" | "hiver" | null {
+  return value === "ete" || value === "hiver" ? value : null;
+}
+
+export function saisonKind(saison: HoraireSaison): "ete" | "hiver" {
+  const nom = (saison.nom ?? "").toLowerCase();
+  if (nom.includes("été") || nom.includes("ete") || saison.ordre === 0) {
+    return "ete";
+  }
+  return "hiver";
+}
+
+function saisonRowForKind(
+  saisons: HoraireSaison[],
+  kind: "ete" | "hiver",
+): HoraireSaison {
+  return (
+    saisons.find((row) => saisonKind(row) === kind) ??
+    defaultHoraires().find((row) => saisonKind(row) === kind) ??
+    defaultHoraires()[kind === "ete" ? 0 : 1]!
+  );
+}
+
 export function saisonForDate(
   snapshot: PlanningSnapshot,
   date: string,
 ): HoraireSaison {
   const runtime = runtimeFor(snapshot);
+  if (runtime.saisonForcee) {
+    return saisonRowForKind(runtime.saisons, runtime.saisonForcee);
+  }
   const md = monthDay(date);
   const cached = runtime.saisonByMd.get(md);
   if (cached) return cached;
@@ -197,12 +304,13 @@ export function saisonForDate(
   return saison;
 }
 
-export function saisonKind(saison: HoraireSaison): "ete" | "hiver" {
-  const nom = (saison.nom ?? "").toLowerCase();
-  if (nom.includes("été") || nom.includes("ete") || saison.ordre === 0) {
-    return "ete";
-  }
-  return "hiver";
+export function activeSaisonStatus(
+  snapshot: PlanningSnapshot,
+  today = toISODate(new Date()),
+): { kind: "ete" | "hiver"; source: "auto" | "manuel" } {
+  const forced = parseSaisonForcee(snapshot.saison_forcee);
+  if (forced) return { kind: forced, source: "manuel" };
+  return { kind: saisonKind(saisonForDate(snapshot, today)), source: "auto" };
 }
 
 export function minutesFromTime(value: unknown): number | null {
@@ -280,6 +388,7 @@ type HoursRuntime = {
   holidays: { start: string; end: string }[];
   offByEmployee: Map<string, { start: string; end: string }[]>;
   saisons: HoraireSaison[];
+  saisonForcee: "ete" | "hiver" | null;
   saisonByMd: Map<string, HoraireSaison>;
   horairesByEmployee: Map<string, HorairesEmploye>;
   hours: Map<string, number>;
@@ -310,6 +419,7 @@ function runtimeFor(snapshot: PlanningSnapshot): HoursRuntime {
     holidays,
     offByEmployee,
     saisons: [...horairesOf(snapshot)].sort((a, b) => a.ordre - b.ordre),
+    saisonForcee: parseSaisonForcee(snapshot.saison_forcee),
     saisonByMd: new Map(),
     horairesByEmployee: new Map(),
     hours: new Map(),

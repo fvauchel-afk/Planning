@@ -14,7 +14,7 @@ import {
   schedulePhaseInserts,
 } from "@/lib/engine/schedule-chantier";
 import { compareEmployeesByOrdre, ordreAffichageFromNom } from "@/lib/display-order";
-import { defaultHoraires, normalizeHoraire, normalizeHorairesEmploye } from "@/lib/engine/hours";
+import { defaultHoraires, normalizeHoraire, normalizeHorairesEmploye, parseSaisonForcee } from "@/lib/engine/hours";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
   asIsoDate,
@@ -175,8 +175,9 @@ async function fetchSupabaseSnapshotOnce(): Promise<PlanningSnapshot> {
       ascending: false,
     }),
     supabase.from("sous_traitants").select("*").order("nom"),
+    supabase.from("planning_reglages").select("saison_forcee").eq("id", "default").maybeSingle(),
   ]);
-  const [signalements, receptions, demandes, sousTraitants] = extra;
+  const [signalements, receptions, demandes, sousTraitants, reglages] = extra;
 
   const signalementRows = isMissingSchemaError(signalements.error)
     ? []
@@ -319,6 +320,15 @@ async function fetchSupabaseSnapshotOnce(): Promise<PlanningSnapshot> {
         }),
       );
       return rows.length > 0 ? rows : defaultHoraires();
+    })(),
+    saison_forcee: (() => {
+      if (isMissingSchemaError(reglages.error)) return null;
+      if (reglages.error) {
+        logSupabaseError("planning_reglages", reglages.error);
+        return null;
+      }
+      const row = reglages.data as { saison_forcee?: unknown } | null;
+      return parseSaisonForcee(row?.saison_forcee);
     })(),
   };
   const started = phaseIdsStartedToday(snapshot);
@@ -1370,6 +1380,18 @@ export async function supabaseReplaceHoraires(
     ordre: index,
   }));
   const { error } = await supabase.from("horaires_saisonniers").insert(payload);
+  if (error) throw wrapSupabaseError(error);
+}
+
+export async function supabaseSetSaisonForcee(
+  saison: "ete" | "hiver" | null,
+): Promise<void> {
+  const supabase = createSupabaseServerClient();
+  const { error } = await supabase.from("planning_reglages").upsert({
+    id: "default",
+    saison_forcee: saison,
+  });
+  if (error && isMissingSchemaError(error)) return;
   if (error) throw wrapSupabaseError(error);
 }
 
