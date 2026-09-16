@@ -51,13 +51,18 @@ export function eachDay(fromIso: string, count: number): string[] {
 }
 
 export function eachDayInclusive(fromIso: string, toIso: string): string[] {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fromIso) || !/^\d{4}-\d{2}-\d{2}$/.test(toIso)) {
+    return [];
+  }
   const start = fromIso <= toIso ? fromIso : toIso;
   const end = fromIso <= toIso ? toIso : fromIso;
   const days: string[] = [];
   let cursor = start;
-  while (cursor <= end) {
+  for (let i = 0; i < 800 && cursor <= end; i += 1) {
     days.push(cursor);
-    cursor = addDays(cursor, 1);
+    const next = addDays(cursor, 1);
+    if (next === cursor) break;
+    cursor = next;
   }
   return days;
 }

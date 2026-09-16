@@ -41,13 +41,32 @@ export function isMissingSchemaError(err: unknown): boolean {
     typeof err === "object" && err && "code" in err
       ? String((err as { code: unknown }).code)
       : "";
-  return (
-    code === "PGRST205" ||
-    message.includes("schema cache") ||
-    message.includes("Could not find the table") ||
-    message.includes("Tables Supabase introuvables")
-  );
+  if (code === "PGRST205" || code === "42P01") return true;
+  if (/could not find the table/i.test(message)) return true;
+  if (message.includes("Tables Supabase introuvables")) return true;
+  if (/schema cache/i.test(message) && /column/i.test(message)) return false;
+  return /schema cache/i.test(message) && /table/i.test(message);
 }
+
+function runMissingSchemaSelfCheck() {
+  if (
+    !isMissingSchemaError({
+      code: "PGRST205",
+      message: "Could not find the table 'public.x' in the schema cache",
+    })
+  ) {
+    throw new Error("errors: table absente doit être reconnue");
+  }
+  if (
+    isMissingSchemaError({
+      code: "PGRST204",
+      message: "Could not find the 'proposition' column of 'signalements' in the schema cache",
+    })
+  ) {
+    throw new Error("errors: une colonne manquante ne doit pas vider toute la table");
+  }
+}
+runMissingSchemaSelfCheck();
 
 export function formatSaveError(
   err: unknown,

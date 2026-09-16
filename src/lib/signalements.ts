@@ -13,7 +13,9 @@ export const PENDING_CHANTIER_MESSAGE =
   "Un signalement est en attente de validation — merci de le traiter avant d’ajouter un nouveau chantier.";
 
 export function pendingSignalements(snapshot: PlanningSnapshot) {
-  return (snapshot.signalements ?? []).filter((item) => item.statut === "en_attente");
+  return (snapshot.signalements ?? []).filter((item) =>
+    signalementEstEnAttente(item.statut),
+  );
 }
 
 export function hasPendingSignalements(snapshot: PlanningSnapshot): boolean {
@@ -28,19 +30,27 @@ export function needsAlgoValidation(result: {
 }
 
 export function parseProposition(raw: unknown): SignalementProposition | null {
-  if (!raw || typeof raw !== "object") return null;
-  const value = raw as Partial<SignalementProposition>;
-  if (!Array.isArray(value.patches)) return null;
+  let value: unknown = raw;
+  if (typeof value === "string" && value.trim()) {
+    try {
+      value = JSON.parse(value) as unknown;
+    } catch {
+      return null;
+    }
+  }
+  if (!value || typeof value !== "object") return null;
+  const parsed = value as Partial<SignalementProposition>;
+  if (!Array.isArray(parsed.patches)) return null;
   return {
-    message: typeof value.message === "string" ? value.message : "",
-    patches: value.patches.filter(
+    message: typeof parsed.message === "string" ? parsed.message : "",
+    patches: parsed.patches.filter(
       (patch): patch is PhasePatch =>
         Boolean(patch && typeof patch === "object" && typeof patch.id === "string"),
     ),
-    repercussions: Array.isArray(value.repercussions) ? value.repercussions : [],
-    createChantier: value.createChantier,
-    alternatives: Array.isArray(value.alternatives)
-      ? value.alternatives.filter(
+    repercussions: Array.isArray(parsed.repercussions) ? parsed.repercussions : [],
+    createChantier: parsed.createChantier,
+    alternatives: Array.isArray(parsed.alternatives)
+      ? parsed.alternatives.filter(
           (item): item is NonNullable<SignalementProposition["alternatives"]>[number] =>
             Boolean(
               item &&
@@ -52,6 +62,23 @@ export function parseProposition(raw: unknown): SignalementProposition | null {
         )
       : undefined,
   };
+}
+
+export function parseStatutSignalement(value: unknown): Signalement["statut"] {
+  const raw =
+    typeof value === "string"
+      ? value
+      : value && typeof value === "object" && "statut" in value
+        ? String((value as { statut?: unknown }).statut ?? "")
+        : String(value ?? "");
+  const normalized = raw.trim().toLowerCase();
+  if (normalized === "valide") return "valide";
+  if (normalized === "rejete" || normalized === "rejeté") return "rejete";
+  return "en_attente";
+}
+
+export function signalementEstEnAttente(statut: unknown): boolean {
+  return parseStatutSignalement(statut) === "en_attente";
 }
 
 export function repercussionsFromPatches(
@@ -246,6 +273,15 @@ function runSignalementsSelfCheck() {
   }
   if (!similarAbsenceSignalement(snapRejected, payload, ["rejete"])) {
     throw new Error("signalements: un rejeté pour les mêmes dates doit être détecté");
+  }
+  if (parseStatutSignalement("en_attente") !== "en_attente") {
+    throw new Error("signalements: statut en_attente");
+  }
+  if (parseStatutSignalement("  VALIDE ") !== "valide") {
+    throw new Error("signalements: statut valide insensible à la casse");
+  }
+  if (!signalementEstEnAttente(undefined) || signalementEstEnAttente("rejete")) {
+    throw new Error("signalements: un statut inconnu doit rester en attente");
   }
 }
 runSignalementsSelfCheck();
