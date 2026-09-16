@@ -294,17 +294,21 @@ function packCascade(
           continue;
         }
         if (!relocatable.has(phase.id)) continue;
-        const prev = i === 0 ? null : dates.get(list[i - 1].id);
-        let start: string | null = prev
-          ? nextOpenDay(snapshot, rowId, prev.fin)
-          : null;
-        const logistics = minStartForPhase(snapshot, phase, dates, rowId);
-        if (logistics) {
-          start = start ? maxDate(start, logistics) : logistics;
-        }
-        if (!start) start = phase.date_debut!;
-        const placed = placePhase(snapshot, phase, start);
         const current = dates.get(phase.id)!;
+        const prev = i === 0 ? null : dates.get(list[i - 1].id);
+        let start = current.debut;
+        if (
+          prev &&
+          datesOverlap(prev.debut, prev.fin, current.debut, current.fin)
+        ) {
+          start = maxDate(start, nextOpenDay(snapshot, rowId, prev.fin));
+        }
+        const logistics = minStartForPhase(snapshot, phase, dates, rowId);
+        if (logistics && logistics > start) {
+          start = logistics;
+        }
+        if (start === current.debut) continue;
+        const placed = placePhase(snapshot, phase, start);
         if (current.debut === placed.debut && current.fin === placed.fin) continue;
         const originChantier = chantierOf(snapshot, origin);
         const chantier = chantierOf(snapshot, phase);
@@ -489,7 +493,7 @@ function resultFromPacked(
     message: conflict
       ? "Ce décalage toucherait un chantier prioritaire. Validez l’arbitrage, ou annulez."
       : extras?.messageOk ??
-        `${patches.length} phase(s) recollées en cascade, sans trou évitable.`,
+        `${patches.length} phase(s) décalée(s) au minimum (aval bloqué seulement).`,
   };
 }
 
@@ -697,7 +701,7 @@ export function planDelayCascade(
     const verb = direction < 0 ? "avancée" : "décalage";
     return {
       ...result,
-      message: `${result.patches.length} phase(s) recollées en cascade (${verb}), sans trou évitable.`,
+      message: `${result.patches.length} phase(s) décalée(s) au minimum (${verb}, aval bloqué seulement).`,
     };
   }
   return result;
@@ -786,4 +790,111 @@ export function planAbsenceCascade(
       : `${patches.length} phase(s) recollées en cascade, hors jours d’absence.`,
   };
 }
+
+function delaySelfCheckSnapshot(): PlanningSnapshot {
+  const employee = (
+    id: string,
+    nom: string,
+  ): PlanningSnapshot["employees"][number] => ({
+    id,
+    nom,
+    roles: ["fabrication", "pose"],
+    actif: true,
+  });
+  const chantier = (
+    id: string,
+    nom_client: string,
+  ): PlanningSnapshot["chantiers"][number] => ({
+    id,
+    nom_client,
+    adresse: "",
+    lien_dossier_onedrive: null,
+    priorite: "normal",
+    date_creation: "2026-09-01",
+  });
+  const phase = (
+    id: string,
+    element_id: string,
+    type_phase: PhasePlanning["type_phase"],
+    debut: string,
+    fin: string,
+    employe_id: string,
+  ): PhasePlanning => ({
+    id,
+    element_id,
+    type_phase,
+    duree_estimee_heures: 8,
+    date_debut: debut,
+    date_fin: fin,
+    employe_id,
+    statut: "a_faire",
+    urgent: false,
+  });
+  return {
+    employees: [employee("alexis", "Alexis"), employee("romain", "Romain")],
+    chantiers: [
+      chantier("alpha", "Alpha"),
+      chantier("beta", "Beta"),
+      chantier("gamma", "Gamma"),
+    ],
+    elements: [
+      { id: "el-a", chantier_id: "alpha", nom_element: "Table" },
+      { id: "el-b", chantier_id: "alpha", nom_element: "Pergola" },
+      { id: "el-c", chantier_id: "gamma", nom_element: "Portail" },
+    ],
+    phases: [
+      phase("fab-a", "el-a", "fabrication", "2026-09-14", "2026-09-14", "alexis"),
+      phase("pose-a", "el-a", "pose", "2026-10-05", "2026-10-05", "alexis"),
+      phase("fab-b", "el-b", "fabrication", "2026-09-22", "2026-09-23", "alexis"),
+      phase("fab-c", "el-c", "fabrication", "2026-09-15", "2026-09-16", "romain"),
+    ],
+    absences: [],
+    signalements: [],
+    receptions: [],
+    demandes: [],
+    horaires: [],
+  };
+}
+
+function runDelayCascadeSelfCheck() {
+  const snapshot = delaySelfCheckSnapshot();
+  const gap = planDelayCascade(snapshot, "fab-a", 1);
+  const ids = new Set(gap.patches.map((item) => item.id));
+  if (!ids.has("fab-a")) {
+    throw new Error("delay-cascade: la phase en retard doit être dans la proposition");
+  }
+  if (ids.has("fab-b") || ids.has("fab-c") || ids.has("pose-a")) {
+    throw new Error(
+      "delay-cascade: un demi-jour ne doit pas décaler un autre élément, un autre salarié, ni une pose déjà hors délai logistique",
+    );
+  }
+  const origin = gap.patches.find((item) => item.id === "fab-a");
+  if (origin?.date_fin !== "2026-09-15") {
+    throw new Error(
+      `delay-cascade: fin attendue 2026-09-15, reçu ${origin?.date_fin ?? "vide"}`,
+    );
+  }
+
+  const tight: PlanningSnapshot = {
+    ...snapshot,
+    phases: snapshot.phases.map((item) =>
+      item.id === "fab-b"
+        ? { ...item, date_debut: "2026-09-15", date_fin: "2026-09-15" }
+        : item,
+    ),
+  };
+  const bumped = planDelayCascade(tight, "fab-a", 1);
+  const movedB = bumped.patches.find((item) => item.id === "fab-b");
+  if (!movedB?.date_debut || movedB.date_debut <= "2026-09-15") {
+    throw new Error(
+      "delay-cascade: la phase suivante du même salarié, en chevauchement, doit avancer d’un cran",
+    );
+  }
+  if (bumped.patches.some((item) => item.id === "fab-c")) {
+    throw new Error("delay-cascade: le salarié non concerné ne doit pas bouger");
+  }
+}
+
+runDelayCascadeSelfCheck();
+
 
