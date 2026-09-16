@@ -11,6 +11,15 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-16-cascade-retard-minimale",
+    title: "Retard : décalage au plus juste",
+    items: [
+      "Un retard ne recalcule plus tout le planning : seules les phases vraiment bloquées en aval bougent (même salarié s’il y a chevauchement, ou étape suivante du même élément si le délai logistique n’est plus respecté).",
+      "Un chantier à plusieurs éléments indépendants ne reçoit plus plusieurs décalages incohérents pour un seul retard.",
+      "Un signalement de retard n’envoie plus plusieurs propositions alternatives contradictoires : une seule proposition minimale.",
+    ],
+  },
+  {
     id: "2026-09-16-creer-salarie-pin",
     title: "Création d’un salarié",
     items: [
