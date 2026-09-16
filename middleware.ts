@@ -3,6 +3,7 @@ import {
   decodeSession,
   SESSION_COOKIE,
 } from "@/lib/auth/session";
+import { isAuthTemporarilyOpen } from "@/lib/auth/temp-open-check";
 
 function isPublicPath(pathname: string): boolean {
   if (pathname === "/connexion") return true;
@@ -37,6 +38,7 @@ function jsonError(message: string, status: number) {
 
 async function middlewareInner(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  const authOpen = isAuthTemporarilyOpen();
   if (isPublicPath(pathname)) {
     if (pathname === "/connexion") {
       const session = await decodeSession(
@@ -45,6 +47,9 @@ async function middlewareInner(request: NextRequest) {
       if (session) {
         const target = session.isAdmin ? "/" : "/moi";
         return NextResponse.redirect(new URL(target, request.url));
+      }
+      if (authOpen) {
+        return NextResponse.redirect(new URL("/", request.url));
       }
     }
     return NextResponse.next();
@@ -56,6 +61,7 @@ async function middlewareInner(request: NextRequest) {
   const isApi = pathname.startsWith("/api/");
 
   if (!session) {
+    if (authOpen) return NextResponse.next();
     if (isApi) return jsonError("Non authentifié.", 401);
     const login = new URL("/connexion", request.url);
     login.searchParams.set("next", pathname);

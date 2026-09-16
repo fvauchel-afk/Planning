@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { AuthOpenBanner } from "@/components/AuthOpenBanner";
 import { useSession } from "@/lib/auth/session-context";
 
 export function MobileShell({
@@ -24,6 +25,7 @@ export function MobileShell({
 
   return (
     <div className="min-h-screen bg-[#f3efe6]">
+      <AuthOpenBanner />
       <header className="sticky top-0 z-20 border-b border-stone-800 bg-stone-900 px-4 py-3 text-stone-100">
         <p className="text-[10px] uppercase tracking-[0.2em] text-amber-500">
           Ferronnerie Vauchel
