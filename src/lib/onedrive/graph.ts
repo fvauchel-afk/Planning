@@ -170,36 +170,13 @@ export async function probeOnedriveConnection(): Promise<OnedriveProbeResult> {
   };
   try {
     const token = await getValidAccessToken();
-    await graphFetch<{ id?: string }>(token, "/me/drive?$select=id");
-    // Dossier racine (sauvegarde, création chantier) : /me/drive seul ne suffit pas.
-    await getRootFolder();
-    let shareWarning: string | undefined;
-    try {
-      const cfg = getOnedriveConfig();
-      const shared = await resolveShareItem(token, cfg.rootShareUrl);
-      await graphFetch<{ id?: string }>(
-        token,
-        `${meItemPath(shared.itemId)}?$select=id`,
-      );
-    } catch (shareErr) {
-      const shareMessage =
-        shareErr instanceof Error
-          ? shareErr.message
-          : "Accès dossier partagé impossible.";
-      if (needsOnedriveReconnect(shareMessage)) {
-        shareWarning =
-          "Microsoft refuse les dossiers partagés. La copie d’une réception ou d’un bon de commande peut échouer : reconnectez OneDrive.";
-      }
-    }
     const label =
       (await fetchOnedriveAccountLabel(token)) || row.account_label || null;
-    return {
-      ...base,
-      connected: true,
-      expired: false,
-      account: label,
-      error: shareWarning,
-    };
+    // Même opération que /sauvegarde (liste du dossier Sauvegarde), pas un
+    // simple GET /me/drive : ce GET peut réussir alors que Microsoft refuse
+    // d’écrire ou de lister les dossiers métier.
+    await listBackupFiles();
+    return { ...base, connected: true, expired: false, account: label };
   } catch (err) {
     const message =
       err instanceof Error ? err.message : "Accès OneDrive impossible.";
@@ -208,9 +185,7 @@ export async function probeOnedriveConnection(): Promise<OnedriveProbeResult> {
       ...base,
       connected: false,
       expired,
-      error: expired
-        ? "Connexion expirée, reconnexion nécessaire."
-        : message,
+      error: message,
     };
   }
 }

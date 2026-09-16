@@ -14,7 +14,8 @@ export const CHANGELOG: ChangelogEntry[] = [
     id: "2026-09-16-onedrive-statut-partage",
     title: "Statut OneDrive et copie des documents",
     items: [
-      "L’onglet OneDrive ne reste plus « connecté » en vert si Microsoft refuse les dossiers partagés (copie d’une réception ou d’un bon de commande) : le bandeau passe en avertissement et demande de reconnecter.",
+      "L’onglet OneDrive vérifie le même accès que Sauvegarde (liste du dossier Sauvegarde), plus seulement un GET /me/drive. Si Microsoft refuse, le statut n’est plus vert « connecté ».",
+      "Le message affiché est le même que sur Sauvegarde ou à la copie d’une réception.",
       "Si le lien de partage d’un chantier est refusé, la copie du PDF retente dans le dossier du client sur le OneDrive du compte.",
     ],
   },

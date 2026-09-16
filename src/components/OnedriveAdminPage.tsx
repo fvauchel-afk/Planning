@@ -77,8 +77,8 @@ export function OnedriveAdminPage() {
                 <p className="mt-1">Dernier compte : {status.account}</p>
               )}
               <p className="mt-2 text-amber-900">
-                Un jeton est encore enregistré, mais Microsoft refuse les appels
-                (dossier chantier, sauvegarde). Cliquez sur « Connecter OneDrive ».
+                {status.error?.trim() ||
+                  "Un jeton est encore enregistré, mais Microsoft refuse les appels (dossier chantier, sauvegarde). Cliquez sur « Connecter OneDrive »."}
               </p>
             </>
           ) : (
