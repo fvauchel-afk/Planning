@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-16-creer-salarie-pin",
+    title: "Création d’un salarié",
+    items: [
+      "Ajouter un employé enregistre à nouveau le code PIN (l’erreur serveur gen_salt est corrigée).",
+      "Si Enregistrer échoue, un message d’erreur s’affiche sur le formulaire et la saisie n’est pas effacée.",
+    ],
+  },
+  {
     id: "2026-09-15-ligne-transport-livraison",
     title: "Ligne Transport / Livraison sur le planning",
     items: [

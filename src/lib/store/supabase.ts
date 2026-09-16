@@ -1,5 +1,9 @@
 import "server-only";
-import { asAdminFlag } from "@/lib/auth/ids";
+import { asAdminFlag, idsEqual } from "@/lib/auth/ids";
+import {
+  employeesMatchingPin,
+  hashEmployeePin,
+} from "@/lib/auth/pin-verify";
 import { chantierHasEstimativeDates, chantierIdForPhase, phaseIdsStartedToday, withConfirmedPhases } from "@/lib/dates-estimatives";
 import { parseProposition } from "@/lib/signalements";
 import { phaseTypeForRoles } from "@/lib/chantier-status";
@@ -845,10 +849,60 @@ export async function supabaseScheduleChantierDay(
   }
 }
 
+async function assertPinAvailable(
+  supabase: ReturnType<typeof createSupabaseServerClient>,
+  pin: string,
+  exceptEmployeeId?: string,
+) {
+  const { data, error } = await supabase
+    .from("employees")
+    .select("id, nom, is_admin, actif, pin_hash")
+    .not("pin_hash", "is", null);
+  if (error) {
+    if (isMissingColumnError(error, "pin_hash")) return;
+    throw wrapSupabaseError(error);
+  }
+  const matches = await employeesMatchingPin(pin, data ?? []);
+  if (matches.some((row) => !idsEqual(String(row.id), exceptEmployeeId))) {
+    throw wrapSupabaseError(
+      new Error("Ce code PIN est déjà utilisé par un autre employé."),
+    );
+  }
+}
+
+async function writeEmployeePinHash(
+  supabase: ReturnType<typeof createSupabaseServerClient>,
+  employeeId: string,
+  pin: string,
+) {
+  const hash = await hashEmployeePin(pin);
+  const { error } = await supabase
+    .from("employees")
+    .update({ pin_hash: hash })
+    .eq("id", employeeId);
+  if (!error) return;
+  if (isMissingColumnError(error, "pin_hash")) {
+    const { error: pinError } = await supabase.rpc("set_employee_pin", {
+      p_id: employeeId,
+      p_pin: pin,
+    });
+    if (pinError) throw wrapSupabaseError(pinError);
+    return;
+  }
+  throw wrapSupabaseError(error);
+}
+
 export async function supabaseUpsertEmployee(
   input: NewEmployeeInput & { id?: string },
 ): Promise<void> {
   const supabase = createSupabaseServerClient();
+  const pin = input.pin?.trim();
+  if (pin) {
+    await assertPinAvailable(supabase, pin, input.id);
+  }
+  const defaultPinHash = !input.id
+    ? await hashEmployeePin(pin && /^\d{4}$/.test(pin) ? pin : "1234")
+    : null;
   const payload: Record<string, unknown> = {
     nom: input.nom,
     roles: input.roles,
@@ -856,6 +910,7 @@ export async function supabaseUpsertEmployee(
     horaires: normalizeHorairesEmploye(input.horaires),
     is_admin: Boolean(input.is_admin),
   };
+  if (defaultPinHash) payload.pin_hash = defaultPinHash;
   if (input.ordre_affichage != null) {
     payload.ordre_affichage = input.ordre_affichage;
   } else if (!input.id) {
@@ -871,7 +926,8 @@ export async function supabaseUpsertEmployee(
       if (
         isMissingColumnError(error, "is_admin") ||
         isMissingColumnError(error, "horaires") ||
-        isMissingColumnError(error, "ordre_affichage")
+        isMissingColumnError(error, "ordre_affichage") ||
+        isMissingColumnError(error, "pin_hash")
       ) {
         const { error: retry } = await supabase
           .from("employees")
@@ -907,7 +963,8 @@ export async function supabaseUpsertEmployee(
       if (
         isMissingColumnError(error, "is_admin") ||
         isMissingColumnError(error, "horaires") ||
-        isMissingColumnError(error, "ordre_affichage")
+        isMissingColumnError(error, "ordre_affichage") ||
+        isMissingColumnError(error, "pin_hash")
       ) {
         const slim = {
           nom: payload.nom,
@@ -924,6 +981,11 @@ export async function supabaseUpsertEmployee(
             : payload.ordre_affichage != null
               ? { ordre_affichage: payload.ordre_affichage }
               : {}),
+          ...(isMissingColumnError(error, "pin_hash")
+            ? {}
+            : payload.pin_hash
+              ? { pin_hash: payload.pin_hash }
+              : {}),
         };
         const retry = await supabase.from("employees").insert(slim).select("id").single();
         if (retry.error) throw wrapSupabaseError(retry.error);
@@ -935,13 +997,8 @@ export async function supabaseUpsertEmployee(
       employeeId = data?.id;
     }
   }
-  const pin = input.pin?.trim();
   if (pin && employeeId) {
-    const { error: pinError } = await supabase.rpc("set_employee_pin", {
-      p_id: employeeId,
-      p_pin: pin,
-    });
-    if (pinError) throw wrapSupabaseError(pinError);
+    await writeEmployeePinHash(supabase, employeeId, pin);
   }
 }
 
@@ -976,14 +1033,8 @@ export async function supabasePatchEmployee(input: EmployeePatch): Promise<void>
   }
   const pin = input.pin?.trim();
   if (pin) {
-    if (!/^\d{4}$/.test(pin)) {
-      throw wrapSupabaseError(new Error("Le code PIN doit contenir 4 chiffres."));
-    }
-    const { error: pinError } = await supabase.rpc("set_employee_pin", {
-      p_id: input.id,
-      p_pin: pin,
-    });
-    if (pinError) throw wrapSupabaseError(pinError);
+    await assertPinAvailable(supabase, pin, input.id);
+    await writeEmployeePinHash(supabase, input.id, pin);
   }
 }
 
