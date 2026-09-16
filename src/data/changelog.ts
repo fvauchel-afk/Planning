@@ -46,6 +46,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     ],
   },
   {
+    id: "2026-09-15-lancement-a-valider",
     title: "Ne pas oublier de valider le lancement",
     items: [
       "Un bloc fabrication dont le début est aujourd’hui ou déjà passé, et qui n’a pas encore « Je valide le lancement », s’affiche en orange « à valider ».",
