@@ -11,6 +11,13 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-16-chantier-multi-elements",
+    title: "Nouveau chantier : plusieurs éléments, un même salarié",
+    items: [
+      "Si table, pergola et portail sont assignés à la même personne, le 2e et le 3e élément ne se collent plus sur les mêmes jours que le 1er.",
+      "Le formulaire tient compte des créneaux déjà pris par les éléments précédents du même chantier, pas seulement des affaires déjà enregistrées.",
+    ],
+  },  {
     id: "2026-09-15-horaires-presets-saison",
     title: "Préréglages d’horaires et bascule été / hiver",
     items: [
