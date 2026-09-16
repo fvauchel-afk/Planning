@@ -11,6 +11,23 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-16-creer-salarie-pin",
+    title: "Création d’un salarié",
+    items: [
+      "Ajouter un employé enregistre à nouveau le code PIN (l’erreur serveur gen_salt est corrigée).",
+      "Si Enregistrer échoue, un message d’erreur s’affiche sur le formulaire et la saisie n’est pas effacée.",
+    ],
+  },
+  {
+    id: "2026-09-16-auth-ouverte-check",
+    title: "Connexion ouverte pour le check (16 et 17 septembre)",
+    items: [
+      "Le 16 et le 17 septembre 2026, l’écran du code PIN est sauté : on entre directement comme Jonathan (admin).",
+      "Un bandeau rouge rappelle : « Authentification désactivée temporairement — check en cours ».",
+      "À partir du 18 septembre 2026 (minuit, heure de Paris), le code PIN se réactive tout seul.",
+    ],
+  },
+  {
     id: "2026-09-15-ligne-transport-livraison",
     title: "Ligne Transport / Livraison sur le planning",
     items: [

@@ -172,6 +172,8 @@ export function EmployeesPage() {
   const [pin, setPin] = useState("");
   const [isAdmin, setIsAdmin] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const errorRef = useRef<HTMLParagraphElement>(null);
   const dirty = useRef(new Set<string>());
 
   const applyEmployeePatch = useCallback(
@@ -280,6 +282,7 @@ export function EmployeesPage() {
       return;
     }
     setError(null);
+    setSaving(true);
     try {
       await live.flush();
       await upsertEmployee({
@@ -293,7 +296,13 @@ export function EmployeesPage() {
       });
       resetForm();
     } catch (err) {
-      setError(formatSaveError(err, "le salarié n’a pas été enregistré"));
+      const message = formatSaveError(err, "le salarié n’a pas été enregistré");
+      setError(message);
+      requestAnimationFrame(() => {
+        errorRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      });
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -436,7 +445,15 @@ export function EmployeesPage() {
           <h3 className="font-medium">
             {editing ? "Modifier un employé" : "Ajouter un employé"}
           </h3>
-          {error && <p className="text-sm text-red-700">{error}</p>}
+          {error && (
+            <p
+              ref={errorRef}
+              role="alert"
+              className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm font-medium text-red-800"
+            >
+              {error}
+            </p>
+          )}
           <label className="block text-sm">
             <span className="mb-1 block">Nom</span>
             <input
@@ -532,22 +549,30 @@ export function EmployeesPage() {
               className="w-full rounded border border-stone-300 px-3 py-2"
             />
           </label>
-          <div className="flex gap-2">
-            <button
-              type="submit"
-              className="rounded bg-amber-700 px-3 py-2 text-sm text-amber-50"
-            >
-              Enregistrer
-            </button>
-            {editing && (
-              <button
-                type="button"
-                onClick={resetForm}
-                className="rounded border border-stone-300 px-3 py-2 text-sm"
-              >
-                Annuler
-              </button>
+          <div className="flex flex-col gap-2">
+            {error && (
+              <p role="alert" className="text-sm font-medium text-red-800">
+                {error}
+              </p>
             )}
+            <div className="flex gap-2">
+              <button
+                type="submit"
+                disabled={saving}
+                className="rounded bg-amber-700 px-3 py-2 text-sm text-amber-50 disabled:opacity-60"
+              >
+                {saving ? "Enregistrement…" : "Enregistrer"}
+              </button>
+              {editing && (
+                <button
+                  type="button"
+                  onClick={resetForm}
+                  className="rounded border border-stone-300 px-3 py-2 text-sm"
+                >
+                  Annuler
+                </button>
+              )}
+            </div>
           </div>
         </form>
       </div>

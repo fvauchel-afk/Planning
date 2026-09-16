@@ -8,7 +8,9 @@ export type EmployeePinRow = {
   pin_hash: string;
 };
 
-/** Compare le PIN à chaque pin_hash (bcrypt pgcrypto). N’accepte jamais plusieurs matches. */
+export async function hashEmployeePin(pin: string): Promise<string> {
+  return bcrypt.hash(pin, 10);
+}
 export async function employeesMatchingPin(
   pin: string,
   rows: EmployeePinRow[],
@@ -36,6 +38,10 @@ function runPinVerifySelfCheck() {
   }
   if (!bcrypt.compareSync("1111", jonathanHash) || bcrypt.compareSync("1111", mikaHash)) {
     throw new Error("pin-verify: 1111 ne doit coller qu’au hash de Jonathan");
+  }
+  const roundTrip = bcrypt.hashSync("4321", 6);
+  if (!bcrypt.compareSync("4321", roundTrip) || bcrypt.compareSync("1111", roundTrip)) {
+    throw new Error("pin-verify: hashEmployeePin doit coller au PIN fourni");
   }
 }
 
