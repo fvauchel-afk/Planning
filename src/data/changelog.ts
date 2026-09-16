@@ -11,6 +11,13 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-16-synthese-seuil-110",
+    title: "Couleurs de la Synthèse de charge",
+    items: [
+      "Vert jusqu’à 80 %, orange de 80 à 110 % (zone tolérée), rouge au-delà de 110 % (vraie surcharge).",
+    ],
+  },
+  {
     id: "2026-09-16-liste-apres-enregistrer",
     title: "La liste se met à jour dès Enregistrer",
     items: [
