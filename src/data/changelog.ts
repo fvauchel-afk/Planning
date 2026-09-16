@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-16-reception-pose-pdf",
+    title: "Clôturer une pose et générer la réception",
+    items: [
+      "Sur un bloc Pose du planning, « Terminer / réception » ouvre un document (aperçu PDF, puis confirmation), avec une zone de signature simulée.",
+      "La pose passe en terminée, et le PDF est copié dans le dossier OneDrive du chantier.",
+    ],
+  },
+  {
     id: "2026-09-16-ferie-toute-equipe",
     title: "Jour férié pour toute l’équipe",
     items: [

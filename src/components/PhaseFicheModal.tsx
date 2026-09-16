@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { BonCommandeModal } from "@/components/BonCommandeModal";
+import { ReceptionModal } from "@/components/ReceptionModal";
 import { ConflictModal } from "@/components/ConflictModal";
 import { LaunchValidateButton } from "@/components/LaunchValidateButton";
 import { canGenerateBonCommande } from "@/lib/bon-commande/active-phase";
@@ -51,6 +51,7 @@ export function PhaseFicheModal({
     halfDays: number;
   } | null>(null);
   const [bonCommande, setBonCommande] = useState(false);
+  const [receptionOpen, setReceptionOpen] = useState(false);
 
   const phase = snapshot.phases.find((item) => item.id === phaseId);
   const element = snapshot.elements.find((item) => item.id === phase?.element_id);
@@ -115,6 +116,7 @@ export function PhaseFicheModal({
               .join(" · ")
           : note.trim();
       if (delayKind === "cible") {
+        if (!chantier) throw new Error("Chantier introuvable.");
         const flexDays = Math.max(0, Number(flex) || 0);
         await patchChantier({
           id: chantier.id,
@@ -287,16 +289,19 @@ export function PhaseFicheModal({
                   Générer / Envoyer le bon de commande
                 </button>
               ) : null}
-              {phase.type_phase === "livraison" &&
-              !reception &&
-              (session?.isAdmin ||
-                idsEqual(phase.employe_id, session?.employeeId)) ? (
-                <Link
-                  href={`/moi/reception?phase=${phase.id}`}
+              {((phase.type_phase === "pose" || phase.type_phase === "livraison") &&
+                !reception &&
+                (session?.isAdmin ||
+                  idsEqual(phase.employe_id, session?.employeeId))) ? (
+                <button
+                  type="button"
                   className="rounded-lg bg-sky-800 px-4 py-2 text-sm text-sky-50"
+                  onClick={() => setReceptionOpen(true)}
                 >
-                  Faire signer le bon de livraison
-                </Link>
+                  {phase.type_phase === "livraison"
+                    ? "Faire signer le bon de livraison"
+                    : "Terminer la pose / réception"}
+                </button>
               ) : null}
               {session?.isAdmin ? (
               <button
@@ -505,6 +510,12 @@ export function PhaseFicheModal({
         <BonCommandeModal
           chantierId={chantier.id}
           onClose={() => setBonCommande(false)}
+        />
+      ) : null}
+      {receptionOpen ? (
+        <ReceptionModal
+          phaseId={phase.id}
+          onClose={() => setReceptionOpen(false)}
         />
       ) : null}
     </div>
