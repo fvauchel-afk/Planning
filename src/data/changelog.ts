@@ -11,6 +11,13 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-16-fin-phase-vendredi",
+    title: "Fin de phase : le vendredi compte vraiment ½ journée",
+    items: [
+      "La date de fin d’une phase se calcule avec les heures réelles de chaque jour du salarié (vendredi souvent jusqu’à 12 h), et non plus avec une moyenne de 8 h.",
+      "Exemple : 32 h à partir d’un mardi, sur un horaire 35 h, ne se terminent plus le vendredi (seulement 27,5 h disponibles) : ça continue le lundi suivant.",
+    ],
+  },  {
     id: "2026-09-15-horaires-presets-saison",
     title: "Préréglages d’horaires et bascule été / hiver",
     items: [

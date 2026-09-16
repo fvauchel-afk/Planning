@@ -1,4 +1,4 @@
-import { addDays, isoWeekday, isSunday, toISODate } from "@/lib/dates";
+import { addDays, addWorkingDays, isoWeekday, isSunday, toISODate } from "@/lib/dates";
 import {
   JOURS_OUVRES,
   type Employee,
@@ -621,10 +621,48 @@ export function dayCapacityHours(
   date: string,
 ): number {
   if (!employee.actif) return 0;
-  return (
-    hoursForSlot(snapshot, employee.id, date, 0) +
-    hoursForSlot(snapshot, employee.id, date, 1)
-  );
+  return hoursAvailableOnRowDate(snapshot, employee.id, date);
+}
+
+export function hoursAvailableOnRowDate(
+  snapshot: PlanningSnapshot,
+  rowId: string,
+  date: string,
+): number {
+  const runtime = runtimeFor(snapshot);
+  if (isSunday(date) || isHolidayDate(runtime, date)) return 0;
+  if (!isCompanyHoursRow(rowId) && isOffDate(runtime, rowId, date)) return 0;
+  const hours =
+    hoursForSlot(snapshot, rowId, date, 0) +
+    hoursForSlot(snapshot, rowId, date, 1);
+  return Math.round(hours * 100) / 100;
+}
+
+export function rangeEndFromHours(
+  snapshot: PlanningSnapshot,
+  rowId: string | null,
+  start: string,
+  hours: number,
+): string {
+  const needed = Number(hours) || 0;
+  if (needed <= 0) return start;
+  if (!rowId) {
+    const days = Math.max(1, Math.ceil(needed / 8));
+    return days <= 1 ? start : addWorkingDays(start, days - 1);
+  }
+  let remaining = needed;
+  let date = start;
+  let last = start;
+  for (let i = 0; i < 420; i += 1) {
+    const available = hoursAvailableOnRowDate(snapshot, rowId, date);
+    if (available > 0) {
+      remaining -= available;
+      last = date;
+      if (remaining <= 0.0001) return date;
+    }
+    date = addDays(date, 1);
+  }
+  return last;
 }
 
 export function capacityHoursForWeek(
@@ -657,3 +695,42 @@ export function mmddFromInput(value: string): string {
   if (value.length >= 10) return value.slice(5, 10);
   return "";
 }
+
+function runFridayHoursRangeSelfCheck() {
+  const snapshot: PlanningSnapshot = {
+    employees: [
+      {
+        id: "alexis",
+        nom: "Alexis",
+        roles: ["fabrication"],
+        actif: true,
+        horaires: horairesFromPreset("35"),
+      },
+    ],
+    chantiers: [],
+    elements: [],
+    phases: [],
+    absences: [],
+    signalements: [],
+    receptions: [],
+    demandes: [],
+    horaires: defaultHoraires(),
+  };
+  const throughFriday =
+    hoursAvailableOnRowDate(snapshot, "alexis", "2026-09-15") +
+    hoursAvailableOnRowDate(snapshot, "alexis", "2026-09-16") +
+    hoursAvailableOnRowDate(snapshot, "alexis", "2026-09-17") +
+    hoursAvailableOnRowDate(snapshot, "alexis", "2026-09-18");
+  if (throughFriday !== 27.5) {
+    throw new Error(
+      `horaires: 32 h du mardi au vendredi 35 h/sem. doivent faire 27,5 h, reçu ${throughFriday}`,
+    );
+  }
+  const end = rangeEndFromHours(snapshot, "alexis", "2026-09-15", 32);
+  if (end !== "2026-09-21") {
+    throw new Error(
+      `horaires: 32 h à partir du mardi 15 sept. doivent finir le lundi 21, reçu ${end}`,
+    );
+  }
+}
+runFridayHoursRangeSelfCheck();
