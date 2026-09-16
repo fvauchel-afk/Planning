@@ -2,6 +2,7 @@ import { addDays, addWorkingDays, datesOverlap, isWeekend, shiftToReach, working
 import { canPriorityDisplace, chantierToleranceWorkingDays } from "@/lib/priorite";
 import {
   TYPES_PHASE,
+  isVirtualPlanningRow,
   type Chantier,
   type PhasePatch,
   type PhasePlanning,
@@ -55,6 +56,58 @@ function laterType(phase: PhasePlanning, origin: PhasePlanning): boolean {
   return (
     TYPES_PHASE.indexOf(phase.type_phase as TypePhase) >
     TYPES_PHASE.indexOf(origin.type_phase)
+  );
+}
+
+function exclusiveRowId(phase: PhasePlanning): string | null {
+  const rowId = rowIdForPhase(phase.type_phase, phase.employe_id);
+  if (!rowId || isVirtualPlanningRow(rowId)) return null;
+  return rowId;
+}
+
+function laterOnExclusiveRow(
+  phase: PhasePlanning,
+  current: PhasePlanning,
+): boolean {
+  const currentRow = exclusiveRowId(current);
+  const rowId = exclusiveRowId(phase);
+  return Boolean(currentRow && rowId === currentRow && originalOrder(phase, current) > 0);
+}
+
+function phaseDatesMoved(
+  phase: PhasePlanning,
+  dates: Map<string, Dated>,
+): boolean {
+  const next = dates.get(phase.id);
+  if (!next) return false;
+  return next.debut !== phase.date_debut || next.fin !== phase.date_fin;
+}
+
+function logisticsPredecessorMoved(
+  snapshot: PlanningSnapshot,
+  phase: PhasePlanning,
+  dates: Map<string, Dated>,
+  origin: PhasePlanning,
+): boolean {
+  const siblings = datedPhases(snapshot).filter(
+    (item) => item.element_id === phase.element_id,
+  );
+  const fab = siblings.find((item) => item.type_phase === "fabrication");
+  const log = siblings.find((item) => item.type_phase === "logistique");
+  const liv = siblings.find((item) => item.type_phase === "livraison");
+  const preds: PhasePlanning[] = [];
+  if (phase.type_phase === "logistique" && fab) preds.push(fab);
+  if (phase.type_phase === "livraison") {
+    if (log) preds.push(log);
+    if (fab) preds.push(fab);
+  }
+  if (phase.type_phase === "pose") {
+    if (liv) preds.push(liv);
+    if (log) preds.push(log);
+    if (fab) preds.push(fab);
+  }
+  return preds.some(
+    (item) => item.id === origin.id || phaseDatesMoved(item, dates),
   );
 }
 
@@ -133,16 +186,13 @@ function collectRelocatable(
   origin: PhasePlanning,
 ): Set<string> {
   const relocatable = new Set<string>();
-  const originRow = rowIdForPhase(origin.type_phase, origin.employe_id);
   const all = datedPhases(snapshot);
 
   for (const phase of all) {
     if (phase.id === origin.id || phase.statut === "termine") continue;
-    const rowId = rowIdForPhase(phase.type_phase, phase.employe_id);
-    if (originRow && rowId === originRow && originalOrder(phase, origin) > 0) {
+    if (laterOnExclusiveRow(phase, origin) || laterType(phase, origin)) {
       relocatable.add(phase.id);
     }
-    if (laterType(phase, origin)) relocatable.add(phase.id);
   }
 
   let added = true;
@@ -150,21 +200,10 @@ function collectRelocatable(
     added = false;
     for (const current of all) {
       if (!relocatable.has(current.id)) continue;
-      const currentRow = rowIdForPhase(current.type_phase, current.employe_id);
       for (const phase of all) {
         if (phase.id === origin.id || phase.statut === "termine") continue;
         if (relocatable.has(phase.id)) continue;
-        if (laterType(phase, current)) {
-          relocatable.add(phase.id);
-          added = true;
-          continue;
-        }
-        const rowId = rowIdForPhase(phase.type_phase, phase.employe_id);
-        if (
-          currentRow &&
-          rowId === currentRow &&
-          originalOrder(phase, current) > 0
-        ) {
+        if (laterType(phase, current) || laterOnExclusiveRow(phase, current)) {
           relocatable.add(phase.id);
           added = true;
         }
@@ -295,17 +334,25 @@ function packCascade(
         }
         if (!relocatable.has(phase.id)) continue;
         const current = dates.get(phase.id)!;
-        const prev = i === 0 ? null : dates.get(list[i - 1].id);
+        const prevPhase = i === 0 ? null : list[i - 1];
+        const prev = prevPhase ? dates.get(prevPhase.id) : undefined;
+        const prevMoved =
+          Boolean(prevPhase) &&
+          (prevPhase.id === origin.id || phaseDatesMoved(prevPhase, dates));
         let start = current.debut;
         if (
+          !isVirtualPlanningRow(rowId) &&
+          prevMoved &&
           prev &&
           datesOverlap(prev.debut, prev.fin, current.debut, current.fin)
         ) {
           start = maxDate(start, nextOpenDay(snapshot, rowId, prev.fin));
         }
-        const logistics = minStartForPhase(snapshot, phase, dates, rowId);
-        if (logistics && logistics > start) {
-          start = logistics;
+        if (logisticsPredecessorMoved(snapshot, phase, dates, origin)) {
+          const logistics = minStartForPhase(snapshot, phase, dates, rowId);
+          if (logistics && logistics > start) {
+            start = logistics;
+          }
         }
         if (start === current.debut) continue;
         const placed = placePhase(snapshot, phase, start);
@@ -818,7 +865,7 @@ function delaySelfCheckSnapshot(): PlanningSnapshot {
     type_phase: PhasePlanning["type_phase"],
     debut: string,
     fin: string,
-    employe_id: string,
+    employe_id: string | null,
   ): PhasePlanning => ({
     id,
     element_id,
@@ -843,10 +890,14 @@ function delaySelfCheckSnapshot(): PlanningSnapshot {
       { id: "el-c", chantier_id: "gamma", nom_element: "Portail" },
     ],
     phases: [
+      phase("admin-a", "el-a", "administratif", "2026-09-08", "2026-09-08", "alexis"),
       phase("fab-a", "el-a", "fabrication", "2026-09-14", "2026-09-14", "alexis"),
+      phase("log-a", "el-a", "logistique", "2026-09-15", "2026-09-16", null),
       phase("pose-a", "el-a", "pose", "2026-10-05", "2026-10-05", "alexis"),
       phase("fab-b", "el-b", "fabrication", "2026-09-22", "2026-09-23", "alexis"),
       phase("fab-c", "el-c", "fabrication", "2026-09-15", "2026-09-16", "romain"),
+      phase("log-c", "el-c", "logistique", "2026-09-15", "2026-09-16", null),
+      phase("pose-c", "el-c", "pose", "2026-10-06", "2026-10-06", "romain"),
     ],
     absences: [],
     signalements: [],
@@ -866,6 +917,17 @@ function runDelayCascadeSelfCheck() {
   if (ids.has("fab-b") || ids.has("fab-c") || ids.has("pose-a")) {
     throw new Error(
       "delay-cascade: un demi-jour ne doit pas décaler un autre élément, un autre salarié, ni une pose déjà hors délai logistique",
+    );
+  }
+  if (ids.has("log-c") || ids.has("pose-c")) {
+    throw new Error(
+      "delay-cascade: la file thermolaquage partagée ne doit pas sérialiser les autres chantiers",
+    );
+  }
+  const movedLogA = gap.patches.find((item) => item.id === "log-a");
+  if (!movedLogA?.date_debut || movedLogA.date_debut <= "2026-09-15") {
+    throw new Error(
+      "delay-cascade: la logistique du même élément doit suivre la fab si elle collait juste derrière",
     );
   }
   const origin = gap.patches.find((item) => item.id === "fab-a");
@@ -892,6 +954,17 @@ function runDelayCascadeSelfCheck() {
   }
   if (bumped.patches.some((item) => item.id === "fab-c")) {
     throw new Error("delay-cascade: le salarié non concerné ne doit pas bouger");
+  }
+
+  const adminDelay = planDelayCascade(snapshot, "admin-a", 1);
+  const adminIds = [...new Set(adminDelay.patches.map((item) => item.id))];
+  if (adminIds.some((id) => id !== "admin-a")) {
+    throw new Error(
+      `delay-cascade: un retard admin sans chevauchement ni fab bougée ne doit pas entraîner la file aval (${adminIds.join(", ")})`,
+    );
+  }
+  if (!adminIds.includes("admin-a")) {
+    throw new Error("delay-cascade: la phase admin en retard doit être dans la proposition");
   }
 }
 
