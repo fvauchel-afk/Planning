@@ -94,6 +94,16 @@ export function AbsencesPage() {
   };
   const live = useDebouncedPatch(applyAbsencePatch);
 
+  const listedAbsences = useMemo(() => {
+    return [...snapshot.absences].sort((left, right) => {
+      const byStart = right.date_debut.localeCompare(left.date_debut);
+      if (byStart !== 0) return byStart;
+      const byEnd = right.date_fin.localeCompare(left.date_fin);
+      if (byEnd !== 0) return byEnd;
+      return right.id.localeCompare(left.id);
+    });
+  }, [snapshot.absences]);
+
   const employeesById = new Map(
     snapshot.employees.map((employee) => [employee.id, employee]),
   );
@@ -337,6 +347,7 @@ export function AbsencesPage() {
       if (plan.patches.length > 0) {
         await applyPhasePatches(plan.patches);
       }
+      setNotice("Absence enregistrée.");
       resetForm();
     } catch (err) {
       setError(
@@ -423,14 +434,14 @@ export function AbsencesPage() {
               </tr>
             </thead>
             <tbody>
-              {snapshot.absences.length === 0 && (
+              {listedAbsences.length === 0 && (
                 <tr>
                   <td className="px-3 py-4 text-stone-500" colSpan={5}>
                     Aucune absence enregistrée.
                   </td>
                 </tr>
               )}
-              {snapshot.absences.map((absence) => (
+              {listedAbsences.map((absence) => (
                 <tr
                   key={absence.id}
                   className={`border-t border-stone-200 ${

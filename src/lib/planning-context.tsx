@@ -50,6 +50,7 @@ import { syntheseMessageConge } from "@/lib/demandes";
 import { shouldUseSharedDatabase } from "@/lib/supabase/client";
 import { DATABASE_UNAVAILABLE_MESSAGE, formatSaveError } from "@/lib/supabase/errors";
 import type {
+  Absence,
   NewAbsenceInput,
   AbsenceUpdateInput,
   AbsenceSimplePatch,
@@ -189,6 +190,7 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
   const [liveSupabase, setLiveSupabase] = useState(false);
   const liveSupabaseRef = useRef(false);
   liveSupabaseRef.current = liveSupabase;
+  const appliedRefreshAt = useRef(0);
 
   const assertWritable = useCallback(() => {
     if (useShared && !liveSupabaseRef.current) {
@@ -197,6 +199,7 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
   }, [useShared]);
 
   const refresh = useCallback(async (options?: { throwOnError?: boolean; quiet?: boolean }): Promise<PlanningSnapshot | undefined> => {
+    const started = Date.now();
     try {
       if (!useShared) {
         setLiveSupabase(false);
@@ -215,6 +218,10 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
         throw new Error(DATABASE_UNAVAILABLE_MESSAGE);
       }
       const next = remote.snapshot as PlanningSnapshot;
+      if (started < appliedRefreshAt.current) {
+        return next;
+      }
+      appliedRefreshAt.current = started;
       setSnapshot(next);
       setLiveSupabase(true);
       setError(null);
@@ -434,8 +441,34 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
     async (input: NewAbsenceInput) => {
       assertWritable();
       if (useShared) {
-        await mutate({ action: "createAbsence", input });
-        await refresh({ throwOnError: true });
+        const result = await mutate<{ absence?: Absence }>({
+          action: "createAbsence",
+          input,
+        });
+        if (result.absence) {
+          const created = result.absence;
+          setSnapshot((current) => {
+            if (current.absences.some((row) => row.id === created.id)) {
+              return current;
+            }
+            return {
+              ...current,
+              absences: [...current.absences, created],
+            };
+          });
+        }
+        const latest = await refresh({ throwOnError: true });
+        if (result.absence && latest && !latest.absences.some((row) => row.id === result.absence!.id)) {
+          setSnapshot((current) => {
+            if (current.absences.some((row) => row.id === result.absence!.id)) {
+              return current;
+            }
+            return {
+              ...current,
+              absences: [...current.absences, result.absence!],
+            };
+          });
+        }
         return;
       }
       setSnapshot((current) => localCreateAbsence(current, input));

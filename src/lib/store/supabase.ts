@@ -77,25 +77,32 @@ type EmployeeRow = {
 
 let inflightSnapshot: Promise<PlanningSnapshot> | null = null;
 let lastSnapshot: { at: number; data: PlanningSnapshot } | null = null;
+let snapshotGen = 0;
 const SNAPSHOT_TTL_MS = 2500;
 
 export function invalidateSupabaseSnapshotCache() {
+  snapshotGen += 1;
   lastSnapshot = null;
   inflightSnapshot = null;
 }
 
 export async function fetchSupabaseSnapshot(): Promise<PlanningSnapshot> {
+  const gen = snapshotGen;
   if (lastSnapshot && Date.now() - lastSnapshot.at < SNAPSHOT_TTL_MS) {
     return lastSnapshot.data;
   }
   if (!inflightSnapshot) {
     inflightSnapshot = fetchSupabaseSnapshotOnce()
       .then((data) => {
-        lastSnapshot = { at: Date.now(), data };
+        if (gen === snapshotGen) {
+          lastSnapshot = { at: Date.now(), data };
+        }
         return data;
       })
       .finally(() => {
-        inflightSnapshot = null;
+        if (gen === snapshotGen) {
+          inflightSnapshot = null;
+        }
       });
   }
   return inflightSnapshot;
@@ -1078,17 +1085,27 @@ export async function supabaseReorderEmployees(
 
 export async function supabaseCreateAbsence(
   input: NewAbsenceInput,
-): Promise<void> {
+): Promise<Absence> {
   const supabase = createSupabaseServerClient();
-  const { error } = await supabase.from("absences").insert({
-    employe_id: input.employe_id,
-    date_debut: input.date_debut,
-    date_fin: input.date_fin,
-    type: input.type,
-    motif_precision:
-      input.type === "autre" ? input.motif_precision?.trim() || null : null,
-  });
+  const { data, error } = await supabase
+    .from("absences")
+    .insert({
+      employe_id: input.employe_id,
+      date_debut: input.date_debut,
+      date_fin: input.date_fin,
+      type: input.type,
+      motif_precision:
+        input.type === "autre" ? input.motif_precision?.trim() || null : null,
+    })
+    .select("*")
+    .single();
   if (error) throw wrapSupabaseError(error);
+  return {
+    ...(data as Absence),
+    date_debut: asIsoDate((data as Absence).date_debut) ?? input.date_debut,
+    date_fin: asIsoDate((data as Absence).date_fin) ?? input.date_fin,
+    motif_precision: (data as Absence).motif_precision ?? null,
+  };
 }
 
 export async function supabaseDeleteAbsence(id: string): Promise<void> {

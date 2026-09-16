@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-16-liste-apres-enregistrer",
+    title: "La liste se met à jour dès Enregistrer",
+    items: [
+      "Après Enregistrer une absence, la nouvelle ligne apparaît tout de suite dans le tableau, sans recharger la page.",
+      "Les autres listes (employés, chantiers) ne sont plus écrasées par un rafraîchissement plus ancien.",
+    ],
+  },
+  {
     id: "2026-09-16-decalage-date-cible-marge",
     title: "Décalage vers une date cible ± marge",
     items: [
