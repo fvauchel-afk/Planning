@@ -35,6 +35,7 @@ import {
 } from "@/lib/supabase/errors";
 import { hasSupabaseServiceRole, isSupabaseUrlConfigured } from "@/lib/supabase/server";
 import type {
+  Absence,
   HoraireSaison,
   NewAbsenceInput,
   AbsenceUpdateInput,
@@ -194,6 +195,7 @@ export async function POST(request: NextRequest) {
   try {
     let chantierId: string | undefined;
     let createdForPlanId: string | undefined;
+    let createdAbsence: Absence | undefined;
 
     if (body.action === "createChantier") {
       const current = await fetchSupabaseSnapshot();
@@ -272,7 +274,7 @@ export async function POST(request: NextRequest) {
       }
       await supabaseReorderEmployees(rows);
     } else if (body.action === "createAbsence") {
-      await supabaseCreateAbsence(body.input);
+      createdAbsence = await supabaseCreateAbsence(body.input);
     } else if (body.action === "updateAbsence") {
       await supabaseUpdateAbsence(body.input);
     } else if (body.action === "patchAbsence") {
@@ -587,7 +589,7 @@ export async function POST(request: NextRequest) {
     }
 
     invalidateSupabaseSnapshotCache();
-    return NextResponse.json({ ok: true, chantierId });
+    return NextResponse.json({ ok: true, chantierId, absence: createdAbsence });
   } catch (err) {
     return NextResponse.json(
       { error: wrapSupabaseError(err).message },

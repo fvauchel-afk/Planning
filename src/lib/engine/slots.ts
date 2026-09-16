@@ -19,6 +19,8 @@ export const HOURS_PER_SLOT = 4;
 export const MIN_LOGISTICS_WORKING_DAYS = 10;
 export const MAX_LOGISTICS_WORKING_DAYS = 12;
 export const TARGET_LOAD = 0.8;
+/** Au-delà : vraie surcharge (la zone 80–110 % reste tolérée). */
+export const LOAD_OVERFLOW = 1.1;
 export const SEARCH_DAYS = 420;
 export const SHORT_TASK_HOURS = 3;
 

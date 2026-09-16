@@ -1,7 +1,7 @@
 import { addDays, startOfWeekIso } from "@/lib/dates";
 import type { PlanningSnapshot } from "@/lib/types";
 import { capacityHoursForWeek } from "./hours";
-import { TARGET_LOAD, buildOccupancy, occupancySpans } from "./slots";
+import { TARGET_LOAD, LOAD_OVERFLOW, buildOccupancy, occupancySpans } from "./slots";
 
 export type WeekLoad = {
   weekStart: string;
@@ -44,7 +44,8 @@ export function buildSynthesis(
     plannedHours = Math.round(plannedHours * 10) / 10;
     const capacityHours = capacityHoursForWeek(snapshot, weekStart);
     const rate = capacityHours === 0 ? 0 : plannedHours / capacityHours;
-    const tone = rate <= TARGET_LOAD ? "green" : rate <= 1 ? "orange" : "red";
+    const tone =
+      rate <= TARGET_LOAD ? "green" : rate <= LOAD_OVERFLOW ? "orange" : "red";
     weeks.push({ weekStart, plannedHours, capacityHours, rate, tone });
   }
 
@@ -70,5 +71,19 @@ export function buildSynthesis(
   return { weeks, unplaced, target: TARGET_LOAD };
 }
 
-export { TARGET_LOAD };
+function runCapacityToneSelfCheck() {
+  const green = 0.8;
+  const orange = 1.1;
+  const red = 1.11;
+  const tone = (rate: number) =>
+    rate <= TARGET_LOAD ? "green" : rate <= LOAD_OVERFLOW ? "orange" : "red";
+  if (tone(green) !== "green") throw new Error("capacity: 80 % doit être vert");
+  if (tone(orange) !== "orange") {
+    throw new Error("capacity: 110 % doit rester orange (toléré)");
+  }
+  if (tone(red) !== "red") throw new Error("capacity: > 110 % doit être rouge");
+}
+runCapacityToneSelfCheck();
+
+export { TARGET_LOAD, LOAD_OVERFLOW };
 export { HOURS_PER_SLOT } from "./slots";

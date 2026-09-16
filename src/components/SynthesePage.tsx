@@ -28,7 +28,7 @@ export function SynthesePage() {
         <p className="mt-1 text-sm text-stone-600">
           Heures planifiées vs capacité réelle (horaires de chaque salarié selon
           la saison été/hiver en cours), semaine par semaine. Repère vert ≤ 80 %,
-          orange 80–100 %, rouge &gt; 100 %.
+          orange 80–110 % (zone tolérée), rouge &gt; 110 % (surcharge).
         </p>
       </div>
 

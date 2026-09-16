@@ -29,12 +29,26 @@ export function chantierToleranceCalendarDays(
   },
 ): number {
   if (chantier.priorite === "prioritaire") return 0;
-  if (chantier.priorite === "normal") return TOLERANCE_NORMAL_JOURS;
   const custom = Number(chantier.tolerance_deplacement_jours);
   if (Number.isFinite(custom) && custom > 0) {
     return Math.min(180, Math.round(custom));
   }
+  if (chantier.priorite === "normal") return TOLERANCE_NORMAL_JOURS;
   return TOLERANCE_PAS_PRESSE_JOURS_DEFAUT;
+}
+
+/** Marge par défaut du formulaire « date cible ± jours » (jours ouvrés). */
+export function delayWindowFlexDays(
+  chantier: Pick<Chantier, "priorite"> & {
+    tolerance_deplacement_jours?: number | null;
+  },
+): number {
+  if (chantier.priorite === "prioritaire") return 0;
+  const custom = Number(chantier.tolerance_deplacement_jours);
+  if (Number.isFinite(custom) && custom >= 0) {
+    return Math.min(30, Math.max(0, Math.round(custom)));
+  }
+  return 3;
 }
 
 /** Jours ouvrés approximatifs pour caper un décalage de l’algorithme. */
@@ -95,11 +109,30 @@ function runPrioriteSelfCheck() {
   }
   if (
     chantierToleranceCalendarDays({
+      priorite: "normal",
+      tolerance_deplacement_jours: 3,
+    }) !== 3
+  ) {
+    throw new Error("priorite: marge saisie utilisée aussi en normal");
+  }
+  if (
+    chantierToleranceCalendarDays({
       priorite: "pas_presse",
       tolerance_deplacement_jours: 60,
     }) !== 60
   ) {
     throw new Error("priorite: pas pressé utilise la marge saisie");
+  }
+  if (delayWindowFlexDays({ priorite: "normal" }) !== 3) {
+    throw new Error("priorite: flex décalage par défaut = 3 j");
+  }
+  if (
+    delayWindowFlexDays({
+      priorite: "normal",
+      tolerance_deplacement_jours: 3,
+    }) !== 3
+  ) {
+    throw new Error("priorite: flex décalage lit tolerance_deplacement_jours");
   }
 }
 runPrioriteSelfCheck();

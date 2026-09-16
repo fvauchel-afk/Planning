@@ -19,6 +19,7 @@ import { AbsenceImprevueModal } from "@/components/AbsenceImprevueModal";
 import { ChantierEditModal } from "@/components/ChantierEditModal";
 import { LaunchValidateButton } from "@/components/LaunchValidateButton";
 import { PhaseFicheModal } from "@/components/PhaseFicheModal";
+import { ReceptionModal } from "@/components/ReceptionModal";
 import { colorForChantier } from "@/lib/colors";
 import {
   addDays,
@@ -66,6 +67,7 @@ export function CalendarBoard() {
   const [todayIso, setTodayIso] = useState(() => toISODate(new Date()));
   const [cursorIso, setCursorIso] = useState(todayIso);
   const [selectedPhaseId, setSelectedPhaseId] = useState<string | null>(null);
+  const [receptionPhaseId, setReceptionPhaseId] = useState<string | null>(null);
   const [absenceEmployee, setAbsenceEmployee] = useState<Employee | null>(null);
   const [editingChantier, setEditingChantier] = useState<Chantier | null>(null);
 
@@ -453,6 +455,7 @@ export function CalendarBoard() {
           focusCell={focusCell}
           onSelectDay={setCursorIso}
           onOpenPhase={setSelectedPhaseId}
+          onReception={setReceptionPhaseId}
           onAbsence={setAbsenceEmployee}
         />
       ) : (
@@ -665,6 +668,19 @@ export function CalendarBoard() {
                               phaseId={assignment.phase.id}
                               compact
                             />
+                            {assignment.phase.type_phase === "pose" &&
+                            assignment.phase.statut !== "termine" ? (
+                              <button
+                                type="button"
+                                className="mt-0.5 w-full rounded bg-sky-800 px-1 py-0.5 text-[10px] font-medium text-sky-50"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  setReceptionPhaseId(assignment.phase.id);
+                                }}
+                              >
+                                Terminer / réception
+                              </button>
+                            ) : null}
                             </div>
                           ))}
                         </div>
@@ -696,6 +712,12 @@ export function CalendarBoard() {
           onClose={() => setSelectedPhaseId(null)}
         />
       )}
+      {receptionPhaseId ? (
+        <ReceptionModal
+          phaseId={receptionPhaseId}
+          onClose={() => setReceptionPhaseId(null)}
+        />
+      ) : null}
       </>
       )}
     </section>
@@ -713,6 +735,7 @@ function DayDetail({
   focusCell,
   onSelectDay,
   onOpenPhase,
+  onReception,
   onAbsence,
 }: {
   iso: string;
@@ -725,6 +748,7 @@ function DayDetail({
   focusCell: { rowId: string; date: string; half: 0 | 1 } | null;
   onSelectDay: (iso: string) => void;
   onOpenPhase: (phaseId: string) => void;
+  onReception: (phaseId: string) => void;
   onAbsence: (employee: Employee) => void;
 }) {
   const isToday = iso === todayIso;
@@ -832,6 +856,22 @@ function DayDetail({
                     <div key={`launch-${item.phase.id}`} className="mt-2">
                       <LaunchValidateButton phaseId={item.phase.id} compact />
                     </div>
+                  ))}
+                {assignments
+                  .filter(
+                    (item) =>
+                      item.phase.type_phase === "pose" &&
+                      item.phase.statut !== "termine",
+                  )
+                  .map((item) => (
+                    <button
+                      key={`reception-${item.phase.id}`}
+                      type="button"
+                      className="mt-1 text-[11px] text-sky-800 underline"
+                      onClick={() => onReception(item.phase.id)}
+                    >
+                      Terminer / réception
+                    </button>
                   ))}
               </div>
               <div className="relative min-h-[96px] border-l border-stone-200 p-3">

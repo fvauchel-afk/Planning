@@ -11,6 +11,45 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-16-reception-pose-pdf",
+    title: "Clôturer une pose et générer la réception",
+    items: [
+      "Sur un bloc Pose du planning, « Terminer / réception » ouvre un document (aperçu PDF, puis confirmation), avec une zone de signature simulée.",
+      "La pose passe en terminée, et le PDF est copié dans le dossier OneDrive du chantier.",
+    ],
+  },
+  {
+    id: "2026-09-16-ferie-toute-equipe",
+    title: "Jour férié pour toute l’équipe",
+    items: [
+      "Sur une absence « Jour férié entreprise », une case « Appliquer à toute l’équipe » crée l’absence pour tous les salariés actifs d’un coup.",
+    ],
+  },
+  {
+    id: "2026-09-16-synthese-seuil-110",
+    title: "Couleurs de la Synthèse de charge",
+    items: [
+      "Vert jusqu’à 80 %, orange de 80 à 110 % (zone tolérée), rouge au-delà de 110 % (vraie surcharge).",
+    ],
+  },
+  {
+    id: "2026-09-16-liste-apres-enregistrer",
+    title: "La liste se met à jour dès Enregistrer",
+    items: [
+      "Après Enregistrer une absence, la nouvelle ligne apparaît tout de suite dans le tableau, sans recharger la page.",
+      "Les autres listes (employés, chantiers) ne sont plus écrasées par un rafraîchissement plus ancien.",
+    ],
+  },
+  {
+    id: "2026-09-16-decalage-date-cible-marge",
+    title: "Décalage vers une date cible ± marge",
+    items: [
+      "Sur la fiche d’une phase, Décaler ouvre d’abord « Date cible ± marge » : vous indiquez par exemple le 15 novembre et 3 jours.",
+      "L’algorithme choisit le meilleur jour dans cette fourchette (délai logistique, chantiers prioritaires, absences).",
+      "La marge est enregistrée sur le chantier et ressort la prochaine fois.",
+    ],
+  },
+  {
     id: "2026-09-15-horaires-presets-saison",
     title: "Préréglages d’horaires et bascule été / hiver",
     items: [
