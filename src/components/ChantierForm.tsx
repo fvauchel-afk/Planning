@@ -20,7 +20,11 @@ import {
 import { generatePlanSolutions, propositionFromSolutions } from "@/lib/engine/plan-solutions";
 import { applyPhaseChainOnCreate, missingRequiredAssignee } from "@/lib/engine/phase-chain";
 import { moisToToleranceJours } from "@/lib/priorite";
-import { employeeCanTakePhase } from "@/lib/chantier-status";
+import { EmployeePhaseSelect } from "@/components/EmployeePhaseSelect";
+import {
+  coerceSelectValue,
+  employeesForPhaseSelect,
+} from "@/lib/chantier-status";
 import { usePlanning } from "@/lib/planning-context";
 import { SousTraitantSelect } from "@/components/SousTraitantSelect";
 import { formatSaveError } from "@/lib/supabase/errors";
@@ -41,8 +45,10 @@ import {
   PRIORITES,
   PRIORITE_LABELS,
   TYPES_PHASE,
+  type Employee,
   type NewChantierInput,
   type PhasePatch,
+  type PlanningSnapshot,
   type Priorite,
   type TypePhase,
 } from "@/lib/types";
@@ -63,6 +69,38 @@ type ElementForm = {
   phases: PhaseForm[];
 };
 
+function employeesForPhaseRow(
+  snapshot: PlanningSnapshot,
+  employees: Employee[],
+  phase: PhaseForm,
+) {
+  const listed = employeesForPhaseSelect(employees, phase.type_phase, phase.employe_id);
+  const available = listed.filter((employee) =>
+    employeeAvailableOnRange(
+      snapshot,
+      employee,
+      phase.date_debut || null,
+      phase.date_fin || phase.date_debut || null,
+    ),
+  );
+  if (phase.employe_id && !available.some((item) => item.id === phase.employe_id)) {
+    const selected = listed.find((item) => item.id === phase.employe_id);
+    if (selected) available.push(selected);
+  }
+  return available.length > 0 ? available : listed;
+}
+
+function coercePhasePersonValue(
+  snapshot: PlanningSnapshot,
+  employees: Employee[],
+  phase: PhaseForm,
+) {
+  return coerceSelectValue(
+    phase.employe_id,
+    employeesForPhaseRow(snapshot, employees, phase),
+  );
+}
+
 function emptyPhases(): PhaseForm[] {
   return TYPES_PHASE.map((type_phase) => ({
     type_phase,
@@ -77,7 +115,7 @@ function emptyPhases(): PhaseForm[] {
 
 export function ChantierForm() {
   const router = useRouter();
-  const { snapshot, createChantier, createSignalement } = usePlanning();
+  const { snapshot, loading, createChantier, createSignalement } = usePlanning();
   const { session } = useSession();
   const [nomClient, setNomClient] = useState("");
   const [adresse, setAdresse] = useState("");
@@ -478,6 +516,10 @@ export function ChantierForm() {
     );
   }
 
+  if (loading) {
+    return <p className="text-sm text-stone-500">Chargement des salariés…</p>;
+  }
+
   return (
     <form onSubmit={onSubmit} className="space-y-6">
       {conflict && (
@@ -708,20 +750,14 @@ export function ChantierForm() {
               <span className="mb-1 block font-medium">
                 Salarié responsable de la pose
               </span>
-              <select
+              <EmployeePhaseSelect
+                employees={employeesByRole}
+                type="pose"
                 value={employePose}
-                onChange={(event) => setEmployePose(event.target.value)}
+                onChange={setEmployePose}
+                emptyLabel="Auto (premier disponible)"
                 className="w-full rounded border border-stone-300 bg-white px-3 py-2"
-              >
-                <option value="">Auto (premier disponible)</option>
-                {employeesByRole
-                  .filter((employee) => employeeCanTakePhase(employee, "pose"))
-                  .map((employee) => (
-                    <option key={employee.id} value={employee.id}>
-                      {employee.nom}
-                    </option>
-                  ))}
-              </select>
+              />
             </label>
           ) : null}
         </fieldset>
@@ -733,22 +769,14 @@ export function ChantierForm() {
             <span className="mb-1 block font-medium">
               Salarié responsable de la fabrication
             </span>
-            <select
+            <EmployeePhaseSelect
+              employees={employeesByRole}
+              type="fabrication"
               value={employeFabrication}
-              onChange={(event) => setEmployeFabrication(event.target.value)}
+              onChange={setEmployeFabrication}
+              emptyLabel="Auto (premier disponible)"
               className="w-full rounded border border-stone-300 bg-white px-3 py-2"
-            >
-              <option value="">Auto (premier disponible)</option>
-              {employeesByRole
-                .filter((employee) =>
-                  employeeCanTakePhase(employee, "fabrication"),
-                )
-                .map((employee) => (
-                  <option key={employee.id} value={employee.id}>
-                    {employee.nom}
-                  </option>
-                ))}
-            </select>
+            />
           </label>
         </fieldset>
         <fieldset className="rounded-lg border border-stone-300 bg-stone-50/60 p-3 text-sm md:col-span-2">
@@ -1061,7 +1089,12 @@ export function ChantierForm() {
                           <span className="text-stone-500">Thermolaquage</span>
                         ) : (
                           <select
-                            value={phase.employe_id}
+                            autoComplete="off"
+                            value={coercePhasePersonValue(
+                              snapshot,
+                              employeesByRole,
+                              phase,
+                            )}
                             onChange={(event) =>
                               updatePhase(element.key, phase.type_phase, {
                                 employe_id: event.target.value,
@@ -1070,23 +1103,15 @@ export function ChantierForm() {
                             className="rounded border border-stone-300 px-2 py-1"
                           >
                             <option value="">Auto / non assigné</option>
-                            {employeesByRole
-                              .filter((employee) =>
-                                employeeCanTakePhase(employee, phase.type_phase),
-                              )
-                              .filter((employee) =>
-                                employeeAvailableOnRange(
-                                  snapshot,
-                                  employee,
-                                  phase.date_debut || null,
-                                  phase.date_fin || phase.date_debut || null,
-                                ),
-                              )
-                              .map((employee) => (
-                                <option key={employee.id} value={employee.id}>
-                                  {employee.nom}
-                                </option>
-                              ))}
+                            {employeesForPhaseRow(
+                              snapshot,
+                              employeesByRole,
+                              phase,
+                            ).map((employee) => (
+                              <option key={employee.id} value={employee.id}>
+                                {employee.nom}
+                              </option>
+                            ))}
                           </select>
                         )}
                       </td>

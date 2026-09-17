@@ -30,7 +30,7 @@ import {
   missingGridAssignee,
   planChantierOptionEdits,
 } from "@/lib/engine/phase-chain";
-import { employeeCanTakePhase } from "@/lib/chantier-status";
+import { EmployeePhaseSelect } from "@/components/EmployeePhaseSelect";
 import { compareEmployeesByOrdre } from "@/lib/display-order";
 import { moisToToleranceJours, toleranceJoursToMois } from "@/lib/priorite";
 import { usePlanning } from "@/lib/planning-context";
@@ -924,23 +924,17 @@ export function ChantierEditModal({
                 <span className="mb-1 block font-medium">
                   Salarié responsable de la pose
                 </span>
-                <select
+                <EmployeePhaseSelect
+                  employees={activeEmployees}
+                  type="pose"
                   value={employePose}
-                  onChange={(event) => {
+                  onChange={(id) => {
                     markCascade();
-                    setEmployePose(event.target.value);
+                    setEmployePose(id);
                   }}
+                  emptyLabel="Auto (premier disponible)"
                   className="w-full rounded border border-stone-300 bg-white px-3 py-2"
-                >
-                  <option value="">Auto (premier disponible)</option>
-                  {activeEmployees
-                    .filter((employee) => employeeCanTakePhase(employee, "pose"))
-                    .map((employee) => (
-                      <option key={employee.id} value={employee.id}>
-                        {employee.nom}
-                      </option>
-                    ))}
-                </select>
+                />
               </label>
             ) : null}
           </fieldset>
@@ -950,25 +944,17 @@ export function ChantierEditModal({
               <span className="mb-1 block font-medium">
                 Salarié responsable de la fabrication
               </span>
-              <select
+              <EmployeePhaseSelect
+                employees={activeEmployees}
+                type="fabrication"
                 value={employeFabrication}
-                  onChange={(event) => {
-                    markCascade();
-                    setEmployeFabrication(event.target.value);
-                  }}
+                onChange={(id) => {
+                  markCascade();
+                  setEmployeFabrication(id);
+                }}
+                emptyLabel="Auto (premier disponible)"
                 className="w-full rounded border border-stone-300 bg-white px-3 py-2"
-              >
-                <option value="">Auto (premier disponible)</option>
-                {activeEmployees
-                  .filter((employee) =>
-                    employeeCanTakePhase(employee, "fabrication"),
-                  )
-                  .map((employee) => (
-                    <option key={employee.id} value={employee.id}>
-                      {employee.nom}
-                    </option>
-                  ))}
-              </select>
+              />
             </label>
           </fieldset>
           <fieldset className="rounded-lg border border-stone-300 bg-stone-50/60 p-3 text-sm">

@@ -2,7 +2,16 @@ import { addDays, calendarDaysBetween, formatIsoFr, toISODate } from "@/lib/date
 import {
   chantierHasEstimativeDates,
 } from "@/lib/dates-estimatives";
-import type { PhasePatch, PlanningSnapshot, Role, TypePhase } from "@/lib/types";
+import { compareEmployeesByOrdre } from "@/lib/display-order";
+import {
+  LOGISTIQUE_ROW_ID,
+  ROLES,
+  TRANSPORT_ROW_ID,
+  type PhasePatch,
+  type PlanningSnapshot,
+  type Role,
+  type TypePhase,
+} from "@/lib/types";
 
 export const STATUTS_CHANTIER = [
   "non_planifie",
@@ -136,18 +145,121 @@ function runChantierStatusSelfCheck() {
 runChantierStatusSelfCheck();
 
 export function phaseTypeForRoles(roles: Role[]): TypePhase {
-  if (roles.includes("pose")) return "pose";
-  if (roles.includes("fabrication")) return "fabrication";
-  if (roles.includes("administratif")) return "administratif";
+  const normalized = normalizeEmployeeRoles(roles);
+  if (normalized.includes("pose")) return "pose";
+  if (normalized.includes("fabrication")) return "fabrication";
+  if (normalized.includes("administratif")) return "administratif";
   return "logistique";
 }
 
+const ROLE_SET = new Set<string>(ROLES);
+
+export function normalizeEmployeeRoles(roles: unknown): Role[] {
+  if (Array.isArray(roles)) {
+    return roles.filter((item): item is Role => typeof item === "string" && ROLE_SET.has(item));
+  }
+  if (typeof roles === "string") {
+    return roles
+      .replace(/^[{\[]/, "")
+      .replace(/[}\]]$/, "")
+      .split(",")
+      .map((item) => item.trim().replace(/^["']|["']$/g, ""))
+      .filter((item): item is Role => ROLE_SET.has(item));
+  }
+  return [];
+}
+
+function isAssignablePerson(employee: { id: string }): boolean {
+  return employee.id !== LOGISTIQUE_ROW_ID && employee.id !== TRANSPORT_ROW_ID;
+}
+
 export function employeeCanTakePhase(
-  employee: { actif: boolean; roles: Role[] },
+  employee: { actif: boolean; roles: unknown; id?: string },
   type: TypePhase,
 ): boolean {
   if (!employee.actif) return false;
+  if (employee.id && !isAssignablePerson({ id: employee.id })) return false;
   if (type === "logistique") return false;
   if (type === "livraison") return true;
-  return employee.roles.includes(type);
+  return normalizeEmployeeRoles(employee.roles).includes(type as Role);
 }
+
+type PhaseSelectEmployee = {
+  id: string;
+  nom: string;
+  actif: boolean;
+  roles: unknown;
+  ordre_affichage?: number | null;
+};
+
+/** Options d’un <select> salarié : jamais une valeur hors liste (message orange du navigateur). */
+export function employeesForPhaseSelect<T extends PhaseSelectEmployee>(
+  employees: T[],
+  type: TypePhase,
+  selectedId?: string | null,
+): T[] {
+  const people = employees.filter(isAssignablePerson);
+  const eligible = people
+    .filter((employee) => employeeCanTakePhase(employee, type))
+    .sort(compareEmployeesByOrdre);
+  const selected = (selectedId ?? "").trim();
+  if (selected) {
+    const extra = people.find((employee) => employee.id === selected);
+    if (extra && !eligible.some((employee) => employee.id === extra.id)) {
+      eligible.push(extra);
+    }
+  }
+  if (eligible.length === 0) {
+    return people.filter((employee) => employee.actif).sort(compareEmployeesByOrdre);
+  }
+  return eligible;
+}
+
+export function coerceSelectValue(
+  value: string,
+  options: Array<{ id: string }>,
+): string {
+  if (!value) return "";
+  return options.some((item) => item.id === value) ? value : "";
+}
+
+function runEmployeePhaseSelectSelfCheck() {
+  const fabricant = {
+    id: "emp-fab",
+    nom: "Romain",
+    actif: true,
+    roles: ["fabrication", "pose"] as Role[],
+  };
+  const admin = {
+    id: "emp-admin",
+    nom: "Jonathan",
+    actif: true,
+    roles: ["administratif"] as Role[],
+  };
+  const pgArray = {
+    id: "emp-pg",
+    nom: "Alexis",
+    actif: true,
+    roles: "{fabrication,pose}",
+  };
+  if (!employeeCanTakePhase(pgArray, "fabrication")) {
+    throw new Error("chantier-status: rôles Postgres texte doivent compter pour fabrication");
+  }
+  const listed = employeesForPhaseSelect([admin, fabricant], "fabrication", "");
+  if (listed.length !== 1 || listed[0]?.id !== "emp-fab") {
+    throw new Error("chantier-status: le select fabrication doit lister le fabricant");
+  }
+  const unmatched = employeesForPhaseSelect([admin, fabricant], "fabrication", "emp-admin");
+  if (!unmatched.some((item) => item.id === "emp-admin")) {
+    throw new Error("chantier-status: le salarié déjà choisi reste dans la liste");
+  }
+  const fallback = employeesForPhaseSelect([admin], "fabrication", "");
+  if (fallback.length !== 1 || fallback[0]?.id !== "emp-admin") {
+    throw new Error("chantier-status: sans fabricant, proposer les salariés actifs");
+  }
+  if (coerceSelectValue("manquant", listed) !== "") {
+    throw new Error("chantier-status: valeur absente des options → vide");
+  }
+}
+
+runEmployeePhaseSelectSelfCheck();
