@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-17-dnd-insert-milieu",
+    title: "Insérer un chantier au milieu d’un autre",
+    items: [
+      "Sur le planning équipe, vous pouvez glisser un chantier et le déposer au milieu d’un autre déjà planifié.",
+      "Le début de l’affaire en place ne bouge pas ; la suite reprend juste après le chantier inséré.",
+    ],
+  },
+  {
     id: "2026-09-17-email-plan-mika",
     title: "E-mail plan à la création d’un chantier",
     items: [

@@ -12,7 +12,9 @@ import {
 } from "@/lib/engine/slots";
 import {
   isVirtualPlanningRow,
+  type PhaseInsert,
   type PhasePatch,
+  type PhasePlanning,
   type PlanningSnapshot,
 } from "@/lib/types";
 
@@ -403,13 +405,287 @@ function destCascadeChain(
 export type DragShiftResult = {
   delta: number;
   patches: PhasePatch[];
+  inserts?: PhaseInsert[];
   chain: ChantierBlock[];
   preview: DragShiftPreviewCell[];
   blocked: boolean;
 };
 
 function emptyDragShift(preview: DragShiftPreviewCell[] = []): DragShiftResult {
-  return { delta: 0, patches: [], chain: [], preview, blocked: false };
+  return { delta: 0, patches: [], inserts: [], chain: [], preview, blocked: false };
+}
+
+function halfKey(item: OccupiedHalf): string {
+  return `${item.date}|${item.half}`;
+}
+
+function nextOpenWorkHalf(
+  snapshot: PlanningSnapshot,
+  rowId: string,
+  from: OccupiedHalf,
+): OccupiedHalf | null {
+  let cursor = addHalfSteps(from.date, from.half, 1);
+  for (let i = 0; i < 90; i += 1) {
+    if (
+      isWorkHalf(snapshot, rowId, cursor.date, cursor.half) &&
+      !isSlotBlockedForRow(snapshot, rowId, cursor.date, cursor.half)
+    ) {
+      return cursor;
+    }
+    cursor = addHalfSteps(cursor.date, cursor.half, 1);
+  }
+  return null;
+}
+
+function hoursForOccupiedHalf(
+  snapshot: PlanningSnapshot,
+  rowId: string,
+  half: OccupiedHalf,
+): number {
+  return Math.max(0, hoursForSlot(snapshot, rowId, half.date, half.half));
+}
+
+function insertFromPhase(
+  phase: PhasePlanning,
+  start: OccupiedHalf,
+  end: OccupiedHalf,
+  hours: number,
+  employeId: string,
+): PhaseInsert {
+  return {
+    element_id: phase.element_id,
+    type_phase: phase.type_phase,
+    duree_estimee_heures: hours,
+    date_debut: start.date,
+    date_fin: end.date,
+    heure_debut: heureForHalf(start.half, phase.heure_debut),
+    employe_id: employeId,
+    statut: phase.statut,
+    urgent: phase.urgent,
+    heures_supplementaires_par_jour:
+      phase.heures_supplementaires_par_jour ?? 0,
+    dates_estimatives: phase.dates_estimatives,
+  };
+}
+
+function tryInsertChantierInMiddle(input: {
+  snapshot: PlanningSnapshot;
+  fromRowId: string;
+  toRowId: string;
+  origin: ChantierBlock;
+  delta: number;
+}): DragShiftResult | null {
+  const landingHalves = previewHalves(input.origin, input.delta);
+  if (landingHalves.length === 0) return null;
+  const landingStart = landingHalves[0]!;
+  const landingEnd = landingHalves[landingHalves.length - 1]!;
+  const destBlocks = chantierBlocksForRow(
+    input.snapshot,
+    input.toRowId,
+  ).filter(
+    (block) =>
+      block.chantierId !== input.origin.chantierId &&
+      halvesOverlap(block.halves, landingHalves),
+  );
+  const splitTargets = destBlocks.filter((block) =>
+    block.halves.some((half) => compareHalves(half, landingStart) < 0),
+  );
+  if (splitTargets.length === 0) return null;
+
+  const { occupancy } = occupancyForRow(input.snapshot, input.toRowId);
+  const rowBlocks = chantierBlocksForRow(input.snapshot, input.toRowId);
+  const following: ChantierBlock[] = [];
+  const seenFollow = new Set<string>();
+  for (const target of splitTargets) {
+    for (const neighbor of gluedNeighbors(
+      input.snapshot,
+      occupancy,
+      rowBlocks,
+      target,
+      1,
+    )) {
+      if (neighbor.chantierId === input.origin.chantierId) continue;
+      if (seenFollow.has(neighbor.key)) continue;
+      seenFollow.add(neighbor.key);
+      following.push(neighbor);
+    }
+  }
+
+  const suffixQueue: OccupiedHalf[] = [];
+  const seenSuffix = new Set<string>();
+  const pushSuffix = (half: OccupiedHalf) => {
+    const key = halfKey(half);
+    if (seenSuffix.has(key)) return;
+    seenSuffix.add(key);
+    suffixQueue.push(half);
+  };
+  const orderedTargets = [...splitTargets].sort((left, right) =>
+    compareHalves(left.halves[0]!, right.halves[0]!),
+  );
+  for (const target of orderedTargets) {
+    for (const half of target.halves) {
+      if (compareHalves(half, landingStart) >= 0) pushSuffix(half);
+    }
+  }
+  for (const block of following) {
+    for (const half of block.halves) pushSuffix(half);
+  }
+  if (suffixQueue.length === 0) return null;
+
+  const packed: OccupiedHalf[] = [];
+  let cursor = landingEnd;
+  for (let i = 0; i < suffixQueue.length; i += 1) {
+    const next = nextOpenWorkHalf(input.snapshot, input.toRowId, cursor);
+    if (!next) return null;
+    packed.push(next);
+    cursor = next;
+  }
+  const remap = new Map<string, OccupiedHalf>();
+  suffixQueue.forEach((old, index) => {
+    remap.set(halfKey(old), packed[index]!);
+  });
+
+  const movingPhaseIds = new Set([
+    ...input.origin.phaseIds,
+    ...orderedTargets.flatMap((block) => block.phaseIds),
+    ...following.flatMap((block) => block.phaseIds),
+  ]);
+  const landings: { rowId: string; halves: OccupiedHalf[] }[] = [
+    { rowId: input.toRowId, halves: landingHalves },
+    { rowId: input.toRowId, halves: packed },
+  ];
+  if (landingHasConflict(input.snapshot, landings, movingPhaseIds)) {
+    return null;
+  }
+
+  const byId = new Map<string, PhasePatch>();
+  const inserts: PhaseInsert[] = [];
+  for (const patch of patchesForBlock(
+    input.snapshot,
+    { ...input.origin, rowId: input.toRowId },
+    input.delta,
+    input.toRowId,
+  )) {
+    byId.set(patch.id, patch);
+  }
+
+  const remapHalves = (halves: OccupiedHalf[]): OccupiedHalf[] =>
+    halves.map((half) => remap.get(halfKey(half)) ?? half);
+
+  const applyRemapToPhase = (
+    phase: PhasePlanning,
+    halves: OccupiedHalf[],
+  ): PhasePatch | null => {
+    const mapped = remapHalves(halves).sort(compareHalves);
+    if (mapped.length === 0) return null;
+    const first = mapped[0]!;
+    const last = mapped[mapped.length - 1]!;
+    const hours = halves.reduce(
+      (sum, half) =>
+        sum + hoursForOccupiedHalf(input.snapshot, input.toRowId, half),
+      0,
+    );
+    return {
+      id: phase.id,
+      date_debut: first.date,
+      date_fin: last.date,
+      employe_id: input.toRowId,
+      heure_debut: heureForHalf(first.half, phase.heure_debut),
+      duree_estimee_heures: hours,
+    };
+  };
+
+  const phaseHalvesOnRow = (phaseId: string): OccupiedHalf[] => {
+    const phase = input.snapshot.phases.find((item) => item.id === phaseId);
+    if (!phase) return [];
+    const slots = slotsFromExistingPhase(input.snapshot, phase).filter(
+      (slot) => slot.rowId === input.toRowId || slot.rowId === input.fromRowId,
+    );
+    const unique = new Map<string, OccupiedHalf>();
+    for (const slot of slots) {
+      const half: OccupiedHalf = { date: slot.date, half: slot.half };
+      unique.set(halfKey(half), half);
+    }
+    return Array.from(unique.values()).sort(compareHalves);
+  };
+
+  for (const phaseId of orderedTargets.flatMap((block) => block.phaseIds)) {
+    const phase = input.snapshot.phases.find((item) => item.id === phaseId);
+    if (!phase) continue;
+    const halves = phaseHalvesOnRow(phaseId);
+    const prefix = halves.filter(
+      (half) => compareHalves(half, landingStart) < 0,
+    );
+    const suffix = halves.filter(
+      (half) => compareHalves(half, landingStart) >= 0,
+    );
+    if (suffix.length === 0) continue;
+    if (prefix.length === 0) {
+      const patch = applyRemapToPhase(phase, suffix);
+      if (patch) byId.set(patch.id, patch);
+      continue;
+    }
+    const prefixHours = prefix.reduce(
+      (sum, half) =>
+        sum + hoursForOccupiedHalf(input.snapshot, input.toRowId, half),
+      0,
+    );
+    const suffixHours = suffix.reduce(
+      (sum, half) =>
+        sum + hoursForOccupiedHalf(input.snapshot, input.toRowId, half),
+      0,
+    );
+    const prefixLast = prefix[prefix.length - 1]!;
+    byId.set(phase.id, {
+      id: phase.id,
+      date_debut: prefix[0]!.date,
+      date_fin: prefixLast.date,
+      employe_id: phase.employe_id,
+      heure_debut: heureForHalf(prefix[0]!.half, phase.heure_debut),
+      duree_estimee_heures: prefixHours,
+    });
+    const mappedSuffix = remapHalves(suffix).sort(compareHalves);
+    const suffixFirst = mappedSuffix[0];
+    const suffixLast = mappedSuffix[mappedSuffix.length - 1];
+    if (suffixFirst && suffixLast && suffixHours > 0) {
+      inserts.push(
+        insertFromPhase(
+          phase,
+          suffixFirst,
+          suffixLast,
+          suffixHours,
+          input.toRowId,
+        ),
+      );
+    }
+  }
+
+  for (const block of following) {
+    for (const phaseId of block.phaseIds) {
+      if (byId.has(phaseId)) continue;
+      const phase = input.snapshot.phases.find((item) => item.id === phaseId);
+      if (!phase) continue;
+      const patch = applyRemapToPhase(phase, phaseHalvesOnRow(phaseId));
+      if (patch) byId.set(patch.id, patch);
+    }
+  }
+
+  const preview: DragShiftPreviewCell[] = [
+    ...previewCellsForHalves(input.toRowId, landingHalves),
+    ...previewCellsForHalves(input.toRowId, packed),
+  ];
+  return {
+    delta: input.delta,
+    patches: Array.from(byId.values()),
+    inserts,
+    chain: [
+      { ...input.origin, rowId: input.toRowId },
+      ...orderedTargets,
+      ...following,
+    ],
+    preview,
+    blocked: false,
+  };
 }
 
 export function shiftChantierBlock(input: {
@@ -450,6 +726,14 @@ export function shiftChantierBlock(input: {
     preview.push(...previewCellsForHalves(block.rowId, halves));
   }
   if (landingHasConflict(input.snapshot, landings, movingPhaseIds)) {
+    const inserted = tryInsertChantierInMiddle({
+      snapshot: input.snapshot,
+      fromRowId: input.rowId,
+      toRowId: input.rowId,
+      origin,
+      delta,
+    });
+    if (inserted) return inserted;
     return { delta, patches: [], chain, preview, blocked: true };
   }
   const byId = new Map<string, PhasePatch>();
@@ -515,6 +799,14 @@ export function shiftOrMoveChantierBlock(input: {
     rowId: input.toRowId,
     halves: previewHalves(origin, delta),
   };
+  const inserted = tryInsertChantierInMiddle({
+    snapshot: input.snapshot,
+    fromRowId: input.fromRowId,
+    toRowId: input.toRowId,
+    origin,
+    delta,
+  });
+  if (inserted) return inserted;
   let destChain: ChantierBlock[] = [];
   if (delta !== 0) {
     const direction: 1 | -1 = delta > 0 ? 1 : -1;
@@ -1309,6 +1601,87 @@ function runDragShiftSelfCheck() {
   if (!overlapSameMorning.blocked) {
     throw new Error(
       "drag-shift: deux fabrications qui se chevauchent en minutes doivent être en conflit",
+    );
+  }
+
+  const insertSnapshot: PlanningSnapshot = {
+    ...movedAcrossSnapshot(),
+    phases: [
+      {
+        ...movedAcrossSnapshot().phases[0]!,
+        date_debut: "2026-09-11",
+        date_fin: "2026-09-11",
+        duree_estimee_heures: 4,
+        employe_id: "emp-a",
+      },
+      {
+        ...movedAcrossSnapshot().phases[1]!,
+        date_debut: "2026-09-07",
+        date_fin: "2026-09-09",
+        duree_estimee_heures: 22.5,
+        employe_id: "emp-a",
+      },
+    ],
+  };
+  const insertMiddle = shiftChantierBlock({
+    snapshot: insertSnapshot,
+    rowId: "emp-a",
+    chantierId: "ch-a",
+    grab: { date: "2026-09-11", half: 0 },
+    drop: { date: "2026-09-08", half: 0 },
+  });
+  const originInserted = insertMiddle.patches.find((item) => item.id === "ph-a");
+  const destPrefix = insertMiddle.patches.find((item) => item.id === "ph-b");
+  if (insertMiddle.blocked || !originInserted || !destPrefix) {
+    throw new Error(
+      "drag-shift: déposer au milieu d’un autre chantier doit ouvrir le bloc, pas refuser",
+    );
+  }
+  if (originInserted.date_debut !== "2026-09-08") {
+    throw new Error(
+      "drag-shift: le chantier glissé doit commencer sur la case de dépôt",
+    );
+  }
+  if (destPrefix.date_debut !== "2026-09-07" || destPrefix.date_fin !== "2026-09-07") {
+    throw new Error(
+      "drag-shift: le début du chantier cible doit rester avant le dépôt",
+    );
+  }
+  const destSuffix = insertMiddle.inserts?.find(
+    (item) => item.element_id === "el-b",
+  );
+  if (!destSuffix || !destSuffix.date_debut || destSuffix.date_debut < "2026-09-08") {
+    throw new Error(
+      "drag-shift: la suite du chantier cible doit reprendre après le chantier inséré",
+    );
+  }
+
+  const insertAcross = shiftOrMoveChantierBlock({
+    snapshot: {
+      ...insertSnapshot,
+      phases: [
+        {
+          ...insertSnapshot.phases[0]!,
+          employe_id: "emp-b",
+          date_debut: "2026-09-11",
+          date_fin: "2026-09-11",
+        },
+        insertSnapshot.phases[1]!,
+      ],
+    },
+    fromRowId: "emp-b",
+    toRowId: "emp-a",
+    chantierId: "ch-a",
+    grab: { date: "2026-09-11", half: 0 },
+    drop: { date: "2026-09-08", half: 0 },
+  });
+  if (
+    insertAcross.blocked ||
+    insertAcross.patches.find((item) => item.id === "ph-a")?.employe_id !== "emp-a" ||
+    insertAcross.patches.find((item) => item.id === "ph-b")?.date_fin !== "2026-09-07"
+  ) {
+    throw new Error(
+      "drag-shift: insérer au milieu depuis une autre ligne doit garder le préfixe du chantier cible",
     );
   }
 }
