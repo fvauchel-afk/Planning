@@ -18,7 +18,7 @@ export function OnedriveAdminPage() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     setQueryError(params.get("error"));
-    fetch("/api/onedrive/status")
+    fetch("/api/onedrive/status", { redirect: "manual" })
       .then((res) => res.json())
       .then((json: Status) => setStatus(json))
       .catch(() =>
@@ -105,12 +105,14 @@ export function OnedriveAdminPage() {
         </p>
       )}
 
-      <a
-        href="/api/onedrive/login"
-        className="inline-flex min-h-11 items-center rounded-lg bg-stone-900 px-4 text-sm font-medium text-white"
-      >
-        Connecter OneDrive
-      </a>
+      <form method="post" action="/api/onedrive/login">
+        <button
+          type="submit"
+          className="inline-flex min-h-11 items-center rounded-lg bg-stone-900 px-4 text-sm font-medium text-white"
+        >
+          Connecter OneDrive
+        </button>
+      </form>
 
       <div className="border-t border-stone-200 pt-4">
         <h3 className="font-medium text-stone-900">Sauvegarde</h3>

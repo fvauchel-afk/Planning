@@ -31,6 +31,8 @@ export default function ConnexionPage() {
         method: "POST",
         credentials: "include",
         keepalive: true,
+        redirect: "manual",
+        headers: { Accept: "application/json" },
       }).catch(() => {
         /* OneDrive en arrière-plan : ne jamais bloquer l’entrée. */
       });

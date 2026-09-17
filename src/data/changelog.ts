@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-16-onedrive-oauth-silencieux",
+    title: "Connexion OneDrive uniquement sur demande",
+    items: [
+      "Microsoft ne s’ouvre plus tout seul en naviguant dans l’app (Signalements, Planning, etc.).",
+      "Pour reconnecter OneDrive, il faut cliquer sur « Connecter OneDrive » dans l’onglet OneDrive.",
+    ],
+  },
+  {
     id: "2026-09-16-onedrive-statut-partage",
     title: "Statut OneDrive et copie des documents",
     items: [

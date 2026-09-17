@@ -71,6 +71,7 @@ export async function requestEnsureOnedriveFolder(input: {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(input),
+      redirect: "manual",
     });
     const json = (await res.json().catch(() => ({}))) as {
       shareUrl?: string;
@@ -102,6 +103,7 @@ export async function requestUploadReceptionOnedrive(input: {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(input),
+      redirect: "manual",
     });
     const json = (await res.json().catch(() => ({}))) as { error?: string };
     if (!res.ok) {
