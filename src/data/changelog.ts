@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-17-select-fabrication",
+    title: "Choisir le salarié de fabrication",
+    items: [
+      "Dans Nouveau chantier et Modifier, le menu « Salarié responsable de la fabrication » liste bien les salariés (Romain, Alexis, etc.).",
+      "Plus de message orange « Veuillez sélectionner l’une de ces options » avec une liste vide.",
+    ],
+  },
+  {
     id: "2026-09-17-onedrive-statut-domaine",
     title: "OneDrive : statut à jour, même depuis le domaine atelier",
     items: [
