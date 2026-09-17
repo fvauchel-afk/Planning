@@ -22,7 +22,8 @@ export const CHECK_ADMIN_FALLBACK = {
 export { parisCalendarYmd };
 
 /** Toujours faux : plus d’entrée sans PIN. */
-export function isAuthTemporarilyOpen(_now: Date = new Date()): boolean {
+export function isAuthTemporarilyOpen(now: Date = new Date()): boolean {
+  void now;
   return false;
 }
 
