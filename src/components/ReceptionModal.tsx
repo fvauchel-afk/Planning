@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import SignatureCanvas from "react-signature-canvas";
 import { usePlanning } from "@/lib/planning-context";
 import { planningApiPost } from "@/lib/planning/api";
+import { PdfPreview } from "@/components/PdfPreview";
 import { PHASE_LABELS } from "@/lib/types";
 
 type Preview = {
@@ -207,12 +208,11 @@ export function ReceptionModal({
                 <p className="text-sm font-medium text-stone-800">
                   Aperçu — {preview.subject}
                 </p>
-                <iframe
+                <PdfPreview
                   title="Aperçu du document de réception"
-                  className="h-[28rem] w-full rounded border border-stone-300"
-                  src={`data:application/pdf;base64,${preview.pdfBase64}`}
+                  fileName={preview.fileName}
+                  pdfBase64={preview.pdfBase64}
                 />
-                <p className="text-xs text-stone-500">Fichier : {preview.fileName}</p>
               </div>
             ) : null}
             <div className="mt-5 flex flex-wrap gap-2">

@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-17-pdf-apercu-ios",
+    title: "Aperçu PDF sur iPhone",
+    items: [
+      "L’aperçu d’une réception, d’un bon de livraison ou d’un bon de commande s’ouvre bien sur iPhone : bouton « Ouvrir le PDF » (Safari n’affiche pas un PDF dans la page).",
+      "Sur ordinateur, l’aperçu dans la fenêtre reste le même. Un lien Télécharger est aussi proposé.",
+    ],
+  },
+  {
     id: "2026-09-17-livraison-signer-planning",
     title: "Bon de livraison depuis le planning équipe",
     items: [
