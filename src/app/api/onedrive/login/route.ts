@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
   } catch (err) {
     const message = err instanceof Error ? err.message : "Connexion OneDrive impossible.";
     const origin =
-      process.env.ONEDRIVE_REDIRECT_URI?.replace(/\/api\/onedrive/callback\/?$/, "") ||
+      process.env.ONEDRIVE_REDIRECT_URI?.replace(/\/api\/onedrive\/callback\/?$/, "") ||
       request.nextUrl.origin;
     const fail = NextResponse.redirect(
       `${origin}/admin/onedrive?error=${encodeURIComponent(message)}`,
