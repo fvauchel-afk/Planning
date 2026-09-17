@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-17-multi-poseurs",
+    title: "Plusieurs poseurs sur un chantier",
+    items: [
+      "À la création, vous pouvez cocher plusieurs poseurs : chacun a sa ligne sur le planning le jour de la pose.",
+      "Si des dates sont déjà saisies, l’app indique qui est libre ce jour-là. Sans case cochée, le premier disponible est pris comme avant.",
+    ],
+  },
+  {
     id: "2026-09-17-fab-dates-sync",
     title: "Dates chantier et fabrication liées",
     items: [
