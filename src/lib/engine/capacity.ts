@@ -1,4 +1,4 @@
-import { addDays, startOfWeekIso } from "@/lib/dates";
+import { addDays, parisCalendarYmd, startOfWeekIso } from "@/lib/dates";
 import type { PlanningSnapshot } from "@/lib/types";
 import { capacityHoursForWeek } from "./hours";
 import { TARGET_LOAD, LOAD_OVERFLOW, buildOccupancy, occupancySpans } from "./slots";
@@ -29,7 +29,7 @@ export function buildSynthesis(
   fromIso?: string,
 ): Synthesis {
   const occupancy = buildOccupancy(snapshot);
-  const start = startOfWeekIso(fromIso ?? new Date().toISOString().slice(0, 10));
+  const start = startOfWeekIso(fromIso ?? parisCalendarYmd());
   const weeks: WeekLoad[] = [];
 
   for (let w = 0; w < weekCount; w += 1) {
@@ -82,6 +82,15 @@ function runCapacityToneSelfCheck() {
     throw new Error("capacity: 110 % doit rester orange (toléré)");
   }
   if (tone(red) !== "red") throw new Error("capacity: > 110 % doit être rouge");
+  const parisMonday = parisCalendarYmd(new Date("2026-09-20T22:30:00.000Z"));
+  if (parisMonday !== "2026-09-21") {
+    throw new Error(
+      "capacity: après minuit Paris, la synthèse doit démarrer le lundi 21, pas le dimanche UTC",
+    );
+  }
+  if (startOfWeekIso(parisMonday) !== "2026-09-21") {
+    throw new Error("capacity: la semaine du 21/09/2026 commence le lundi 21");
+  }
 }
 runCapacityToneSelfCheck();
 

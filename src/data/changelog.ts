@@ -11,6 +11,15 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-17-tour-check-planning",
+    title: "Planning : vue Jour, synthèse, demandes",
+    items: [
+      "En vue Jour, vous pouvez glisser un chantier comme en semaine : déposez-le sur le matin ou l’après-midi (cases hors horaire toujours refusées).",
+      "La Synthèse de charge aligne ses semaines sur le calendrier de Paris, pas sur UTC.",
+      "Dans Demandes, la pastille indique « 2 nouveaux » au pluriel.",
+    ],
+  },
+  {
     id: "2026-09-17-pdf-date-signature",
     title: "Date du PDF de réception",
     items: [

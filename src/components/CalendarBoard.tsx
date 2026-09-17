@@ -201,6 +201,26 @@ export function CalendarBoard() {
     setDragPreview({ cells: keys, blocked: result.blocked });
   }
 
+  function beginChipDrag(
+    event: PointerEvent<HTMLButtonElement>,
+    rowId: string,
+    chantierId: string,
+    date: string,
+    half: 0 | 1,
+  ) {
+    event.currentTarget.setPointerCapture(event.pointerId);
+    dragRef.current = {
+      pointerId: event.pointerId,
+      rowId,
+      chantierId,
+      grab: { date, half },
+      startX: event.clientX,
+      startY: event.clientY,
+      moved: false,
+    };
+    setDragError(null);
+  }
+
   function jumpToChantier(chantierId: string) {
     const first = firstChantierOccurrence(snapshot, chantierId);
     if (!first) return;
@@ -294,8 +314,8 @@ export function CalendarBoard() {
             Une ligne par personne, chaque jour en matin / après-midi. Le
             thermolaquage sous-traité et les livraisons ont chacun leur ligne.
             Les livraisons restent aussi sur la ligne du salarié responsable.
-            Glissez un chantier
-            vers une autre date ou vers un autre salarié.             Les blocs collés sur
+            Glissez un chantier vers une autre date ou vers un autre salarié,
+            y compris en vue Jour. Les blocs collés sur
             la ligne d’arrivée reculent ou avancent pour laisser la place.
             Un dépôt sur une case déjà prise (absence, créneau hors horaire
             à 0 h — vendredi après-midi en 35 h, week-end — ou chantier qui
@@ -453,12 +473,36 @@ export function CalendarBoard() {
           rows={rows}
           canReorder={Boolean(session?.isAdmin)}
           draggingId={draggingId}
+          dragPreview={dragPreview}
           rowHandleProps={rowHandleProps}
           focusCell={focusCell}
           onSelectDay={setCursorIso}
           onOpenPhase={setSelectedPhaseId}
           onReception={setReceptionPhaseId}
           onAbsence={setAbsenceEmployee}
+          onChipDragStart={beginChipDrag}
+          onChipDragMove={(event) => {
+            const drag = dragRef.current;
+            if (!drag || drag.pointerId !== event.pointerId) return;
+            if (
+              !drag.moved &&
+              Math.abs(event.clientX - drag.startX) < 8 &&
+              Math.abs(event.clientY - drag.startY) < 8
+            ) {
+              return;
+            }
+            drag.moved = true;
+            event.preventDefault();
+            updateDragPreview(event.clientX, event.clientY);
+          }}
+          onChipDragEnd={(event, phaseId) => {
+            if (!dragRef.current) {
+              setSelectedPhaseId(phaseId);
+              return;
+            }
+            if (dragRef.current.pointerId !== event.pointerId) return;
+            void finishDrag(event.clientX, event.clientY, phaseId);
+          }}
         />
       ) : (
         <div className={`overflow-auto rounded-lg border border-stone-300 bg-white shadow-sm ${dragPreview || reordering ? "select-none" : ""}`}>
@@ -625,19 +669,13 @@ export function CalendarBoard() {
                               allowDrag={row.id !== TRANSPORT_ROW_ID}
 
                               onPointerDragStart={(event) => {
-                                event.currentTarget.setPointerCapture(
-                                  event.pointerId,
+                                beginChipDrag(
+                                  event,
+                                  row.id,
+                                  assignment.chantier.id,
+                                  iso,
+                                  half,
                                 );
-                                dragRef.current = {
-                                  pointerId: event.pointerId,
-                                  rowId: row.id,
-                                  chantierId: assignment.chantier.id,
-                                  grab: { date: iso, half },
-                                  startX: event.clientX,
-                                  startY: event.clientY,
-                                  moved: false,
-                                };
-                                setDragError(null);
                               }}
                               onPointerDragMove={(event) => {
                                 const drag = dragRef.current;
@@ -727,12 +765,16 @@ function DayDetail({
   rows,
   canReorder,
   draggingId,
+  dragPreview,
   rowHandleProps,
   focusCell,
   onSelectDay,
   onOpenPhase,
   onReception,
   onAbsence,
+  onChipDragStart,
+  onChipDragMove,
+  onChipDragEnd,
 }: {
   iso: string;
   todayIso: string;
@@ -740,12 +782,25 @@ function DayDetail({
   rows: ReturnType<typeof planningRows>;
   canReorder: boolean;
   draggingId: string | null;
+  dragPreview: { cells: Set<string>; blocked: boolean } | null;
   rowHandleProps: ReturnType<typeof useEmployeeRowReorder>["rowHandleProps"];
   focusCell: { rowId: string; date: string; half: 0 | 1 } | null;
   onSelectDay: (iso: string) => void;
   onOpenPhase: (phaseId: string) => void;
   onReception: (phaseId: string) => void;
   onAbsence: (employee: Employee) => void;
+  onChipDragStart: (
+    event: PointerEvent<HTMLButtonElement>,
+    rowId: string,
+    chantierId: string,
+    date: string,
+    half: 0 | 1,
+  ) => void;
+  onChipDragMove: (event: PointerEvent<HTMLButtonElement>) => void;
+  onChipDragEnd: (
+    event: PointerEvent<HTMLButtonElement>,
+    phaseId: string,
+  ) => void;
 }) {
   const isToday = iso === todayIso;
 
@@ -868,16 +923,27 @@ function DayDetail({
                 ))}
                 {windows.length > 0 && absences.length === 0 && (
                   <div className="relative h-16">
-                    {windows.map((window) => (
+                    {windows.map((window) => {
+                      const cellKey = `${row.id}|${iso}|${window.half}`;
+                      const dropTarget = dragPreview?.cells.has(cellKey);
+                      return (
                       <div
                         key={`${row.id}-${window.half}`}
-                        className="absolute top-0 h-full rounded bg-stone-100"
+                        data-plan-cell={cellKey}
+                        className={`absolute top-0 h-full rounded ${
+                          dropTarget && dragPreview?.blocked
+                            ? "bg-red-200 ring-2 ring-inset ring-red-500"
+                            : dropTarget
+                              ? "bg-amber-100"
+                              : "bg-stone-100"
+                        }`}
                         style={{
                           left: `${((window.start - dayStart) / span) * 100}%`,
                           width: `${((window.end - window.start) / span) * 100}%`,
                         }}
                       />
-                    ))}
+                      );
+                    })}
                     {assignments.flatMap((assignment) =>
                       slotsForPhase(snapshot, assignment.phase.id)
                         .filter(
@@ -890,16 +956,25 @@ function DayDetail({
                         .map((slot) => {
                           const start = slot.startMin!;
                           const end = slot.endMin!;
+                          const allowDrag = row.id !== TRANSPORT_ROW_ID;
+                          const cellKey = `${row.id}|${iso}|${slot.half}`;
+                          const dropTarget = dragPreview?.cells.has(cellKey);
                           return (
                             <button
                               key={`${assignment.phase.id}-${start}`}
                               type="button"
-                              data-plan-cell={`${row.id}|${iso}|${slot.half}`}
-                              className={`absolute top-1 h-[56px] overflow-hidden rounded px-1.5 py-0.5 text-left text-[11px] leading-tight ${
+                              data-plan-cell={cellKey}
+                              className={`absolute top-1 z-[1] h-[56px] overflow-hidden rounded px-1.5 py-0.5 text-left text-[11px] leading-tight ${
+                                allowDrag
+                                  ? `touch-none ${dragPreview ? "cursor-grabbing" : "cursor-grab"}`
+                                  : "cursor-pointer"
+                              } ${
                                 focusCell?.rowId === row.id &&
                                 focusCell.date === iso &&
                                 focusCell.half === slot.half
                                   ? "ring-2 ring-amber-600"
+                                  : dropTarget && dragPreview?.blocked
+                                    ? "ring-2 ring-red-500"
                                   : fabricationAwaitingLaunch(assignment.phase)
                                     ? "ring-2 ring-orange-500"
                                     : ""
@@ -918,7 +993,29 @@ function DayDetail({
                                   ? ` · ${assignment.chantier.adresse_livraison}`
                                   : ""
                               }`}
-                              onClick={() => onOpenPhase(assignment.phase.id)}
+                              onPointerDown={
+                                allowDrag
+                                  ? (event) =>
+                                      onChipDragStart(
+                                        event,
+                                        row.id,
+                                        assignment.chantier.id,
+                                        iso,
+                                        slot.half,
+                                      )
+                                  : undefined
+                              }
+                              onPointerMove={allowDrag ? onChipDragMove : undefined}
+                              onPointerUp={(event) =>
+                                allowDrag
+                                  ? onChipDragEnd(event, assignment.phase.id)
+                                  : onOpenPhase(assignment.phase.id)
+                              }
+                              onPointerCancel={(event) => {
+                                if (allowDrag) {
+                                  onChipDragEnd(event, assignment.phase.id);
+                                }
+                              }}
                             >
                               <span className="block font-semibold">
                                 {formatClock(start)}–{formatClock(end)}

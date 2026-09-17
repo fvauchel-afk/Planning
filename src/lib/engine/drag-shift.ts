@@ -828,6 +828,84 @@ function runDragShiftSelfCheck() {
       "drag-shift: un dépôt le vendredi matin (heures disponibles) doit rester possible",
     );
   }
+
+  const glued: PlanningSnapshot["phases"] = [];
+  const gluedChantiers: PlanningSnapshot["chantiers"] = [];
+  const gluedElements: PlanningSnapshot["elements"] = [];
+  const packedHalves: { date: string; half: 0 | 1; heure: string }[] = [
+    { date: "2026-10-12", half: 0, heure: "08:00" },
+    { date: "2026-10-12", half: 1, heure: "13:00" },
+    { date: "2026-10-13", half: 0, heure: "08:00" },
+    { date: "2026-10-13", half: 1, heure: "13:00" },
+    { date: "2026-10-14", half: 0, heure: "08:00" },
+    { date: "2026-10-14", half: 1, heure: "13:00" },
+    { date: "2026-10-15", half: 0, heure: "08:00" },
+    { date: "2026-10-15", half: 1, heure: "13:00" },
+    { date: "2026-10-16", half: 0, heure: "08:00" },
+  ];
+  for (let i = 0; i < packedHalves.length; i += 1) {
+    const id = `ch-g${i}`;
+    const slot = packedHalves[i]!;
+    gluedChantiers.push({
+      id,
+      nom_client: `G${i}`,
+      adresse: "",
+      lien_dossier_onedrive: null,
+      priorite: "normal",
+      date_creation: "2026-10-01",
+    });
+    gluedElements.push({
+      id: `el-g${i}`,
+      chantier_id: id,
+      nom_element: `G${i}`,
+    });
+    glued.push({
+      id: `ph-g${i}`,
+      element_id: `el-g${i}`,
+      type_phase: "fabrication",
+      duree_estimee_heures: 4,
+      date_debut: slot.date,
+      date_fin: slot.date,
+      heure_debut: slot.heure,
+      employe_id: "emp-a",
+      statut: "a_faire",
+      urgent: false,
+    });
+  }
+  const scale = shiftChantierBlock({
+    snapshot: {
+      ...movedAcrossSnapshot(),
+      chantiers: gluedChantiers,
+      elements: gluedElements,
+      phases: glued,
+    },
+    rowId: "emp-a",
+    chantierId: "ch-g0",
+    grab: { date: "2026-10-12", half: 0 },
+    drop: { date: "2026-10-12", half: 1 },
+  });
+  if (!scale.blocked || scale.patches.length !== 0) {
+    throw new Error(
+      "drag-shift: une file collée jusqu’au vendredi matin ne doit pas déborder sur le vendredi après-midi (0 h)",
+    );
+  }
+  const scaleOk = shiftChantierBlock({
+    snapshot: {
+      ...movedAcrossSnapshot(),
+      chantiers: gluedChantiers.slice(0, 8),
+      elements: gluedElements.slice(0, 8),
+      phases: glued.slice(0, 8),
+    },
+    rowId: "emp-a",
+    chantierId: "ch-g0",
+    grab: { date: "2026-10-12", half: 0 },
+    drop: { date: "2026-10-12", half: 1 },
+  });
+  if (scaleOk.blocked || scaleOk.patches.length !== 8) {
+    throw new Error(
+      "drag-shift: une file collée lun–jeu doit pouvoir avancer d’une demi-journée",
+    );
+  }
 }
 
 function movedAcrossSnapshot(): PlanningSnapshot {

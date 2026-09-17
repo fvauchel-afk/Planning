@@ -1,6 +1,6 @@
 "use client";
 
-import { addDays, eachDayInclusive, formatDisplayedDay, isSunday } from "@/lib/dates";
+import { addDays, eachDayInclusive, formatDisplayedDay, isSunday, parisCalendarYmd } from "@/lib/dates";
 import {
   assignmentsForDay,
   planningRows,
@@ -31,7 +31,7 @@ function previewWindow(snapshot: PlanningSnapshot, solution: PlanningSolution): 
       .map((phase) => phase.date_debut)
       .filter((value): value is string => Boolean(value))
       .sort();
-    const start = fallback[0] ?? new Date().toISOString().slice(0, 10);
+    const start = fallback[0] ?? parisCalendarYmd();
     return eachDayInclusive(start, addDays(start, 13)).filter((day) => !isSunday(day));
   }
   const start = addDays(sorted[0], -2);
