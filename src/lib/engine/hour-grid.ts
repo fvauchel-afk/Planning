@@ -216,6 +216,22 @@ function runHourGridSelfCheck() {
   ) {
     throw new Error("hour-grid: 08–12 et 09–11 se chevauchent");
   }
+  const windows: WorkWindow[] = [
+    { start: 7 * 60 + 30, end: 12 * 60, half: 0 },
+    { start: 13 * 60, end: 16 * 60, half: 1 },
+  ];
+  const snap0814 = clampToWorkWindows(windows, 8 * 60 + 14);
+  const snap0815 = clampToWorkWindows(windows, 8 * 60 + 15);
+  if (!snap0814 || snap0814.minutes !== 8 * 60 || snap0814.half !== 0) {
+    throw new Error("hour-grid: dépôt 08:14 doit cranter à 08:00 matin");
+  }
+  if (!snap0815 || snap0815.minutes !== 8 * 60 + 30 || snap0815.half !== 0) {
+    throw new Error("hour-grid: dépôt 08:15 doit cranter à 08:30 matin");
+  }
+  const lunch = clampToWorkWindows(windows, 12 * 60 + 30);
+  if (!lunch || lunch.minutes !== 13 * 60 || lunch.half !== 1) {
+    throw new Error("hour-grid: 12:30 doit cranter à 13:00 (reprise)");
+  }
 }
 
 runHourGridSelfCheck();

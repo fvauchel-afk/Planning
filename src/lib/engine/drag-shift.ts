@@ -1160,6 +1160,144 @@ function runDragShiftSelfCheck() {
     );
   }
 
+  const slackOneHour = shiftChantierBlockByMinutes({
+    snapshot: slackSnapshot,
+    fromRowId: "emp-a",
+    toRowId: "emp-a",
+    chantierId: "ch-early",
+    grab: { date: "2026-09-22", half: 0, startMin: 7 * 60 + 30 },
+    drop: { date: "2026-09-22", half: 0, startMin: 8 * 60 + 30 },
+  });
+  if (slackOneHour.blocked) {
+    throw new Error(
+      "drag-shift: un glissement de 1 h dans le trou de fin de journée ne doit pas être bloqué",
+    );
+  }
+  if (slackOneHour.patches.some((patch) => patch.id === "ph-next")) {
+    throw new Error(
+      "drag-shift: slack 1 h — le lendemain ne doit pas être recalé",
+    );
+  }
+  const earlyAfterHour = slackOneHour.patches.find(
+    (patch) => patch.id === "ph-early",
+  );
+  if (
+    !earlyAfterHour ||
+    earlyAfterHour.heure_debut !== "08:30" ||
+    earlyAfterHour.date_debut !== "2026-09-22" ||
+    earlyAfterHour.date_fin !== "2026-09-22"
+  ) {
+    throw new Error(
+      "drag-shift: slack 1 h — le bloc reste le mardi, début 08:30",
+    );
+  }
+
+  const dupontLike: PlanningSnapshot = {
+    ...slackSnapshot,
+    chantiers: [
+      ...slackSnapshot.chantiers,
+      {
+        id: "ch-dupont",
+        nom_client: "Portail Dupont",
+        adresse: "",
+        lien_dossier_onedrive: null,
+        priorite: "normal",
+        date_creation: "2026-09-01",
+      },
+    ],
+    elements: [
+      ...slackSnapshot.elements,
+      { id: "el-dupont", chantier_id: "ch-dupont", nom_element: "Portail" },
+    ],
+    phases: [
+      {
+        id: "ph-dupont",
+        element_id: "el-dupont",
+        type_phase: "fabrication",
+        duree_estimee_heures: 8,
+        date_debut: "2026-09-17",
+        date_fin: "2026-09-18",
+        heure_debut: "07:30",
+        employe_id: "emp-a",
+        statut: "a_faire",
+        urgent: false,
+      },
+      {
+        id: "ph-after",
+        element_id: "el-next",
+        type_phase: "fabrication",
+        duree_estimee_heures: 4,
+        date_debut: "2026-09-21",
+        date_fin: "2026-09-21",
+        heure_debut: "07:30",
+        employe_id: "emp-a",
+        statut: "a_faire",
+        urgent: false,
+      },
+    ],
+  };
+  const dupontThirty = shiftChantierBlockByMinutes({
+    snapshot: dupontLike,
+    fromRowId: "emp-a",
+    toRowId: "emp-a",
+    chantierId: "ch-dupont",
+    grab: { date: "2026-09-17", half: 0, startMin: 7 * 60 + 30 },
+    drop: { date: "2026-09-17", half: 0, startMin: 8 * 60 },
+  });
+  if (dupontThirty.blocked) {
+    throw new Error(
+      "drag-shift: Dupont 8 h + 30 min (trou le 18 au matin) ne doit pas être bloqué",
+    );
+  }
+  if (dupontThirty.patches.some((patch) => patch.id === "ph-after")) {
+    throw new Error(
+      "drag-shift: Dupont + 30 min — le chantier du lundi suivant ne doit pas bouger",
+    );
+  }
+  const dupontPatch = dupontThirty.patches.find(
+    (patch) => patch.id === "ph-dupont",
+  );
+  if (
+    !dupontPatch ||
+    dupontPatch.heure_debut !== "08:00" ||
+    dupontPatch.date_debut !== "2026-09-17" ||
+    dupontPatch.date_fin !== "2026-09-18"
+  ) {
+    throw new Error(
+      "drag-shift: Dupont + 30 min — dates 17–18 conservées, début 08:00",
+    );
+  }
+
+  const fridayAfternoon = shiftChantierBlockByMinutes({
+    snapshot: {
+      ...movedAcrossSnapshot(),
+      phases: [
+        {
+          id: "ph-fri",
+          element_id: "el-a",
+          type_phase: "fabrication",
+          duree_estimee_heures: 4,
+          date_debut: "2026-09-18",
+          date_fin: "2026-09-18",
+          heure_debut: "07:30",
+          employe_id: "emp-a",
+          statut: "a_faire",
+          urgent: false,
+        },
+      ],
+    },
+    fromRowId: "emp-a",
+    toRowId: "emp-a",
+    chantierId: "ch-a",
+    grab: { date: "2026-09-18", half: 0, startMin: 7 * 60 + 30 },
+    drop: { date: "2026-09-18", half: 1, startMin: 13 * 60 },
+  });
+  if (!fridayAfternoon.blocked) {
+    throw new Error(
+      "drag-shift: Vue Jour — dépôt vendredi après-midi (0 h) doit être refusé",
+    );
+  }
+
   const overlapSameMorning = shiftChantierBlockByMinutes({
     snapshot: slackSnapshot,
     fromRowId: "emp-a",
