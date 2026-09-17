@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-17-livraison-signer-planning",
+    title: "Bon de livraison depuis le planning équipe",
+    items: [
+      "Sur un bloc Livraison du planning équipe, « Faire signer le bon de livraison » s’affiche comme « Terminer / réception » sur un bloc Pose.",
+      "Le bouton ouvre le même document (aperçu PDF, puis confirmation).",
+    ],
+  },
+  {
     id: "2026-09-17-drag-hors-horaire-pdf-accents",
     title: "Dépôt hors horaire et PDF de réception",
     items: [

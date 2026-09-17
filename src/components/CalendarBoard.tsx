@@ -20,6 +20,7 @@ import { ChantierEditModal } from "@/components/ChantierEditModal";
 import { LaunchValidateButton } from "@/components/LaunchValidateButton";
 import { PhaseFicheModal } from "@/components/PhaseFicheModal";
 import { ReceptionModal } from "@/components/ReceptionModal";
+import { planningReceptionChipLabel } from "@/lib/reception/planning-chip";
 import { colorForChantier } from "@/lib/colors";
 import {
   addDays,
@@ -669,19 +670,13 @@ export function CalendarBoard() {
                               phaseId={assignment.phase.id}
                               compact
                             />
-                            {assignment.phase.type_phase === "pose" &&
-                            assignment.phase.statut !== "termine" ? (
-                              <button
-                                type="button"
-                                className="mt-0.5 w-full rounded bg-sky-800 px-1 py-0.5 text-[10px] font-medium text-sky-50"
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  setReceptionPhaseId(assignment.phase.id);
-                                }}
-                              >
-                                Terminer / réception
-                              </button>
-                            ) : null}
+                            <PlanningReceptionButton
+                              phase={assignment.phase}
+                              compact
+                              onClick={() =>
+                                setReceptionPhaseId(assignment.phase.id)
+                              }
+                            />
                             </div>
                           ))}
                         </div>
@@ -793,9 +788,8 @@ function DayDetail({
             iso,
           );
           const windows = workWindowsForRow(snapshot, row.id, iso);
-          const assignments = uniqueAssignmentsByChantier(
-            assignmentsForDay(snapshot, row.id, iso),
-          );
+          const dayAssignments = assignmentsForDay(snapshot, row.id, iso);
+          const assignments = uniqueAssignmentsByChantier(dayAssignments);
           const dayStart = windows[0]?.start ?? 7 * 60;
           const dayEnd = windows[windows.length - 1]?.end ?? 17 * 60;
           const span = Math.max(1, dayEnd - dayStart);
@@ -858,22 +852,15 @@ function DayDetail({
                       <LaunchValidateButton phaseId={item.phase.id} compact />
                     </div>
                   ))}
-                {assignments
-                  .filter(
-                    (item) =>
-                      item.phase.type_phase === "pose" &&
-                      item.phase.statut !== "termine",
-                  )
+                {dayAssignments
+                  .filter((item) => planningReceptionChipLabel(item.phase))
                   .map((item) => (
-                    <button
-                      key={`reception-${item.phase.id}`}
-                      type="button"
-                      className="mt-1 text-[11px] text-sky-800 underline"
-                      onClick={() => onReception(item.phase.id)}
-                    >
-                      Terminer / réception
-                    </button>
-                  ))}
+                  <PlanningReceptionButton
+                    key={`reception-${item.phase.id}`}
+                    phase={item.phase}
+                    onClick={() => onReception(item.phase.id)}
+                  />
+                ))}
               </div>
               <div className="relative min-h-[96px] border-l border-stone-200 p-3">
                 {absences.map((absence) => (
@@ -969,6 +956,35 @@ function DayDetail({
         })}
       </div>
     </div>
+  );
+}
+
+function PlanningReceptionButton({
+  phase,
+  compact,
+  onClick,
+}: {
+  phase: CalendarAssignment["phase"];
+  compact?: boolean;
+  onClick: () => void;
+}) {
+  const label = planningReceptionChipLabel(phase);
+  if (!label) return null;
+  return (
+    <button
+      type="button"
+      className={
+        compact
+          ? "mt-0.5 w-full rounded bg-sky-800 px-1 py-0.5 text-[10px] font-medium text-sky-50"
+          : "mt-1 text-[11px] text-sky-800 underline"
+      }
+      onClick={(event) => {
+        event.stopPropagation();
+        onClick();
+      }}
+    >
+      {label}
+    </button>
   );
 }
 
