@@ -11,6 +11,15 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-17-pin-reactivate",
+    title: "Code PIN à nouveau obligatoire",
+    items: [
+      "L’entrée sans code (check des 16 et 17 septembre) est coupée.",
+      "Chacun doit de nouveau saisir son code PIN, y compris Jonathan.",
+      "Le bandeau rouge « Authentification désactivée temporairement » n’apparaît plus.",
+    ],
+  },
+  {
     id: "2026-09-17-heure-vue-jour",
     title: "Vue Jour à l’heure, conflits à la minute",
     items: [
