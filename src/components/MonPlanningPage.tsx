@@ -23,6 +23,7 @@ import { useSalarieId } from "@/lib/use-salarie";
 import { WelcomeBanner } from "@/components/WelcomeBanner";
 import { LaunchValidateButton } from "@/components/LaunchValidateButton";
 import { PhaseFicheModal } from "@/components/PhaseFicheModal";
+import { ReceptionModal } from "@/components/ReceptionModal";
 import { fabricationAwaitingLaunch, phaseIsEstimative } from "@/lib/dates-estimatives";
 
 export function MonPlanningPage() {
@@ -32,6 +33,7 @@ export function MonPlanningPage() {
   const [weeks, setWeeks] = useState<1 | 2 | 3>(2);
   const [anchor, setAnchor] = useState(() => startOfWeekMonday(new Date()));
   const [selectedPhaseId, setSelectedPhaseId] = useState<string | null>(null);
+  const [receptionPhaseId, setReceptionPhaseId] = useState<string | null>(null);
 
   const employee =
     snapshot.employees.find((item) => idsEqual(item.id, employeeId)) ??
@@ -178,11 +180,13 @@ export function MonPlanningPage() {
                   title="Matin"
                   assignments={morning}
                   onOpenPhase={setSelectedPhaseId}
+                  onReception={setReceptionPhaseId}
                 />
                 <SlotBlock
                   title="Après-midi"
                   assignments={afternoon}
                   onOpenPhase={setSelectedPhaseId}
+                  onReception={setReceptionPhaseId}
                 />
               </div>
             </article>
@@ -195,6 +199,12 @@ export function MonPlanningPage() {
           onClose={() => setSelectedPhaseId(null)}
         />
       ) : null}
+      {receptionPhaseId ? (
+        <ReceptionModal
+          phaseId={receptionPhaseId}
+          onClose={() => setReceptionPhaseId(null)}
+        />
+      ) : null}
     </MobileShell>
   );
 }
@@ -203,10 +213,12 @@ function SlotBlock({
   title,
   assignments,
   onOpenPhase,
+  onReception,
 }: {
   title: string;
   assignments: ReturnType<typeof assignmentsForCell>;
   onOpenPhase: (phaseId: string) => void;
+  onReception: (phaseId: string) => void;
 }) {
   return (
     <div className="space-y-1.5">
@@ -254,21 +266,23 @@ function SlotBlock({
             <LaunchValidateButton phaseId={assignment.phase.id} compact />
             {assignment.phase.type_phase === "pose" &&
               assignment.phase.statut !== "termine" && (
-                <Link
-                  href={`/moi/reception?phase=${assignment.phase.id}`}
-                  className="mt-1 block font-medium underline decoration-white/70"
+                <button
+                  type="button"
+                  onClick={() => onReception(assignment.phase.id)}
+                  className="mt-1 block w-full text-left font-medium underline decoration-white/70"
                 >
                   Terminer et faire signer
-                </Link>
+                </button>
               )}
             {assignment.phase.type_phase === "livraison" &&
               assignment.phase.statut !== "termine" && (
-                <Link
-                  href={`/moi/reception?phase=${assignment.phase.id}`}
-                  className="mt-1 block font-medium underline decoration-white/70"
+                <button
+                  type="button"
+                  onClick={() => onReception(assignment.phase.id)}
+                  className="mt-1 block w-full text-left font-medium underline decoration-white/70"
                 >
                   Faire signer le bon de livraison
-                </Link>
+                </button>
               )}
             <div className="mt-1.5 grid grid-cols-2 gap-1">
               <Link

@@ -25,6 +25,7 @@ function isSalarieAllowed(pathname: string): boolean {
   if (pathname === "/api/auth/me" || pathname === "/api/auth/logout") return true;
   if (pathname === "/api/planning/snapshot") return true;
   if (pathname === "/api/planning/mutate") return true;
+  if (pathname === "/api/planning/reception") return true;
   if (pathname === "/api/onedrive/upload-reception") return true;
   if (pathname === "/api/push/subscribe" || pathname === "/api/push/vapid") {
     return true;

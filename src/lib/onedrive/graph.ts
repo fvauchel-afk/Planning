@@ -30,7 +30,15 @@ function isVroomAuthError(message: string | undefined): boolean {
 
 function graphErrorMessage(json: GraphErrorBody, status: number): string {
   const raw = json.error?.message || `Erreur Microsoft Graph (${status}).`;
-  if (isJwtAuthError(raw) || isVroomAuthError(raw)) {
+  const code = json.error?.code ?? "";
+  const combined = `${code} ${raw}`;
+  if (
+    isJwtAuthError(raw) ||
+    isVroomAuthError(raw) ||
+    /accessDenied|access denied|acc[eè]s refus[eé]/i.test(combined) ||
+    status === 401 ||
+    status === 403
+  ) {
     return "Microsoft a refusé l’accès au OneDrive personnel. Réessayez, ou ouvrez l’onglet OneDrive puis « Connecter OneDrive ».";
   }
   return raw;
@@ -162,9 +170,12 @@ export async function probeOnedriveConnection(): Promise<OnedriveProbeResult> {
   };
   try {
     const token = await getValidAccessToken();
-    await graphFetch<{ id?: string }>(token, "/me/drive?$select=id");
     const label =
       (await fetchOnedriveAccountLabel(token)) || row.account_label || null;
+    // Même opération que /sauvegarde (liste du dossier Sauvegarde), pas un
+    // simple GET /me/drive : ce GET peut réussir alors que Microsoft refuse
+    // d’écrire ou de lister les dossiers métier.
+    await listBackupFiles();
     return { ...base, connected: true, expired: false, account: label };
   } catch (err) {
     const message =
@@ -174,9 +185,7 @@ export async function probeOnedriveConnection(): Promise<OnedriveProbeResult> {
       ...base,
       connected: false,
       expired,
-      error: expired
-        ? "Connexion expirée, reconnexion nécessaire."
-        : message,
+      error: message,
     };
   }
 }
@@ -466,26 +475,22 @@ export async function uploadJsonToBackupFolder(input: {
   return { name: json.name || safeName, webUrl: json.webUrl };
 }
 
-export async function uploadBytesToShareFolder(input: {
-  shareUrl: string;
-  fileName: string;
-  bytes: Buffer | Uint8Array;
-  contentType: string;
-}): Promise<void> {
-  const token = await getValidAccessToken();
-  const folder = await resolveShareItem(token, input.shareUrl);
-  const safeName = sanitizeOnedriveName(input.fileName, "document.bin");
+async function uploadToMeDriveItem(
+  token: string,
+  itemId: string,
+  fileName: string,
+  bytes: Buffer | Uint8Array,
+  contentType: string,
+): Promise<void> {
+  const safeName = sanitizeOnedriveName(fileName, "document.bin");
   const encodedName = encodeURIComponent(safeName);
-  const raw =
-    input.bytes instanceof Uint8Array
-      ? input.bytes
-      : new Uint8Array(input.bytes);
+  const raw = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
   const res = await graphRequest(
     token,
-    `${meItemPath(folder.itemId)}:/${encodedName}:/content`,
+    `${meItemPath(itemId)}:/${encodedName}:/content`,
     {
       method: "PUT",
-      headers: { "Content-Type": input.contentType },
+      headers: { "Content-Type": contentType },
       body: raw as unknown as BodyInit,
     },
   );
@@ -495,16 +500,50 @@ export async function uploadBytesToShareFolder(input: {
   }
 }
 
+export async function uploadBytesToShareFolder(input: {
+  shareUrl: string;
+  fileName: string;
+  bytes: Buffer | Uint8Array;
+  contentType: string;
+  folderName?: string;
+}): Promise<void> {
+  const token = await getValidAccessToken();
+  try {
+    const folder = await resolveShareItem(token, input.shareUrl);
+    await uploadToMeDriveItem(
+      token,
+      folder.itemId,
+      input.fileName,
+      input.bytes,
+      input.contentType,
+    );
+    return;
+  } catch (err) {
+    const folderName = input.folderName?.trim();
+    if (!folderName) throw err;
+    const child = await ensureChildFolder(folderName);
+    await uploadToMeDriveItem(
+      token,
+      child.itemId,
+      input.fileName,
+      input.bytes,
+      input.contentType,
+    );
+  }
+}
+
 export async function uploadPngToShareFolder(input: {
   shareUrl: string;
   fileName: string;
   pngBytes: Buffer;
+  folderName?: string;
 }): Promise<void> {
   await uploadBytesToShareFolder({
     shareUrl: input.shareUrl,
     fileName: input.fileName,
     bytes: input.pngBytes,
     contentType: "image/png",
+    folderName: input.folderName,
   });
 }
 

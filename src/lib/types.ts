@@ -94,7 +94,7 @@ export type Chantier = {
   adresse: string;
   lien_dossier_onedrive: string | null;
   priorite: Priorite;
-  /** Marge ± en jours calendaires (utilisée si priorite = pas_presse). */
+  /** Marge ± en jours (décalage vers une date cible, et slack pas pressé / normal). */
   tolerance_deplacement_jours?: number | null;
   date_creation: string;
   /** Dates approximatives, pas encore confirmées. */

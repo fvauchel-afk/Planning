@@ -67,6 +67,7 @@ export function AbsencesPage() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [motifPrecision, setMotifPrecision] = useState("");
+  const [applyToTeam, setApplyToTeam] = useState(false);
   const [reviewPayload, setReviewPayload] = useState<NewAbsenceInput | null>(null);
   const [choices, setChoices] = useState<Record<string, AbsencePhaseChoice>>({});
   const [saving, setSaving] = useState(false);
@@ -93,6 +94,16 @@ export function AbsencesPage() {
     }
   };
   const live = useDebouncedPatch(applyAbsencePatch);
+
+  const listedAbsences = useMemo(() => {
+    return [...snapshot.absences].sort((left, right) => {
+      const byStart = right.date_debut.localeCompare(left.date_debut);
+      if (byStart !== 0) return byStart;
+      const byEnd = right.date_fin.localeCompare(left.date_fin);
+      if (byEnd !== 0) return byEnd;
+      return right.id.localeCompare(left.id);
+    });
+  }, [snapshot.absences]);
 
   const employeesById = new Map(
     snapshot.employees.map((employee) => [employee.id, employee]),
@@ -142,6 +153,7 @@ export function AbsencesPage() {
     setDateDebut("");
     setDateFin("");
     setMotifPrecision("");
+    setApplyToTeam(false);
     setError(null);
     setReviewPayload(null);
     setChoices({});
@@ -225,7 +237,17 @@ export function AbsencesPage() {
   }, [snapshot, editingId]);
 
   function validatedPayload(): NewAbsenceInput | null {
-    if (!employeId || !dateDebut || !dateFin) {
+    if (!applyToTeam && !employeId) {
+      setError("Tous les champs sont obligatoires.");
+      return null;
+    }
+    if (applyToTeam && type !== "ferie_entreprise") {
+      setError(
+        "« Appliquer à toute l’équipe » n’est disponible que pour un jour férié entreprise.",
+      );
+      return null;
+    }
+    if (!dateDebut || !dateFin) {
       setError("Tous les champs sont obligatoires.");
       return null;
     }
@@ -239,12 +261,91 @@ export function AbsencesPage() {
     }
     setError(null);
     return {
-      employe_id: employeId,
+      employe_id: applyToTeam ? "" : employeId,
       type,
       date_debut: dateDebut,
       date_fin: dateFin,
       motif_precision: type === "autre" ? motifPrecision.trim() : null,
     };
+  }
+
+  async function persistTeamFerie(base: NewAbsenceInput) {
+    const team = snapRef.current.employees.filter((employee) => employee.actif);
+    if (team.length === 0) {
+      setError("Aucun salarié actif.");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    let created = 0;
+    let skipped = 0;
+    let signalements = 0;
+    try {
+      let snap = snapRef.current;
+      for (const employee of team) {
+        const payload: NewAbsenceInput = {
+          ...base,
+          employe_id: employee.id,
+        };
+        if (matchingRecordedAbsence(snap, payload)) {
+          skipped += 1;
+          continue;
+        }
+        await createAbsence(payload);
+        created += 1;
+        snap = (await refresh({ throwOnError: true })) ?? snapRef.current;
+        snapRef.current = snap;
+        const overlap = listImpactedPhases(
+          snap,
+          payload.employe_id,
+          payload.date_debut,
+          payload.date_fin,
+        );
+        if (overlap.length === 0) continue;
+        const nextChoices = defaultAbsenceChoices(snap, overlap, {});
+        const plan = planAbsenceImprevue(snap, payload, nextChoices);
+        const needsPlacementConflict =
+          plan.status === "conflict" ||
+          delayTouchesPrioritaire(snap, plan.patches);
+        if (needsPlacementConflict) {
+          const originPhaseId =
+            overlap[0]?.phase.id ?? plan.patches[0]?.id ?? "";
+          await createSignalement({
+            employe_id: payload.employe_id,
+            phase_id: originPhaseId || null,
+            retard_demi_journees: 1,
+            sens: "retard",
+            note: `${absencePeriodNote(payload)} : jour férié équipe — décalages à valider.`,
+            origine: "decalage_admin",
+            statut: "en_attente",
+            proposition: propositionFromDelay(snap, plan),
+          });
+          signalements += 1;
+          continue;
+        }
+        if (plan.patches.length > 0) {
+          await applyPhasePatches(plan.patches);
+          snap = (await refresh({ throwOnError: true })) ?? snapRef.current;
+          snapRef.current = snap;
+        }
+      }
+      setNotice(
+        `${created} absence${created > 1 ? "s" : ""} « Jour férié entreprise » créée${created > 1 ? "s" : ""} pour l’équipe${
+          skipped ? ` (${skipped} déjà en place)` : ""
+        }${
+          signalements
+            ? ` — ${signalements} signalement${signalements > 1 ? "s" : ""} à valider sur Signalements`
+            : ""
+        }.`,
+      );
+      resetForm();
+    } catch (err) {
+      setError(
+        formatSaveError(err, "le jour férié n’a pas été appliqué à toute l’équipe"),
+      );
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function persistAbsence(
@@ -337,6 +438,7 @@ export function AbsencesPage() {
       if (plan.patches.length > 0) {
         await applyPhasePatches(plan.patches);
       }
+      setNotice("Absence enregistrée.");
       resetForm();
     } catch (err) {
       setError(
@@ -357,6 +459,10 @@ export function AbsencesPage() {
     const payload = validatedPayload();
     if (!payload) return;
     setNotice(null);
+    if (applyToTeam && !editingId && payload.type === "ferie_entreprise") {
+      await persistTeamFerie(payload);
+      return;
+    }
     if (editingId) {
       await live.flush();
       const latest = (await refresh({ quiet: true })) ?? snapshot;
@@ -423,14 +529,14 @@ export function AbsencesPage() {
               </tr>
             </thead>
             <tbody>
-              {snapshot.absences.length === 0 && (
+              {listedAbsences.length === 0 && (
                 <tr>
                   <td className="px-3 py-4 text-stone-500" colSpan={5}>
                     Aucune absence enregistrée.
                   </td>
                 </tr>
               )}
-              {snapshot.absences.map((absence) => (
+              {listedAbsences.map((absence) => (
                 <tr
                   key={absence.id}
                   className={`border-t border-stone-200 ${
@@ -488,11 +594,12 @@ export function AbsencesPage() {
           <span className="mb-1 block">Employé</span>
           <select
             value={employeId}
+            disabled={applyToTeam && type === "ferie_entreprise"}
             onChange={(event) => {
               markAbsenceCascade();
               setEmployeId(event.target.value);
             }}
-            className="w-full rounded border border-stone-300 px-3 py-2"
+            className="w-full rounded border border-stone-300 px-3 py-2 disabled:bg-stone-100"
           >
             <option value="">Choisir…</option>
             {snapshot.employees
@@ -512,6 +619,7 @@ export function AbsencesPage() {
             onChange={(event) => {
               const value = event.target.value as TypeAbsence;
               setType(value);
+              if (value !== "ferie_entreprise") setApplyToTeam(false);
               dirtySimple.current.add("type");
               if (editingId) {
                 live.schedule({
@@ -533,6 +641,22 @@ export function AbsencesPage() {
             ))}
           </select>
         </label>
+        {type === "ferie_entreprise" && !editingId ? (
+          <label className="flex items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              className="mt-1"
+              checked={applyToTeam}
+              onChange={(event) => setApplyToTeam(event.target.checked)}
+            />
+            <span>
+              Appliquer à toute l’équipe
+              <span className="mt-0.5 block text-xs text-stone-500">
+                Crée le jour férié pour tous les salariés actifs, en une fois.
+              </span>
+            </span>
+          </label>
+        ) : null}
         {type === "autre" && (
           <label className="block text-sm">
             <span className="mb-1 block">Préciser le motif</span>
@@ -587,7 +711,11 @@ export function AbsencesPage() {
             disabled={saving}
             className="rounded bg-amber-700 px-3 py-2 text-sm text-amber-50 disabled:opacity-60"
           >
-            {editingId ? "Enregistrer les modifications" : "Enregistrer"}
+            {editingId
+              ? "Enregistrer les modifications"
+              : applyToTeam && type === "ferie_entreprise"
+                ? "Enregistrer pour toute l’équipe"
+                : "Enregistrer"}
           </button>
           {editingId ? (
             <button

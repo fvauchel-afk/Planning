@@ -1,6 +1,6 @@
 /** Erreurs Microsoft qui imposent de reconnecter OneDrive (jeton périmé, MSA, JWT). */
 export function needsOnedriveReconnect(message: string | undefined): boolean {
-  return /expirée|invalid_grant|AADSTS|refusé l.accès au OneDrive personnel|IDX14100|UnauthenticatedVroom|JWT is not well formed|InvalidAuthenticationToken|accessDenied|Erreur Microsoft Graph \(40[13]\)/i.test(
+  return /expirée|invalid_grant|AADSTS|refusé l.accès au OneDrive personnel|IDX14100|UnauthenticatedVroom|JWT is not well formed|InvalidAuthenticationToken|accessDenied|access denied|acc[eè]s refus[eé]|Erreur Microsoft Graph \(40[13]\)/i.test(
     message ?? "",
   );
 }
@@ -32,6 +32,12 @@ function runOnedriveReconnectSelfCheck() {
   }
   if (needsOnedriveReconnect("Dossier introuvable.")) {
     throw new Error("onedrive: erreur métier ne doit pas masquer une connexion OK");
+  }
+  if (!needsOnedriveReconnect("Access denied")) {
+    throw new Error("onedrive: Access denied Microsoft doit demander une reconnexion");
+  }
+  if (!needsOnedriveReconnect("Erreur Microsoft Graph (403).")) {
+    throw new Error("onedrive: Graph 403 doit demander une reconnexion");
   }
   const now = Date.parse("2026-09-14T12:00:00.000Z");
   if (
