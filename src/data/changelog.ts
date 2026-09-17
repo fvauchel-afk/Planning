@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-17-dnd-phase-saut",
+    title: "Déplacer une phase, ou tout le chantier",
+    items: [
+      "Sur le planning, choisissez « Chantier entier » (comme avant) ou « Cette phase » pour ne bouger que l’étape (pose, fabrication…).",
+      "Une phase seule se cale dans un creux, ou saute un autre chantier — utile si la météo impose d’inverser une pose intérieure et une pose extérieure.",
+    ],
+  },
+  {
     id: "2026-09-17-dnd-insert-milieu",
     title: "Insérer un chantier au milieu d’un autre",
     items: [

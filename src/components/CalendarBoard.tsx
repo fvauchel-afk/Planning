@@ -42,6 +42,7 @@ import { formatClock, formatHoursLabel, hoursForSlot, workWindowsForRow } from "
 import {
   shiftChantierBlockByMinutes,
   shiftOrMoveChantierBlock,
+  shiftPhaseOrJump,
   type OccupiedHalf,
 } from "@/lib/engine/drag-shift";
 import { clampToWorkWindows } from "@/lib/engine/hour-grid";
@@ -61,6 +62,7 @@ import {
 import { fabricationAwaitingLaunch } from "@/lib/dates-estimatives";
 
 type ViewMode = "overview" | "week" | "day";
+type DragScope = "chantier" | "phase";
 
 export function CalendarBoard() {
   const { snapshot, loading, error, usingSupabase, applyPhaseEdits, reorderEmployees } =
@@ -68,6 +70,7 @@ export function CalendarBoard() {
   const { reopen, clearReopen } = useFormDraftReopen();
   const { session } = useSession();
   const [view, setView] = useState<ViewMode>("overview");
+  const [dragScope, setDragScope] = useState<DragScope>("chantier");
   const [todayIso, setTodayIso] = useState(() => toISODate(new Date()));
   const [cursorIso, setCursorIso] = useState(todayIso);
   const [selectedPhaseId, setSelectedPhaseId] = useState<string | null>(null);
@@ -91,6 +94,8 @@ export function CalendarBoard() {
     pointerId: number;
     rowId: string;
     chantierId: string;
+    phaseId: string;
+    scope: DragScope;
     grab: OccupiedHalf;
     startX: number;
     startY: number;
@@ -207,46 +212,58 @@ export function CalendarBoard() {
     };
   }
 
-  function updateDragPreview(clientX: number, clientY: number) {
-    const drag = dragRef.current;
-    if (!drag) return;
-    if (view === "day" && drag.startMin != null) {
-      const drop = planDayDropFromPoint(clientX, clientY);
-      if (!drop) {
-        setDragPreview({ cells: new Set(), blocked: false });
-        return;
-      }
-      const result = shiftChantierBlockByMinutes({
+  function computeMove(
+    drag: NonNullable<typeof dragRef.current>,
+    drop: OccupiedHalf & { rowId: string; startMin?: number },
+    phaseMode: boolean,
+  ) {
+    if (view === "day" && drag.startMin != null && drop.startMin != null) {
+      return shiftChantierBlockByMinutes({
         snapshot,
         fromRowId: drag.rowId,
         toRowId: drop.rowId,
         chantierId: drag.chantierId,
         grab: { ...drag.grab, startMin: drag.startMin },
-        drop,
+        drop: {
+          date: drop.date,
+          half: drop.half,
+          startMin: drop.startMin,
+        },
+        phaseId: phaseMode ? drag.phaseId : undefined,
       });
-      const keys = new Set<string>();
-      for (const cell of result.preview) {
-        keys.add(`${cell.rowId}|${cell.date}|${cell.half}`);
-      }
-      if (keys.size === 0) {
-        keys.add(`${drag.rowId}|${drag.grab.date}|${drag.grab.half}`);
-      }
-      setDragPreview({ cells: keys, blocked: result.blocked });
-      return;
     }
-    const drop = planCellFromPoint(clientX, clientY);
-    if (!drop) {
-      setDragPreview({ cells: new Set(), blocked: false });
-      return;
+    if (phaseMode) {
+      return shiftPhaseOrJump({
+        snapshot,
+        fromRowId: drag.rowId,
+        toRowId: drop.rowId,
+        phaseId: drag.phaseId,
+        grab: drag.grab,
+        drop: { date: drop.date, half: drop.half },
+      });
     }
-    const result = shiftOrMoveChantierBlock({
+    return shiftOrMoveChantierBlock({
       snapshot,
       fromRowId: drag.rowId,
       toRowId: drop.rowId,
       chantierId: drag.chantierId,
       grab: drag.grab,
-      drop,
+      drop: { date: drop.date, half: drop.half },
     });
+  }
+
+  function updateDragPreview(clientX: number, clientY: number) {
+    const drag = dragRef.current;
+    if (!drag) return;
+    const drop =
+      view === "day" && drag.startMin != null
+        ? planDayDropFromPoint(clientX, clientY)
+        : planCellFromPoint(clientX, clientY);
+    if (!drop) {
+      setDragPreview({ cells: new Set(), blocked: false });
+      return;
+    }
+    const result = computeMove(drag, drop, drag.scope === "phase");
     const keys = new Set<string>();
     for (const cell of result.preview) {
       keys.add(`${cell.rowId}|${cell.date}|${cell.half}`);
@@ -261,6 +278,7 @@ export function CalendarBoard() {
     event: PointerEvent<HTMLButtonElement>,
     rowId: string,
     chantierId: string,
+    phaseId: string,
     date: string,
     half: 0 | 1,
     startMin?: number,
@@ -270,6 +288,8 @@ export function CalendarBoard() {
       pointerId: event.pointerId,
       rowId,
       chantierId,
+      phaseId,
+      scope: dragScope,
       grab: { date, half, startMin },
       startX: event.clientX,
       startY: event.clientY,
@@ -321,24 +341,7 @@ export function CalendarBoard() {
         ? planDayDropFromPoint(clientX, clientY)
         : planCellFromPoint(clientX, clientY);
     if (!drop || savingDrag.current) return;
-    const result =
-      view === "day" && drag.startMin != null && "startMin" in drop
-        ? shiftChantierBlockByMinutes({
-            snapshot,
-            fromRowId: drag.rowId,
-            toRowId: drop.rowId,
-            chantierId: drag.chantierId,
-            grab: { ...drag.grab, startMin: drag.startMin },
-            drop: drop as OccupiedHalf & { startMin: number },
-          })
-        : shiftOrMoveChantierBlock({
-            snapshot,
-            fromRowId: drag.rowId,
-            toRowId: drop.rowId,
-            chantierId: drag.chantierId,
-            grab: drag.grab,
-            drop: { date: drop.date, half: drop.half },
-          });
+    const result = computeMove(drag, drop, drag.scope === "phase");
     if (result.blocked) {
       setDragError(
         "Créneau occupé : le chantier est revenu à sa place. Impossible de déposer sur une absence ou un créneau hors horaire (0 h).",
@@ -394,6 +397,9 @@ export function CalendarBoard() {
             la ligne d’arrivée reculent ou avancent pour laisser la place.
             Vous pouvez aussi déposer un chantier au milieu d’un autre : le
             début reste en place, la suite reprend juste après.
+            Avec « Cette phase », vous déplacez seulement l’étape (pose,
+            fabrication…) : elle se cale dans un creux, ou saute un autre
+            chantier (météo, pose intérieure / extérieure).
             Un dépôt sur une absence ou un créneau hors horaire
             à 0 h (vendredi après-midi en 35 h, week-end) est annulé.
             Glissez une ligne de salarié (clic gauche maintenu sur le nom)
@@ -421,6 +427,27 @@ export function CalendarBoard() {
                 }}
                 className={`rounded px-3 py-1.5 text-sm ${
                   view === id
+                    ? "bg-stone-900 text-white"
+                    : "text-stone-700 hover:bg-stone-100"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <div className="inline-flex rounded-md border border-stone-300 bg-white p-0.5">
+            {(
+              [
+                ["chantier", "Chantier entier"],
+                ["phase", "Cette phase"],
+              ] as const
+            ).map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setDragScope(id)}
+                className={`rounded px-3 py-1.5 text-sm ${
+                  dragScope === id
                     ? "bg-stone-900 text-white"
                     : "text-stone-700 hover:bg-stone-100"
                 }`}
@@ -550,6 +577,7 @@ export function CalendarBoard() {
           canReorder={Boolean(session?.isAdmin)}
           draggingId={draggingId}
           dragPreview={dragPreview}
+          dragScope={dragScope}
           rowHandleProps={rowHandleProps}
           focusCell={focusCell}
           onSelectDay={setCursorIso}
@@ -694,14 +722,16 @@ export function CalendarBoard() {
                       const half = halfFromLabel(slot);
                       const slotOff =
                         hoursForSlot(snapshot, row.id, iso, half) <= 0;
-                      const assignments = uniqueAssignmentsByChantier(
-                        assignmentsForCell(
+                      const cellAssignments = assignmentsForCell(
                           snapshot,
                           row.id,
                           iso,
                           slot,
-                        ),
-                      );
+                        );
+                      const assignments =
+                        dragScope === "phase"
+                          ? cellAssignments
+                          : uniqueAssignmentsByChantier(cellAssignments);
                       const cellKey = `${row.id}|${iso}|${half}`;
                       const dropTarget = dragPreview?.cells.has(cellKey);
                       const focused =
@@ -750,6 +780,7 @@ export function CalendarBoard() {
                                   event,
                                   row.id,
                                   assignment.chantier.id,
+                                  assignment.phase.id,
                                   iso,
                                   half,
                                 );
@@ -843,6 +874,7 @@ function DayDetail({
   canReorder,
   draggingId,
   dragPreview,
+  dragScope,
   rowHandleProps,
   focusCell,
   onSelectDay,
@@ -860,6 +892,7 @@ function DayDetail({
   canReorder: boolean;
   draggingId: string | null;
   dragPreview: { cells: Set<string>; blocked: boolean } | null;
+  dragScope: DragScope;
   rowHandleProps: ReturnType<typeof useEmployeeRowReorder>["rowHandleProps"];
   focusCell: { rowId: string; date: string; half: 0 | 1 } | null;
   onSelectDay: (iso: string) => void;
@@ -870,6 +903,7 @@ function DayDetail({
     event: PointerEvent<HTMLButtonElement>,
     rowId: string,
     chantierId: string,
+    phaseId: string,
     date: string,
     half: 0 | 1,
     startMin?: number,
@@ -922,7 +956,10 @@ function DayDetail({
           );
           const windows = workWindowsForRow(snapshot, row.id, iso);
           const dayAssignments = assignmentsForDay(snapshot, row.id, iso);
-          const assignments = uniqueAssignmentsByChantier(dayAssignments);
+          const assignments =
+            dragScope === "phase"
+              ? dayAssignments
+              : uniqueAssignmentsByChantier(dayAssignments);
           const dayStart = windows[0]?.start ?? 7 * 60;
           const dayEnd = windows[windows.length - 1]?.end ?? 17 * 60;
           const span = Math.max(1, dayEnd - dayStart);
@@ -1101,6 +1138,7 @@ function DayDetail({
                                         event,
                                         row.id,
                                         assignment.chantier.id,
+                                        assignment.phase.id,
                                         iso,
                                         slot.half,
                                         start,
