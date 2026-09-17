@@ -1,7 +1,7 @@
 import { employeeCanTakePhase } from "@/lib/chantier-status";
 import { addDays, addWorkingDays, isSunday, isoWeekday, workingDaysBetween } from "@/lib/dates";
 import { compareEmployeesByOrdre } from "@/lib/display-order";
-import { employeeAvailableOnRange, employeeWorksOnDate, hoursForSlot } from "@/lib/engine/hours";
+import { employeeAvailableOnRange, employeeWorksOnDate, hoursForSlot, horairesFromPreset, rangeEndFromHours } from "@/lib/engine/hours";
 import {
   SEARCH_DAYS,
   buildOccupancy,
@@ -85,12 +85,6 @@ export function firstWorkingOnOrAfter(date: string): string {
 function rangeEnd(start: string, workingDays: number): string {
   if (workingDays <= 1) return start;
   return addWorkingDays(start, workingDays - 1);
-}
-
-function workingDaysFromHours(hours: number): number {
-  const value = Number(hours) || 0;
-  if (value <= 0) return 1;
-  return Math.max(1, Math.ceil(value / 8));
 }
 
 function inclusiveWorkingDays(start: string, end: string): number {
@@ -245,17 +239,12 @@ export function applyPhaseChainOnCreate(
           start = laterDate(minStart, current.date_debut);
         }
 
-        const workingDays =
-          type === "logistique"
-            ? delayDays
-            : workingDaysFromHours(
-                type === "livraison" && plannedHours <= 0 ? 2 : plannedHours,
-              );
         if (type === "livraison" && plannedHours <= 0) {
           current.duree_estimee_heures = 2;
         }
-        let end = rangeEnd(start, workingDays);
+        let end: string;
         if (type === "logistique") {
+          end = rangeEnd(start, delayDays);
           if (laquageFin && laquageFin >= start) {
             end = laterDate(end, laquageFin);
           }
@@ -264,21 +253,29 @@ export function applyPhaseChainOnCreate(
             current.duree_estimee_heures =
               inclusiveWorkingDays(start, end) * 8;
           }
-        } else if (current.date_fin && current.date_fin >= start) {
-          end = laterDate(end, current.date_fin);
+        } else {
+          current.employe_id = pickEmployeeForPhase(
+            snapshot,
+            type,
+            start,
+            start,
+            current.employe_id,
+          );
+          const hoursForRange =
+            type === "livraison" && plannedHours <= 0 ? 2 : plannedHours;
+          end = rangeEndFromHours(
+            snapshot,
+            current.employe_id,
+            start,
+            hoursForRange,
+          );
+          if (current.date_fin && current.date_fin >= start) {
+            end = laterDate(end, current.date_fin);
+          }
         }
 
         current.date_debut = start;
         current.date_fin = end < start ? start : end;
-        if (type !== "logistique") {
-          current.employe_id = pickEmployeeForPhase(
-            snapshot,
-            type,
-            current.date_debut,
-            current.date_fin,
-            current.employe_id,
-          );
-        }
         if (
           waitingOnBonCommande &&
           (type === "logistique" || type === "livraison" || type === "pose")
@@ -347,11 +344,12 @@ export function applyBonCommandeDelay(
     }
     let followingStart = poseStart;
     if (livraison && (livraison.duree_estimee_heures > 0 || livraison.date_debut)) {
-      const livDays =
-        livraison.date_debut && livraison.date_fin
-          ? inclusiveWorkingDays(livraison.date_debut, livraison.date_fin)
-          : workingDaysFromHours(livraison.duree_estimee_heures || 2);
-      const livEnd = rangeEnd(followingStart, livDays);
+      const livEnd = rangeEndFromHours(
+        snapshot,
+        livraison.employe_id,
+        followingStart,
+        Number(livraison.duree_estimee_heures) || 2,
+      );
       patches.push({
         id: livraison.id,
         date_debut: followingStart,
@@ -362,13 +360,16 @@ export function applyBonCommandeDelay(
       followingStart = nextWorkingDayAfter(livEnd);
     }
     if (pose && (pose.duree_estimee_heures > 0 || pose.date_debut)) {
-      const poseDays = pose.date_debut && pose.date_fin
-        ? inclusiveWorkingDays(pose.date_debut, pose.date_fin)
-        : workingDaysFromHours(pose.duree_estimee_heures);
+      const poseHours = Number(pose.duree_estimee_heures) || 8;
       patches.push({
         id: pose.id,
         date_debut: followingStart,
-        date_fin: rangeEnd(followingStart, poseDays),
+        date_fin: rangeEndFromHours(
+          snapshot,
+          pose.employe_id,
+          followingStart,
+          poseHours,
+        ),
         employe_id: pose.employe_id,
         heure_debut: pose.heure_debut ?? null,
       });
@@ -449,36 +450,25 @@ function firstOpenDateOnOrAfter(
   return date;
 }
 
-function rangeEndOnRow(
-  snapshot: PlanningSnapshot,
-  rowId: string | null,
-  start: string,
-  workingDays: number,
-): string {
-  if (workingDays <= 1) return start;
-  if (!rowId) return rangeEnd(start, workingDays);
-  let date = start;
-  let seen = 1;
-  for (let i = 0; i < SEARCH_DAYS && seen < workingDays; i += 1) {
-    date = addDays(date, 1);
-    if (!isSlotBlockedForRow(snapshot, rowId, date)) seen += 1;
-  }
-  return date;
-}
-
-function scheduleOnAssignee(
+function scheduleHoursOnAssignee(
   snapshot: PlanningSnapshot,
   employeId: string | null,
   fromDate: string,
-  workingDays: number,
+  hours: number,
 ): { start: string; end: string } {
-  const days = Math.max(1, workingDays);
+  const needed = Math.max(hours, 0);
   if (!employeId) {
     const aligned = firstWorkingOnOrAfter(fromDate);
-    return { start: aligned, end: rangeEnd(aligned, days) };
+    return {
+      start: aligned,
+      end: rangeEndFromHours(snapshot, null, aligned, needed),
+    };
   }
   const start = firstOpenDateOnOrAfter(snapshot, employeId, fromDate);
-  return { start, end: rangeEndOnRow(snapshot, employeId, start, days) };
+  return {
+    start,
+    end: rangeEndFromHours(snapshot, employeId, start, needed),
+  };
 }
 
 type OptionEditOptions = {
@@ -530,18 +520,6 @@ function mergePhasePatch(
   const next = { ...current, ...extra };
   if (index >= 0) patches[index] = next;
   else patches.push(next);
-}
-
-function workingDaysOfPhase(
-  type: TypePhase,
-  debut: string | null,
-  fin: string | null,
-  hours: number,
-  delayDays: number,
-): number {
-  if (type === "logistique") return delayDays;
-  if (debut && fin) return inclusiveWorkingDays(debut, fin);
-  return workingDaysFromHours(type === "livraison" && hours <= 0 ? 2 : hours);
 }
 
 function recaleElementChain(
@@ -611,21 +589,20 @@ function recaleElementChain(
     if (!debut && Number(current.duree_estimee_heures) <= 0 && type !== "logistique") {
       continue;
     }
-    const days = workingDaysOfPhase(
-      type,
-      debut,
-      fin,
-      Number(current.duree_estimee_heures) || 0,
-      delayDays,
-    );
+    const hours = Number(current.duree_estimee_heures) || 0;
     const afterPrev = prevEnd ? nextWorkingDayAfter(prevEnd) : null;
     const requested = debut || afterPrev;
     if (!requested && !afterPrev) continue;
     const minStart = afterPrev && requested ? laterDate(afterPrev, requested) : (afterPrev || requested)!;
     const range =
       type === "logistique"
-        ? scheduleAfter(snapshot, prevEnd, days)
-        : scheduleOnAssignee(snapshot, current.employe_id, minStart, days);
+        ? scheduleAfter(snapshot, prevEnd, delayDays)
+        : scheduleHoursOnAssignee(
+            snapshot,
+            current.employe_id,
+            minStart,
+            type === "livraison" && hours <= 0 ? 2 : hours,
+          );
     if (range.start !== debut || range.end !== fin) {
       if (current.kind === "phase") {
         mergePhasePatch(patches, current.phase, {
@@ -938,10 +915,11 @@ export function planChantierOptionEdits(
           kept.filter((item) => item.type_phase !== "livraison"),
           "livraison",
         );
-      const range = scheduleAfter(
+      const range = scheduleHoursOnAssignee(
         snapshot,
-        after,
-        workingDaysFromHours(livHours),
+        liv?.employe_id ?? options.employeLivraisonId ?? null,
+        after ? nextWorkingDayAfter(after) : firstWorkingOnOrAfter(todayIso()),
+        livHours,
       );
       livraisonEnd = range.end;
       const employeId = pickEmployeeForPhase(
@@ -979,10 +957,6 @@ export function planChantierOptionEdits(
 
     if (options.avecPose) {
       const poseHours = Math.max(8, Number(pose?.duree_estimee_heures) || 0);
-      const poseDays =
-        pose?.date_debut && pose.date_fin
-          ? inclusiveWorkingDays(pose.date_debut, pose.date_fin)
-          : workingDaysFromHours(poseHours);
       const after =
         livraisonEnd ||
         thermoEnd ||
@@ -990,7 +964,12 @@ export function planChantierOptionEdits(
           kept.filter((item) => item.type_phase !== "pose"),
           "pose",
         );
-      const range = scheduleAfter(snapshot, after, poseDays);
+      const range = scheduleHoursOnAssignee(
+        snapshot,
+        options.employePoseId || pose?.employe_id || fab?.employe_id || null,
+        after ? nextWorkingDayAfter(after) : earliestAvailableWorkDate(snapshot),
+        poseHours,
+      );
       if (pose && !deleteIds.includes(pose.id)) {
         const shouldRecale =
           !current.avecPose ||
@@ -1097,7 +1076,7 @@ function runPhaseChainSelfCheck() {
   });
   const log = chained.elements[0]?.phases.find((item) => item.type_phase === "logistique");
   const posePhase = chained.elements[0]?.phases.find((item) => item.type_phase === "pose");
-  if (log?.date_debut !== "2026-09-15" || log.date_fin !== "2026-09-21") {
+  if (log?.date_debut !== "2026-09-16" || log.date_fin !== "2026-09-22") {
     throw new Error(
       `phase-chain: thermo provisoire 5 j. après fab, reçu ${log?.date_debut} → ${log?.date_fin}`,
     );
@@ -1105,7 +1084,7 @@ function runPhaseChainSelfCheck() {
   if (!log?.dates_estimatives || !posePhase?.dates_estimatives) {
     throw new Error("phase-chain: thermo et pose restent estimatifs avant le BC");
   }
-  if (posePhase?.date_debut !== "2026-09-22") {
+  if (posePhase?.date_debut !== "2026-09-23") {
     throw new Error(
       `phase-chain: pose après le thermo provisoire, reçu ${posePhase?.date_debut}`,
     );
@@ -1181,7 +1160,7 @@ function runPhaseChainSelfCheck() {
   if (skippedLog?.duree_estimee_heures !== 0 || skippedLog.date_debut) {
     throw new Error("phase-chain: sans thermolaquage, pas de phase laquage");
   }
-  if (poseAfterFab?.date_debut !== "2026-09-15") {
+  if (poseAfterFab?.date_debut !== "2026-09-16") {
     throw new Error(
       `phase-chain: pose après fab sans laquage, reçu ${poseAfterFab?.date_debut}`,
     );
@@ -1213,7 +1192,7 @@ function runPhaseChainSelfCheck() {
   });
   const shortLog = manual.elements[0]?.phases.find((item) => item.type_phase === "logistique");
   const noPose = manual.elements[0]?.phases.find((item) => item.type_phase === "pose");
-  if (shortLog?.date_debut !== "2026-09-15" || shortLog?.date_fin !== "2026-09-17") {
+  if (shortLog?.date_debut !== "2026-09-16" || shortLog?.date_fin !== "2026-09-18") {
     throw new Error(
       `phase-chain: laquage provisoire 3 j. après fab, reçu ${shortLog?.date_debut} → ${shortLog?.date_fin}`,
     );
@@ -1323,7 +1302,7 @@ function runPhaseChainSelfCheck() {
   const thermoCreate = withDelivery.elements[0]?.phases.find(
     (item) => item.type_phase === "logistique",
   );
-  if (thermoCreate?.date_debut !== "2026-09-15" || thermoCreate.date_fin !== "2026-09-21") {
+  if (thermoCreate?.date_debut !== "2026-09-16" || thermoCreate.date_fin !== "2026-09-22") {
     throw new Error(
       `phase-chain: thermo provisoire 5 j. après fab, reçu ${thermoCreate?.date_debut} → ${thermoCreate?.date_fin}`,
     );
@@ -1331,12 +1310,12 @@ function runPhaseChainSelfCheck() {
   if (!thermoCreate?.dates_estimatives || !livCreate?.dates_estimatives || !poseAfterLiv?.dates_estimatives) {
     throw new Error("phase-chain: thermo / livraison / pose restent estimatifs avant le BC");
   }
-  if (livCreate?.date_debut !== "2026-09-22" || livCreate.duree_estimee_heures !== 2) {
+  if (livCreate?.date_debut !== "2026-09-23" || livCreate.duree_estimee_heures !== 2) {
     throw new Error(
       `phase-chain: livraison après le thermo provisoire, reçu ${livCreate?.date_debut} / ${livCreate?.duree_estimee_heures}h`,
     );
   }
-  if (poseAfterLiv?.date_debut !== "2026-09-23") {
+  if (poseAfterLiv?.date_debut !== "2026-09-24") {
     throw new Error(
       `phase-chain: pose après livraison, reçu ${poseAfterLiv?.date_debut}`,
     );
@@ -1605,12 +1584,12 @@ function runPhaseChainSelfCheck() {
   const logMoved = cascaded.patches.find((item) => item.id === "log-cascade");
   const livMoved = cascaded.patches.find((item) => item.id === "liv-cascade");
   const poseMoved = cascaded.patches.find((item) => item.id === "pose-cascade");
-  if (fabMoved?.date_debut !== "2026-09-16" || fabMoved.date_fin !== "2026-09-17") {
+  if (fabMoved?.date_debut !== "2026-09-16" || fabMoved.date_fin !== "2026-09-18") {
     throw new Error(
       `phase-chain: fab recalee sur Alexis, reçu ${fabMoved?.date_debut} → ${fabMoved?.date_fin}`,
     );
   }
-  if (logMoved?.date_debut !== "2026-09-18" || logMoved.date_fin !== "2026-09-24") {
+  if (logMoved?.date_debut !== "2026-09-21" || logMoved.date_fin !== "2026-09-25") {
     throw new Error(
       `phase-chain: thermo doit suivre la fab, reçu ${logMoved?.date_debut} → ${logMoved?.date_fin}`,
     );
@@ -1652,6 +1631,50 @@ function runPhaseChainSelfCheck() {
   );
   if (!missingRequiredAssignee(nobody)) {
     throw new Error("phase-chain: sans salarié, un message d’erreur est attendu");
+  }
+
+  const fridaySnap: PlanningSnapshot = {
+    ...snapshot,
+    employees: [
+      {
+        id: "emp-35",
+        nom: "Alexis",
+        roles: ["fabrication", "pose"],
+        actif: true,
+        horaires: horairesFromPreset("35"),
+      },
+    ],
+  };
+  const longFab = applyPhaseChainOnCreate(fridaySnap, {
+    nom_client: "Vendredi",
+    adresse: "",
+    lien_dossier_onedrive: null,
+    priorite: "normal",
+    date_debut: "2026-09-15",
+    avec_pose: false,
+    avec_thermolaquage: false,
+    elements: [
+      {
+        nom_element: "Portail",
+        phases: [
+          {
+            ...basePhase,
+            type_phase: "fabrication",
+            duree_estimee_heures: 32,
+            employe_id: "emp-35",
+            date_debut: "2026-09-15",
+          },
+        ],
+      },
+    ],
+  });
+  const longPhase = longFab.elements[0]?.phases.find(
+    (item) => item.type_phase === "fabrication",
+  );
+  if (longPhase?.date_fin !== "2026-09-21") {
+    throw new Error(
+      `phase-chain: 32 h dès le mardi 15 sept. (35 h/sem.) doivent finir le lundi 21, reçu ${longPhase?.date_fin}`,
+    );
   }
 }
 
