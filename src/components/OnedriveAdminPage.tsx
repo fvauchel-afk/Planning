@@ -18,7 +18,7 @@ export function OnedriveAdminPage() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     setQueryError(params.get("error"));
-    fetch("/api/onedrive/status", { redirect: "manual" })
+    fetch("/api/onedrive/status", { cache: "no-store", redirect: "manual" })
       .then((res) => res.json())
       .then((json: Status) => setStatus(json))
       .catch(() =>

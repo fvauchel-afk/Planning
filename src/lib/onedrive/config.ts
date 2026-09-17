@@ -1,4 +1,5 @@
 import "server-only";
+import { resolveOnedriveRedirectUri } from "@/lib/onedrive/oauth-state";
 
 export type OnedriveConfig = {
   clientId: string;
@@ -31,9 +32,10 @@ function resolveTenant(raw: string | undefined): string {
 export function getOnedriveConfig(): OnedriveConfig {
   const clientId = process.env.ONEDRIVE_CLIENT_ID?.trim();
   const clientSecret = process.env.ONEDRIVE_CLIENT_SECRET?.trim();
-  const redirectUri =
-    process.env.ONEDRIVE_REDIRECT_URI?.trim() ||
-    "http://localhost:3000/api/onedrive/callback";
+  const redirectUri = resolveOnedriveRedirectUri({
+    envUri: process.env.ONEDRIVE_REDIRECT_URI,
+    vercel: process.env.VERCEL === "1",
+  });
   const rootShareUrl =
     process.env.ONEDRIVE_ROOT_SHARE_URL?.trim() || ROOT_SHARE_FALLBACK;
   if (!clientId || !clientSecret) {
