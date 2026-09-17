@@ -225,7 +225,7 @@ export function DemandesPage() {
                 }`}
               >
                 {nouveauCommandes > 1
-                  ? `${nouveauCommandes} nouveau`
+                  ? `${nouveauCommandes} nouveaux`
                   : "nouveau"}
               </span>
             ) : null}
@@ -238,7 +238,7 @@ export function DemandesPage() {
                 }`}
               >
                 {nouveauConges > 1
-                  ? `${nouveauConges} nouveau`
+                  ? `${nouveauConges} nouveaux`
                   : "nouveau"}
               </span>
             ) : null}

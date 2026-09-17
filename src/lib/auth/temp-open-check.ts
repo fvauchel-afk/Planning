@@ -5,6 +5,8 @@
  * Ne pas prolonger ces dates sans accord : données clients et salariés.
  */
 
+import { parisCalendarYmd } from "@/lib/dates";
+
 export const AUTH_OPEN_FROM_YMD = "2026-09-16";
 /** Premier jour où le PIN est de nouveau obligatoire (exclusif). */
 export const AUTH_OPEN_UNTIL_YMD = "2026-09-18";
@@ -19,14 +21,7 @@ export const CHECK_ADMIN_FALLBACK = {
   isAdmin: true as const,
 };
 
-export function parisCalendarYmd(now: Date = new Date()): string {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Europe/Paris",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(now);
-}
+export { parisCalendarYmd };
 
 /** Vrai seulement le 16/09/2026 et le 17/09/2026, heure de Paris. */
 export function isAuthTemporarilyOpen(now: Date = new Date()): boolean {

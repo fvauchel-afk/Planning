@@ -21,6 +21,16 @@ export function toISODate(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
+/** Jour calendaire Europe/Paris (YYYY-MM-DD), indépendant du fuseau du serveur. */
+export function parisCalendarYmd(now: Date = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Paris",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(now);
+}
+
 export function parseISODate(iso: string): Date {
   const [y, m, d] = iso.split("-").map(Number);
   return new Date(y, (m ?? 1) - 1, d ?? 1);
