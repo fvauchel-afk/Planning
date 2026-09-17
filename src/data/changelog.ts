@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-17-drag-hors-horaire-pdf-accents",
+    title: "Dépôt hors horaire et PDF de réception",
+    items: [
+      "On ne peut plus déposer un chantier sur une case à 0 h pour le salarié : vendredi après-midi (horaire 35 h), samedi ou dimanche. Le bloc revient à sa place, avec le bandeau rouge.",
+      "Sur le PDF de réception, les accents s’affichent : Réception de chantier, Salarié, signature simulée.",
+    ],
+  },
+  {
     id: "2026-09-16-onedrive-oauth-silencieux",
     title: "Connexion OneDrive uniquement sur demande",
     items: [

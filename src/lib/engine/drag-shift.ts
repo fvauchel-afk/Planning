@@ -1,8 +1,8 @@
 import { addDays, parseISODate } from "@/lib/dates";
 import { hoursForSlot } from "@/lib/engine/hours";
 import {
-  isCompanyHoliday,
   isEmployeeAbsent,
+  isSlotBlockedForRow,
   slotsFromExistingPhase,
   type Half,
 } from "@/lib/engine/slots";
@@ -228,15 +228,6 @@ function gluedNeighbors(
   return chain;
 }
 
-function cellHasBlockingAbsence(
-  snapshot: PlanningSnapshot,
-  rowId: string,
-  date: string,
-): boolean {
-  if (isVirtualPlanningRow(rowId)) return isCompanyHoliday(snapshot, date);
-  return isEmployeeAbsent(snapshot, rowId, date) || isCompanyHoliday(snapshot, date);
-}
-
 function landingHasConflict(
   snapshot: PlanningSnapshot,
   landings: { rowId: string; halves: OccupiedHalf[] }[],
@@ -253,7 +244,7 @@ function landingHasConflict(
       occupancyByRow.set(landing.rowId, cells);
     }
     for (const slot of landing.halves) {
-      if (cellHasBlockingAbsence(snapshot, landing.rowId, slot.date)) {
+      if (isSlotBlockedForRow(snapshot, landing.rowId, slot.date, slot.half)) {
         return true;
       }
       for (const occupant of cells) {
@@ -743,6 +734,98 @@ function runDragShiftSelfCheck() {
   if (!sameRowBlocked.blocked || sameRowBlocked.patches.length !== 0) {
     throw new Error(
       "drag-shift: un glisser horizontal sur un autre chantier non collé doit être refusé",
+    );
+  }
+
+  const fridayMorning = shiftChantierBlock({
+    snapshot: {
+      ...movedAcrossSnapshot(),
+      phases: [
+        {
+          ...movedAcrossSnapshot().phases[0]!,
+          date_debut: "2026-10-16",
+          date_fin: "2026-10-16",
+          heure_debut: "08:00",
+        },
+      ],
+    },
+    rowId: "emp-a",
+    chantierId: "ch-a",
+    grab: { date: "2026-10-16", half: 0 },
+    drop: { date: "2026-10-16", half: 1 },
+  });
+  if (!fridayMorning.blocked || fridayMorning.patches.length !== 0) {
+    throw new Error(
+      "drag-shift: un dépôt le vendredi après-midi (0 h en 35 h) doit être refusé",
+    );
+  }
+
+  const ontoSaturday = shiftChantierBlock({
+    snapshot: {
+      ...movedAcrossSnapshot(),
+      phases: [
+        {
+          ...movedAcrossSnapshot().phases[0]!,
+          date_debut: "2026-10-16",
+          date_fin: "2026-10-16",
+          heure_debut: "08:00",
+        },
+      ],
+    },
+    rowId: "emp-a",
+    chantierId: "ch-a",
+    grab: { date: "2026-10-16", half: 0 },
+    drop: { date: "2026-10-17", half: 0 },
+  });
+  if (!ontoSaturday.blocked || ontoSaturday.patches.length !== 0) {
+    throw new Error("drag-shift: un dépôt le samedi (0 h) doit être refusé");
+  }
+
+  const ontoSunday = shiftChantierBlock({
+    snapshot: {
+      ...movedAcrossSnapshot(),
+      phases: [
+        {
+          ...movedAcrossSnapshot().phases[0]!,
+          date_debut: "2026-10-16",
+          date_fin: "2026-10-16",
+          heure_debut: "08:00",
+        },
+      ],
+    },
+    rowId: "emp-a",
+    chantierId: "ch-a",
+    grab: { date: "2026-10-16", half: 0 },
+    drop: { date: "2026-10-18", half: 0 },
+  });
+  if (!ontoSunday.blocked || ontoSunday.patches.length !== 0) {
+    throw new Error("drag-shift: un dépôt le dimanche doit être refusé");
+  }
+
+  const thursdayToFridayMorning = shiftChantierBlock({
+    snapshot: {
+      ...movedAcrossSnapshot(),
+      phases: [
+        {
+          ...movedAcrossSnapshot().phases[0]!,
+          date_debut: "2026-10-15",
+          date_fin: "2026-10-15",
+          heure_debut: "13:00",
+        },
+      ],
+    },
+    rowId: "emp-a",
+    chantierId: "ch-a",
+    grab: { date: "2026-10-15", half: 1 },
+    drop: { date: "2026-10-16", half: 0 },
+  });
+  if (
+    thursdayToFridayMorning.blocked ||
+    thursdayToFridayMorning.patches[0]?.date_debut !== "2026-10-16" ||
+    thursdayToFridayMorning.patches[0]?.heure_debut !== "07:30"
+  ) {
+    throw new Error(
+      "drag-shift: un dépôt le vendredi matin (heures disponibles) doit rester possible",
     );
   }
 }

@@ -249,7 +249,7 @@ export function CalendarBoard() {
     });
     if (blocked) {
       setDragError(
-        "Créneau occupé : le chantier est revenu à sa place. Impossible de déposer sur une absence, une indisponibilité ou un autre chantier.",
+        "Créneau occupé : le chantier est revenu à sa place. Impossible de déposer sur une absence, un créneau hors horaire (0 h) ou un autre chantier.",
       );
       return;
     }
@@ -296,8 +296,9 @@ export function CalendarBoard() {
             Glissez un chantier
             vers une autre date ou vers un autre salarié.             Les blocs collés sur
             la ligne d’arrivée reculent ou avancent pour laisser la place.
-            Un dépôt sur une case déjà prise (absence, indisponibilité ou
-            chantier qui ne peut pas reculer) est annulé.
+            Un dépôt sur une case déjà prise (absence, créneau hors horaire
+            à 0 h — vendredi après-midi en 35 h, week-end — ou chantier qui
+            ne peut pas reculer) est annulé.
             Glissez une ligne de salarié (clic gauche maintenu sur le nom)
             pour changer l’ordre d’affichage, enregistré pour tout le monde.
             {usingSupabase
