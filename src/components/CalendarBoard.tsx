@@ -63,7 +63,7 @@ import { fabricationAwaitingLaunch } from "@/lib/dates-estimatives";
 type ViewMode = "overview" | "week" | "day";
 
 export function CalendarBoard() {
-  const { snapshot, loading, error, usingSupabase, applyPhasePatches, reorderEmployees } =
+  const { snapshot, loading, error, usingSupabase, applyPhaseEdits, reorderEmployees } =
     usePlanning();
   const { reopen, clearReopen } = useFormDraftReopen();
   const { session } = useSession();
@@ -321,7 +321,7 @@ export function CalendarBoard() {
         ? planDayDropFromPoint(clientX, clientY)
         : planCellFromPoint(clientX, clientY);
     if (!drop || savingDrag.current) return;
-    const { patches, blocked } =
+    const result =
       view === "day" && drag.startMin != null && "startMin" in drop
         ? shiftChantierBlockByMinutes({
             snapshot,
@@ -339,17 +339,20 @@ export function CalendarBoard() {
             grab: drag.grab,
             drop: { date: drop.date, half: drop.half },
           });
-    if (blocked) {
+    if (result.blocked) {
       setDragError(
-        "Créneau occupé : le chantier est revenu à sa place. Impossible de déposer sur une absence, un créneau hors horaire (0 h) ou un autre chantier.",
+        "Créneau occupé : le chantier est revenu à sa place. Impossible de déposer sur une absence ou un créneau hors horaire (0 h).",
       );
       return;
     }
-    if (patches.length === 0) return;
+    if (result.patches.length === 0 && !result.inserts?.length) return;
     savingDrag.current = true;
     setDragError(null);
     try {
-      await applyPhasePatches(patches);
+      await applyPhaseEdits({
+        patches: result.patches,
+        inserts: result.inserts,
+      });
     } catch (err) {
       setDragError(
         err instanceof Error ? err.message : "Déplacement impossible à enregistrer.",
@@ -389,9 +392,10 @@ export function CalendarBoard() {
             Glissez un chantier vers une autre date ou vers un autre salarié,
             y compris en vue Jour. Les blocs collés sur
             la ligne d’arrivée reculent ou avancent pour laisser la place.
-            Un dépôt sur une case déjà prise (absence, créneau hors horaire
-            à 0 h — vendredi après-midi en 35 h, week-end — ou chantier qui
-            ne peut pas reculer) est annulé.
+            Vous pouvez aussi déposer un chantier au milieu d’un autre : le
+            début reste en place, la suite reprend juste après.
+            Un dépôt sur une absence ou un créneau hors horaire
+            à 0 h (vendredi après-midi en 35 h, week-end) est annulé.
             Glissez une ligne de salarié (clic gauche maintenu sur le nom)
             pour changer l’ordre d’affichage, enregistré pour tout le monde.
             {usingSupabase
