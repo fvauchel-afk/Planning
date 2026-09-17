@@ -28,7 +28,7 @@ export async function buildReceptionPdf(
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
   const { height } = page.getSize();
   const isLivraison = input.kind === "livraison";
-  const title = isLivraison ? "Bon de livraison" : "Reception de chantier";
+  const title = isLivraison ? "Bon de livraison" : "Réception de chantier";
   let y = height - 64;
 
   page.drawText("Ferronnerie Vauchel", {
@@ -39,7 +39,7 @@ export async function buildReceptionPdf(
     color: rgb(0.22, 0.16, 0.08),
   });
   y -= 18;
-  page.drawText("La Metallerie du Sud", {
+  page.drawText("La Métallerie du Sud", {
     x: 48,
     y,
     size: 11,
@@ -74,7 +74,7 @@ export async function buildReceptionPdf(
   }
   if (input.nomSalarie?.trim()) {
     y -= 16;
-    page.drawText(`Salarie : ${line(input.nomSalarie)}`, {
+    page.drawText(`Salarié : ${line(input.nomSalarie)}`, {
       x: 48,
       y,
       size: 11,
@@ -89,7 +89,7 @@ export async function buildReceptionPdf(
     font,
   });
   y -= 28;
-  page.drawText("Signature (simulee)", { x: 48, y, size: 12, font: bold });
+  page.drawText("Signature (simulée)", { x: 48, y, size: 12, font: bold });
   y -= 10;
   page.drawRectangle({
     x: 48,
@@ -124,7 +124,7 @@ export async function buildReceptionPdf(
     }
   }
   page.drawText(
-    "Document interne : signature simulee, non certifiee.",
+    "Document interne : signature simulée, non certifiée.",
     {
       x: 48,
       y: 48,
