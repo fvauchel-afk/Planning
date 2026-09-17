@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-17-suggestion-administratif",
+    title: "Suggestion Administratif si 7 jours vides",
+    items: [
+      "Si un salarié (fabrication / pose) n’a aucun chantier sur les 7 prochains jours, une suggestion de bloc Administratif apparaît dans Signalements.",
+      "Rien n’est ajouté au planning tant que Jonathan n’a pas cliqué sur Valider. Rejeter ignore la suggestion pour aujourd’hui.",
+    ],
+  },
+  {
     id: "2026-09-17-select-fabrication",
     title: "Choisir le salarié de fabrication",
     items: [

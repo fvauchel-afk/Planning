@@ -7,7 +7,10 @@ import { PHASE_LABELS, SENS_LABELS, SIGNALEMENT_LABELS } from "@/lib/types";
 import { planDelayCascade, type DelayPlanResult } from "@/lib/engine/delay";
 import { allSolutionsOf } from "@/lib/engine/plan-solutions";
 import { formatLongDate } from "@/lib/dates";
-import { propositionFromDelay } from "@/lib/signalements";
+import {
+  isAdministratifIdleSuggestion,
+  propositionFromDelay,
+} from "@/lib/signalements";
 import { usePlanning } from "@/lib/planning-context";
 import type { PlanningSolution } from "@/lib/types";
 
@@ -109,6 +112,7 @@ export function SignalementsPage() {
           {pendingItems.map((item) => {
             const info = describe(item.phase_id);
             const auteur = snapshot.employees.find((e) => e.id === item.employe_id);
+            const idle = isAdministratifIdleSuggestion(item);
             const signed =
               item.sens === "avance"
                 ? -item.retard_demi_journees
@@ -128,7 +132,9 @@ export function SignalementsPage() {
               >
                 <p className="font-medium">
                   {auteur?.nom}
-                  {item.proposition?.createChantier
+                  {idle
+                    ? " — Suggestion : bloc Administratif"
+                    : item.proposition?.createChantier
                     ? ` — Nouveau chantier « ${item.proposition.createChantier.nom_client} »`
                     : ` — ${info.chantier?.nom_client ?? "Proposition"} / ${
                         info.element?.nom_element ?? "—"
@@ -137,7 +143,9 @@ export function SignalementsPage() {
                       })`}
                 </p>
                 <p className="mt-1 text-sm text-stone-600">
-                  {item.proposition
+                  {idle
+                    ? "Aucun chantier sur les 7 prochains jours. Validez pour l’ajouter au planning, ou rejetez."
+                    : item.proposition
                     ? "Proposition de l’algorithme"
                     : `${SENS_LABELS[item.sens ?? "retard"]} : ${item.retard_demi_journees} demi-journée${
                         item.retard_demi_journees > 1 ? "s" : ""
@@ -168,7 +176,9 @@ export function SignalementsPage() {
                       void validate(item.id, item.phase_id, signed, item.proposition)
                     }
                   >
-                    {item.proposition
+                    {idle
+                      ? "Valider le bloc Administratif"
+                      : item.proposition
                       ? "Valider la solution choisie"
                       : item.sens === "avance"
                         ? "Valider et avancer"

@@ -68,6 +68,7 @@ import {
 } from "@/lib/demandes";
 import {
   hasPendingSignalements,
+  isAdministratifIdleSuggestion,
   PENDING_CHANTIER_MESSAGE,
 } from "@/lib/signalements";
 import {
@@ -196,6 +197,7 @@ export async function POST(request: NextRequest) {
     let chantierId: string | undefined;
     let createdForPlanId: string | undefined;
     let createdAbsence: Absence | undefined;
+    let skipPlanMail = false;
 
     if (body.action === "createChantier") {
       const current = await fetchSupabaseSnapshot();
@@ -329,14 +331,16 @@ export async function POST(request: NextRequest) {
           ? proposition?.createChantier
           : body.createChantier ?? undefined;
       if (toCreate) {
-        if (hasPendingSignalements({
+        const othersPending = hasPendingSignalements({
           ...current,
           signalements: current.signalements.filter((row) => row.id !== body.id),
-        })) {
+        });
+        if (othersPending && !isAdministratifIdleSuggestion(item ?? {})) {
           return NextResponse.json({ error: PENDING_CHANTIER_MESSAGE }, { status: 400 });
         }
         createdForPlanId = await supabaseCreateChantier(toCreate);
         chantierId = createdForPlanId;
+        if (isAdministratifIdleSuggestion(item ?? {})) skipPlanMail = true;
       }
       await supabaseSetSignalementStatut(body.id, "valide");
     } else if (body.action === "createReception") {
@@ -583,7 +587,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Action inconnue." }, { status: 400 });
     }
 
-    if (createdForPlanId) {
+    if (createdForPlanId && !skipPlanMail) {
       invalidateSupabaseSnapshotCache();
       await notifyPlanPourMika(request, createdForPlanId);
     }
