@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-17-duree-phase-presets",
+    title: "Durée d’une phase : heures, 1 j, 1,5 j, 2 j",
+    items: [
+      "Dans Nouveau chantier, chaque phase a toujours une durée en heures, plus des boutons 1 j, 1,5 j et 2 j.",
+      "1 jour correspond à une journée atelier du salarié (7,5 h en 35 h été, sinon son horaire).",
+    ],
+  },
+  {
     id: "2026-09-17-dnd-phase-saut",
     title: "Déplacer une phase, ou tout le chantier",
     items: [

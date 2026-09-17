@@ -6,6 +6,10 @@ import { ConflictModal } from "@/components/ConflictModal";
 import { compareEmployeesByOrdre } from "@/lib/display-order";
 import { employeeAvailableOnRange } from "@/lib/engine/hours";
 import {
+  DUREE_JOUR_PRESETS,
+  hoursFromDayPreset,
+} from "@/lib/engine/duree-presets";
+import {
   inspectManualSlotConflict,
   mergePlanIntoInput,
   planChantier,
@@ -1020,7 +1024,7 @@ export function ChantierForm() {
                 <thead>
                   <tr className="text-left text-xs uppercase tracking-wide text-stone-500">
                     <th className="py-2 pr-2">Phase</th>
-                    <th className="py-2 pr-2">Heures</th>
+                    <th className="py-2 pr-2">Durée</th>
                     <th className="py-2 pr-2">Début</th>
                     <th className="py-2 pr-2">Fin</th>
                     <th className="py-2 pr-2">Personne</th>
@@ -1047,18 +1051,50 @@ export function ChantierForm() {
                     <tr key={phase.type_phase} className="border-t border-stone-200">
                       <td className="py-2 pr-2">{PHASE_LABELS[phase.type_phase]}</td>
                       <td className="py-2 pr-2">
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.5"
-                          value={phase.duree_estimee_heures}
-                          onChange={(event) =>
-                            updatePhase(element.key, phase.type_phase, {
-                              duree_estimee_heures: event.target.value,
-                            })
-                          }
-                          className="w-20 rounded border border-stone-300 px-2 py-1"
-                        />
+                        <div className="flex flex-wrap items-center gap-1">
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.5"
+                            value={phase.duree_estimee_heures}
+                            onChange={(event) =>
+                              updatePhase(element.key, phase.type_phase, {
+                                duree_estimee_heures: event.target.value,
+                              })
+                            }
+                            className="w-16 rounded border border-stone-300 px-2 py-1"
+                            aria-label={`Durée en heures — ${PHASE_LABELS[phase.type_phase]}`}
+                          />
+                          <span className="text-xs text-stone-500">h</span>
+                          {DUREE_JOUR_PRESETS.map((preset) => (
+                            <button
+                              key={preset.id}
+                              type="button"
+                              className="rounded border border-stone-300 bg-white px-1.5 py-0.5 text-xs text-stone-700 hover:bg-stone-100"
+                              onClick={() => {
+                                const employeeId =
+                                  phase.type_phase === "fabrication"
+                                    ? employeFabrication || phase.employe_id
+                                    : phase.type_phase === "pose"
+                                      ? employePose || phase.employe_id
+                                      : phase.type_phase === "livraison"
+                                        ? employeLivraison || phase.employe_id
+                                        : phase.employe_id;
+                                updatePhase(element.key, phase.type_phase, {
+                                  duree_estimee_heures: String(
+                                    hoursFromDayPreset(
+                                      snapshot,
+                                      employeeId,
+                                      preset.days,
+                                    ),
+                                  ),
+                                });
+                              }}
+                            >
+                              {preset.label}
+                            </button>
+                          ))}
+                        </div>
                       </td>
                       <td className="py-2 pr-2">
                         <input
