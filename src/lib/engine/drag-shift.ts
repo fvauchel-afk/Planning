@@ -1,19 +1,28 @@
 import { addDays, parseISODate } from "@/lib/dates";
-import { hoursForSlot } from "@/lib/engine/hours";
+import { hoursForSlot, timeFromMinutes } from "@/lib/engine/hours";
+import {
+  occupantsConflictWithSlots,
+  rebuiltSlotsForStart,
+} from "@/lib/engine/hour-grid";
 import {
   isEmployeeAbsent,
   isSlotBlockedForRow,
   slotsFromExistingPhase,
   type Half,
 } from "@/lib/engine/slots";
-import { isVirtualPlanningRow, type PhasePatch, type PlanningSnapshot } from "@/lib/types";
+import {
+  isVirtualPlanningRow,
+  type PhasePatch,
+  type PlanningSnapshot,
+} from "@/lib/types";
 
-export type OccupiedHalf = { date: string; half: Half };
+export type OccupiedHalf = { date: string; half: Half; startMin?: number };
 
 export type DragShiftPreviewCell = {
   rowId: string;
   date: string;
   half: Half;
+  startMin?: number;
 };
 
 export type ChantierBlock = {
@@ -95,11 +104,17 @@ function hasWorkGap(
 function occupancyForRow(
   snapshot: PlanningSnapshot,
   rowId: string,
-): { occupancy: Map<string, string>; cells: { half: OccupiedHalf; chantierId: string; phaseId: string }[] } {
+): {
+  occupancy: Map<string, string>;
+  cells: { half: OccupiedHalf; chantierId: string; phaseId: string }[];
+} {
   const occupancy = new Map<string, string>();
-  const cells: { half: OccupiedHalf; chantierId: string; phaseId: string }[] = [];
+  const cells: { half: OccupiedHalf; chantierId: string; phaseId: string }[] =
+    [];
   for (const phase of snapshot.phases) {
-    const element = snapshot.elements.find((item) => item.id === phase.element_id);
+    const element = snapshot.elements.find(
+      (item) => item.id === phase.element_id,
+    );
     if (!element) continue;
     for (const slot of slotsFromExistingPhase(snapshot, phase)) {
       if (slot.rowId !== rowId) continue;
@@ -180,9 +195,7 @@ export function blockContaining(
     blocks.find(
       (block) =>
         block.chantierId === chantierId &&
-        block.halves.some(
-          (item) => item.date === date && item.half === half,
-        ),
+        block.halves.some((item) => item.date === date && item.half === half),
     ) ?? null
   );
 }
@@ -206,7 +219,9 @@ function gluedNeighbors(
       const next = ordered[i]!;
       const from = cursor.halves[cursor.halves.length - 1]!;
       const to = next.halves[0]!;
-      if (hasWorkGap(snapshot, origin.rowId, occupancy, from, to, next.chantierId)) {
+      if (
+        hasWorkGap(snapshot, origin.rowId, occupancy, from, to, next.chantierId)
+      ) {
         break;
       }
       chain.push(next);
@@ -217,7 +232,16 @@ function gluedNeighbors(
       const prev = ordered[i]!;
       const from = prev.halves[prev.halves.length - 1]!;
       const to = cursor.halves[0]!;
-      if (hasWorkGap(snapshot, origin.rowId, occupancy, from, to, cursor.chantierId)) {
+      if (
+        hasWorkGap(
+          snapshot,
+          origin.rowId,
+          occupancy,
+          from,
+          to,
+          cursor.chantierId,
+        )
+      ) {
         break;
       }
       chain.push(prev);
@@ -303,7 +327,11 @@ function patchesForBlock(
       if (!phase.date_debut) continue;
       const actualStart: Half =
         Number((phase.heure_debut ?? "07:30").slice(0, 2)) >= 12 ? 1 : 0;
-      const first = addHalfSteps(phase.date_debut.slice(0, 10), actualStart, delta);
+      const first = addHalfSteps(
+        phase.date_debut.slice(0, 10),
+        actualStart,
+        delta,
+      );
       const last = addHalfSteps(
         (phase.date_fin ?? phase.date_debut).slice(0, 10),
         actualStart,
@@ -396,7 +424,12 @@ export function shiftChantierBlock(input: {
     halfIndex(input.grab.date, input.grab.half);
   if (delta === 0) return emptyDragShift();
   const blocks = chantierBlocksForRow(input.snapshot, input.rowId);
-  const origin = blockContaining(blocks, input.chantierId, input.grab.date, input.grab.half);
+  const origin = blockContaining(
+    blocks,
+    input.chantierId,
+    input.grab.date,
+    input.grab.half,
+  );
   if (!origin) return emptyDragShift();
   const { occupancy } = occupancyForRow(input.snapshot, input.rowId);
   const direction: 1 | -1 = delta > 0 ? 1 : -1;
@@ -464,7 +497,10 @@ export function shiftOrMoveChantierBlock(input: {
   const intendedPreview = origin
     ? previewCellsForHalves(input.toRowId, previewHalves(origin, delta))
     : previewCellsForHalves(input.toRowId, [input.drop]);
-  if (isVirtualPlanningRow(input.toRowId) || isVirtualPlanningRow(input.fromRowId)) {
+  if (
+    isVirtualPlanningRow(input.toRowId) ||
+    isVirtualPlanningRow(input.fromRowId)
+  ) {
     return { ...emptyDragShift(intendedPreview), blocked: true };
   }
   const destEmployee = input.snapshot.employees.find(
@@ -552,14 +588,147 @@ export function shiftOrMoveChantierBlock(input: {
   };
 }
 
-export function previewHalves(block: ChantierBlock, delta: number): OccupiedHalf[] {
+export function shiftChantierBlockByMinutes(input: {
+  snapshot: PlanningSnapshot;
+  fromRowId: string;
+  toRowId: string;
+  chantierId: string;
+  grab: OccupiedHalf & { startMin: number };
+  drop: OccupiedHalf & { startMin: number };
+}): DragShiftResult {
+  const previewSeed: DragShiftPreviewCell[] = [
+    {
+      rowId: input.toRowId,
+      date: input.drop.date,
+      half: input.drop.half,
+      startMin: input.drop.startMin,
+    },
+  ];
+  if (
+    isVirtualPlanningRow(input.toRowId) ||
+    isVirtualPlanningRow(input.fromRowId)
+  ) {
+    return { ...emptyDragShift(previewSeed), blocked: true };
+  }
+  if (
+    isSlotBlockedForRow(
+      input.snapshot,
+      input.toRowId,
+      input.drop.date,
+      input.drop.half,
+    )
+  ) {
+    return { ...emptyDragShift(previewSeed), blocked: true };
+  }
+  const blocks = chantierBlocksForRow(input.snapshot, input.fromRowId);
+  const origin = blockContaining(
+    blocks,
+    input.chantierId,
+    input.grab.date,
+    input.grab.half,
+  );
+  if (!origin) return emptyDragShift(previewSeed);
+  const destEmployee = input.snapshot.employees.find(
+    (employee) => employee.id === input.toRowId && employee.actif,
+  );
+  if (!destEmployee) {
+    return { ...emptyDragShift(previewSeed), blocked: true };
+  }
+  const deltaMinutes = input.drop.startMin - input.grab.startMin;
+  const sameSlot =
+    input.toRowId === input.fromRowId &&
+    input.drop.date === input.grab.date &&
+    deltaMinutes === 0;
+  if (sameSlot) return emptyDragShift(previewSeed);
+
+  const movingPhaseIds = new Set(origin.phaseIds);
+  const patches: PhasePatch[] = [];
+  const preview: DragShiftPreviewCell[] = [];
+  for (const phaseId of origin.phaseIds) {
+    const phase = input.snapshot.phases.find((item) => item.id === phaseId);
+    if (!phase) continue;
+    const currentSlots = slotsFromExistingPhase(input.snapshot, phase).filter(
+      (slot) => slot.rowId === input.fromRowId,
+    );
+    currentSlots.sort((left, right) => {
+      if (left.date !== right.date) return left.date < right.date ? -1 : 1;
+      return (left.startMin ?? 0) - (right.startMin ?? 0);
+    });
+    const first = currentSlots[0];
+    if (!first || first.startMin == null) continue;
+    const startDate = input.drop.date;
+    const startMin =
+      first.date === input.grab.date
+        ? first.startMin + deltaMinutes
+        : input.drop.startMin;
+    const hours = Math.max(0, Number(phase.duree_estimee_heures) || 0);
+    const rebuilt = rebuiltSlotsForStart(
+      input.snapshot,
+      input.toRowId,
+      hours > 0 ? hours : 1,
+      startDate,
+      startMin,
+    );
+    if (!rebuilt || rebuilt.length === 0) {
+      return {
+        delta: 0,
+        patches: [],
+        chain: [origin],
+        preview: previewSeed,
+        blocked: true,
+      };
+    }
+    if (occupantsConflictWithSlots(input.snapshot, rebuilt, movingPhaseIds)) {
+      return {
+        delta: 0,
+        patches: [],
+        chain: [origin],
+        preview: previewSeed,
+        blocked: true,
+      };
+    }
+    const last = rebuilt[rebuilt.length - 1]!;
+    patches.push({
+      id: phase.id,
+      date_debut: rebuilt[0]!.date,
+      date_fin: last.date,
+      employe_id: input.toRowId,
+      heure_debut: timeFromMinutes(rebuilt[0]!.startMin ?? startMin),
+    });
+    for (const slot of rebuilt) {
+      preview.push({
+        rowId: input.toRowId,
+        date: slot.date,
+        half: slot.half,
+        startMin: slot.startMin,
+      });
+    }
+  }
+  if (patches.length === 0) {
+    return { ...emptyDragShift(previewSeed), blocked: true };
+  }
+  return {
+    delta: deltaMinutes === 0 ? 0 : 1,
+    patches,
+    chain: [{ ...origin, rowId: input.toRowId }],
+    preview: preview.length > 0 ? preview : previewSeed,
+    blocked: false,
+  };
+}
+
+export function previewHalves(
+  block: ChantierBlock,
+  delta: number,
+): OccupiedHalf[] {
   return block.halves.map((item) => addHalfSteps(item.date, item.half, delta));
 }
 
 function runDragShiftSelfCheck() {
   const moved = addHalfSteps("2026-09-10", 0, 1);
   if (moved.date !== "2026-09-10" || moved.half !== 1) {
-    throw new Error("drag-shift: +1 demi-journée doit passer au même jour après-midi");
+    throw new Error(
+      "drag-shift: +1 demi-journée doit passer au même jour après-midi",
+    );
   }
   const nextDay = addHalfSteps("2026-09-10", 1, 1);
   if (nextDay.date !== "2026-09-11" || nextDay.half !== 0) {
@@ -567,7 +736,9 @@ function runDragShiftSelfCheck() {
   }
   const back = addHalfSteps("2026-09-11", 0, -2);
   if (back.date !== "2026-09-10" || back.half !== 0) {
-    throw new Error("drag-shift: -2 demi-journées doit revenir au matin d’avant");
+    throw new Error(
+      "drag-shift: -2 demi-journées doit revenir au matin d’avant",
+    );
   }
   const movedAcross = shiftOrMoveChantierBlock({
     snapshot: {
@@ -904,6 +1075,102 @@ function runDragShiftSelfCheck() {
   if (scaleOk.blocked || scaleOk.patches.length !== 8) {
     throw new Error(
       "drag-shift: une file collée lun–jeu doit pouvoir avancer d’une demi-journée",
+    );
+  }
+
+  const slackSnapshot: PlanningSnapshot = {
+    ...movedAcrossSnapshot(),
+    chantiers: [
+      {
+        id: "ch-early",
+        nom_client: "Tôt",
+        adresse: "",
+        lien_dossier_onedrive: null,
+        priorite: "normal",
+        date_creation: "2026-09-01",
+      },
+      {
+        id: "ch-next",
+        nom_client: "Lendemain",
+        adresse: "",
+        lien_dossier_onedrive: null,
+        priorite: "normal",
+        date_creation: "2026-09-01",
+      },
+    ],
+    elements: [
+      { id: "el-early", chantier_id: "ch-early", nom_element: "A" },
+      { id: "el-next", chantier_id: "ch-next", nom_element: "B" },
+    ],
+    phases: [
+      {
+        id: "ph-early",
+        element_id: "el-early",
+        type_phase: "fabrication",
+        duree_estimee_heures: 6.5,
+        date_debut: "2026-09-22",
+        date_fin: "2026-09-22",
+        heure_debut: "07:30",
+        employe_id: "emp-a",
+        statut: "a_faire",
+        urgent: false,
+      },
+      {
+        id: "ph-next",
+        element_id: "el-next",
+        type_phase: "fabrication",
+        duree_estimee_heures: 4,
+        date_debut: "2026-09-23",
+        date_fin: "2026-09-23",
+        heure_debut: "07:30",
+        employe_id: "emp-a",
+        statut: "a_faire",
+        urgent: false,
+      },
+    ],
+  };
+  const slackMove = shiftChantierBlockByMinutes({
+    snapshot: slackSnapshot,
+    fromRowId: "emp-a",
+    toRowId: "emp-a",
+    chantierId: "ch-early",
+    grab: { date: "2026-09-22", half: 0, startMin: 7 * 60 + 30 },
+    drop: { date: "2026-09-22", half: 0, startMin: 8 * 60 },
+  });
+  if (slackMove.blocked) {
+    throw new Error(
+      "drag-shift: un glissement de 30 min dans un trou ne doit pas être bloqué",
+    );
+  }
+  if (slackMove.patches.some((patch) => patch.id === "ph-next")) {
+    throw new Error("drag-shift: slack — le lendemain ne doit pas bouger");
+  }
+  const nextPatch = slackMove.patches.find((patch) => patch.id === "ph-early");
+  if (!nextPatch || nextPatch.heure_debut !== "08:00") {
+    throw new Error(
+      "drag-shift: Vue Jour doit cranter l’heure de début (08:00)",
+    );
+  }
+  if (
+    nextPatch.date_debut !== "2026-09-22" ||
+    nextPatch.date_fin !== "2026-09-22"
+  ) {
+    throw new Error(
+      "drag-shift: slack — les dates du chantier déplacé restent le même jour",
+    );
+  }
+
+  const overlapSameMorning = shiftChantierBlockByMinutes({
+    snapshot: slackSnapshot,
+    fromRowId: "emp-a",
+    toRowId: "emp-a",
+    chantierId: "ch-next",
+    grab: { date: "2026-09-23", half: 0, startMin: 7 * 60 + 30 },
+    drop: { date: "2026-09-22", half: 0, startMin: 8 * 60 },
+  });
+  if (!overlapSameMorning.blocked) {
+    throw new Error(
+      "drag-shift: deux fabrications qui se chevauchent en minutes doivent être en conflit",
     );
   }
 }
