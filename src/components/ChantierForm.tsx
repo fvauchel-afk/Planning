@@ -190,7 +190,7 @@ export function ChantierForm() {
   }
 
   function applyChantierAndFabricationDates(nextDebut: string, nextFin: string) {
-    let debut = nextDebut;
+    const debut = nextDebut;
     let fin = nextFin;
     if (debut && fin && fin < debut) fin = debut;
     setDateDebut(debut);
