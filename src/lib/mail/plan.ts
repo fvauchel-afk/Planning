@@ -1,15 +1,16 @@
 import "server-only";
 import { BON_COMMANDE_CC, sendResendTextEmail } from "@/lib/bon-commande/mail";
 
+export const PLAN_A_FAIRE_SUBJECT = "PLAN A FAIRE MIKA MERCI";
+
 export function planMikaEmail(): string {
   const fromEnv = process.env.PLAN_MIKA_EMAIL?.trim();
   if (fromEnv && fromEnv.includes("@")) return fromEnv;
   return "f.vauchel@hotmail.com";
 }
 
-export function planPourPlanSubject(nomClient: string): string {
-  const nom = nomClient.trim() || "Chantier";
-  return `${nom} — pour plan`;
+export function planPourPlanSubject(): string {
+  return PLAN_A_FAIRE_SUBJECT;
 }
 
 export function planPourPlanText(input: {
@@ -66,8 +67,11 @@ function escapeHtml(value: string): string {
 }
 
 function runPlanMailSelfCheck() {
-  if (planPourPlanSubject("Portail Dupont") !== "Portail Dupont — pour plan") {
-    throw new Error("plan-mail: l’objet doit être « nom — pour plan »");
+  if (planPourPlanSubject() !== PLAN_A_FAIRE_SUBJECT) {
+    throw new Error("plan-mail: l’objet doit être exactement PLAN A FAIRE MIKA MERCI");
+  }
+  if (planMikaEmail() !== "f.vauchel@hotmail.com" && !process.env.PLAN_MIKA_EMAIL) {
+    throw new Error("plan-mail: destinataire par défaut f.vauchel@hotmail.com");
   }
   const text = planPourPlanText({
     nomClient: "Portail Dupont",
@@ -93,7 +97,7 @@ export async function sendPlanPourMikaEmail(input: {
     await sendResendTextEmail({
       to: planMikaEmail(),
       cc: BON_COMMANDE_CC,
-      subject: planPourPlanSubject(input.nomClient),
+      subject: PLAN_A_FAIRE_SUBJECT,
       text: planPourPlanText(input),
       html: planPourPlanHtml(input),
     });

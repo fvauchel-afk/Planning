@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-17-email-plan-mika",
+    title: "E-mail plan à la création d’un chantier",
+    items: [
+      "À chaque nouveau chantier, un e-mail part vers f.vauchel@hotmail.com avec l’objet exact « PLAN A FAIRE MIKA MERCI ».",
+      "Le message rappelle le client, l’adresse, les dates et le lien de la fiche, pour lancer le plan technique.",
+    ],
+  },
+  {
     id: "2026-09-17-suggestion-administratif",
     title: "Suggestion Administratif si 7 jours vides",
     items: [
