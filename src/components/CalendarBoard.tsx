@@ -214,7 +214,7 @@ export function CalendarBoard() {
 
   function computeMove(
     drag: NonNullable<typeof dragRef.current>,
-    drop: OccupiedHalf & { startMin?: number },
+    drop: OccupiedHalf & { rowId: string; startMin?: number },
     phaseMode: boolean,
   ) {
     if (view === "day" && drag.startMin != null && drop.startMin != null) {
