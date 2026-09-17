@@ -11,6 +11,15 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-17-heure-vue-jour",
+    title: "Vue Jour à l’heure, conflits à la minute",
+    items: [
+      "Deux chantiers du même salarié ne se marchent dessus que s’ils se chevauchent vraiment en heures (ex. 7 h 30–9 h 30 puis 9 h 30–11 h 30 le même matin : OK).",
+      "En vue Jour, vous déposez au cran de 30 minutes. Un trou en fin de journée n’est pas comblé tout seul : le lendemain ne bouge pas.",
+      "En vue Semaine, les cases matin / après-midi restent ; l’horaire du bloc est écrit dessus.",
+    ],
+  },
+  {
     id: "2026-09-17-tour-check-planning",
     title: "Planning : vue Jour, synthèse, demandes",
     items: [

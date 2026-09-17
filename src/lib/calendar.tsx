@@ -14,7 +14,10 @@ import {
 } from "@/lib/types";
 import { colorForChantier } from "@/lib/colors";
 import { dateInRange, formatOvertimeHours } from "@/lib/dates";
-import { phaseIsEstimative, fabricationAwaitingLaunch } from "@/lib/dates-estimatives";
+import {
+  phaseIsEstimative,
+  fabricationAwaitingLaunch,
+} from "@/lib/dates-estimatives";
 import {
   LOGISTIQUE_ROW_LABEL,
   LOGISTIQUE_ROW_ORDRE,
@@ -22,8 +25,16 @@ import {
   TRANSPORT_ROW_ORDRE,
 } from "@/lib/display-order";
 import { employeeOrdreForPlanning } from "@/lib/employee-row-order";
-import { formatHoursLabel, hoursInSlots } from "@/lib/engine/hours";
-import { slotsFromExistingPhase, halfFromLabel, type OccupiedSlot } from "@/lib/engine/slots";
+import {
+  formatClock,
+  formatHoursLabel,
+  hoursInSlots,
+} from "@/lib/engine/hours";
+import {
+  slotsFromExistingPhase,
+  halfFromLabel,
+  type OccupiedSlot,
+} from "@/lib/engine/slots";
 
 export type CalendarAssignment = {
   phase: PhasePlanning;
@@ -177,7 +188,9 @@ export function assignmentsForCell(
   half: "matin" | "apres_midi" = "matin",
 ): CalendarAssignment[] {
   const wantedHalf = halfFromLabel(half);
-  return assignmentIndex(snapshot).byCell.get(cellKey(rowId, iso, wantedHalf)) ?? [];
+  return (
+    assignmentIndex(snapshot).byCell.get(cellKey(rowId, iso, wantedHalf)) ?? []
+  );
 }
 
 export function uniqueAssignmentsByChantier(
@@ -217,9 +230,9 @@ export function rowHoursInDays(
       for (const assignment of assignmentsForCell(snapshot, rowId, iso, slot)) {
         if (seen.has(assignment.phase.id)) continue;
         seen.add(assignment.phase.id);
-        const slots = (index.slotsByPhase.get(assignment.phase.id) ?? []).filter(
-          (item) => item.rowId === rowId && daySet.has(item.date),
-        );
+        const slots = (
+          index.slotsByPhase.get(assignment.phase.id) ?? []
+        ).filter((item) => item.rowId === rowId && daySet.has(item.date));
         total += hoursInSlots(snapshot, slots);
       }
     }
@@ -233,7 +246,8 @@ export function chantierVisibleOnGrid(
 ): boolean {
   const index = assignmentIndex(snapshot);
   for (const assignments of Array.from(index.byCell.values())) {
-    if (assignments.some((item) => item.chantier.id === chantierId)) return true;
+    if (assignments.some((item) => item.chantier.id === chantierId))
+      return true;
   }
   return false;
 }
@@ -258,14 +272,34 @@ export function absencesForCell(
   );
 }
 
+export function assignmentClockLabel(
+  snapshot: PlanningSnapshot,
+  assignment: CalendarAssignment,
+): string | null {
+  const slots = (
+    assignmentIndex(snapshot).slotsByPhase.get(assignment.phase.id) ?? []
+  ).filter(
+    (slot) =>
+      slot.rowId !== TRANSPORT_ROW_ID &&
+      slot.startMin != null &&
+      slot.endMin != null,
+  );
+  if (slots.length === 0) return null;
+  const start = Math.min(...slots.map((slot) => slot.startMin!));
+  const end = Math.max(...slots.map((slot) => slot.endMin!));
+  return `${formatClock(start)}–${formatClock(end)}`;
+}
+
 export function AssignmentChip({
   assignment,
   compact,
   showLivraisonAddress,
+  clockLabel,
 }: {
   assignment: CalendarAssignment;
   compact?: boolean;
   showLivraisonAddress?: boolean;
+  clockLabel?: string | null;
 }) {
   const color = colorForChantier(assignment.chantier.id);
   const needsLaunch = fabricationAwaitingLaunch(assignment.phase);
@@ -288,13 +322,25 @@ export function AssignmentChip({
       }`}
     >
       <span className="font-semibold">{assignment.chantier.nom_client}</span>
+      {clockLabel ? (
+        <span
+          className={`ml-1 rounded bg-black/35 px-1 font-bold tabular-nums tracking-wide ${
+            compact ? "text-[9px]" : "text-[11px]"
+          }`}
+        >
+          {clockLabel}
+        </span>
+      ) : null}
       {showLivraisonAddress && assignment.phase.type_phase === "livraison" ? (
         address ? (
           <span className={`opacity-90 ${compact ? "block truncate" : ""}`}>
             {compact ? address : ` · ${address}`}
           </span>
         ) : !compact ? (
-          <span className="opacity-90"> · {assignment.element.nom_element}</span>
+          <span className="opacity-90">
+            {" "}
+            · {assignment.element.nom_element}
+          </span>
         ) : null
       ) : !compact ? (
         <span className="opacity-90"> · {assignment.element.nom_element}</span>
@@ -321,7 +367,9 @@ export function AssignmentChip({
         <span
           className={`ml-1 rounded bg-black/30 px-1 font-semibold ${compact ? "text-[9px]" : "text-[10px]"}`}
         >
-          {formatOvertimeHours(assignment.phase.heures_supplementaires_par_jour)}
+          {formatOvertimeHours(
+            assignment.phase.heures_supplementaires_par_jour,
+          )}
         </span>
       ) : null}
       {assignment.chantier.lien_dossier_onedrive && (

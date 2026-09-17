@@ -1,6 +1,15 @@
-import { addDays, addWorkingDays, formatLongDate, formatOvertimeHours, startOfWeekIso } from "@/lib/dates";
+import {
+  addDays,
+  addWorkingDays,
+  formatLongDate,
+  formatOvertimeHours,
+  startOfWeekIso,
+} from "@/lib/dates";
 import { employeeCanTakePhase } from "@/lib/chantier-status";
-import { canPriorityDisplace, chantierToleranceWorkingDays } from "@/lib/priorite";
+import {
+  canPriorityDisplace,
+  chantierToleranceWorkingDays,
+} from "@/lib/priorite";
 import {
   LOGISTIQUE_ROW_ID,
   PHASE_LABELS,
@@ -20,6 +29,7 @@ import {
   lastOccupiedSlotForRow,
   nextOpenSlot,
   occupySlots,
+  overlappingOwners,
   slotKey,
   slotsFromExistingPhase,
   todayIso,
@@ -32,10 +42,7 @@ import {
   type Half,
   type OccupiedSlot,
 } from "./slots";
-import {
-  capacityHoursForWeek,
-  hoursInSlots,
-} from "./hours";
+import { capacityHoursForWeek, hoursInSlots } from "./hours";
 
 export type PlannedPhase = {
   elementIndex: number;
@@ -248,7 +255,10 @@ function maxSlot(slots: OccupiedSlot[]): OccupiedSlot | null {
   }, null);
 }
 
-function nextAfter(snapshot: PlanningSnapshot, slot: OccupiedSlot): OccupiedSlot {
+function nextAfter(
+  snapshot: PlanningSnapshot,
+  slot: OccupiedSlot,
+): OccupiedSlot {
   const next = advanceSlot(slot.date, slot.half);
   return nextOpenSlot(snapshot, slot.rowId, next.date, next.half);
 }
@@ -322,27 +332,6 @@ function fromSlots(
   };
 }
 
-function overlappingOwners(
-  occupancy: Map<string, string>,
-  slots: OccupiedSlot[],
-): string[] {
-  const ids = new Set<string>();
-  const busy = occupancySpans(occupancy);
-  for (const slot of slots) {
-    if (slot.startMin != null && slot.endMin != null) {
-      for (const span of busy) {
-        if (span.rowId !== slot.rowId || span.date !== slot.date) continue;
-        if (span.end <= slot.startMin || span.start >= slot.endMin) continue;
-        if (!span.ownerId.startsWith("incoming")) ids.add(span.ownerId);
-      }
-      continue;
-    }
-    const owner = occupancy.get(slotKey(slot.rowId, slot.date, slot.half));
-    if (owner && !owner.startsWith("incoming")) ids.add(owner);
-  }
-  return Array.from(ids);
-}
-
 function chantierNames(snapshot: PlanningSnapshot, ids: string[]): string {
   return ids
     .map(
@@ -355,7 +344,9 @@ function chantierNames(snapshot: PlanningSnapshot, ids: string[]): string {
 
 function employeeName(snapshot: PlanningSnapshot, id: string | null): string {
   if (!id) return "la ligne Thermolaquage";
-  return snapshot.employees.find((item) => item.id === id)?.nom ?? "cet employé";
+  return (
+    snapshot.employees.find((item) => item.id === id)?.nom ?? "cet employé"
+  );
 }
 
 function visitContiguousFreeRuns(
@@ -454,12 +445,7 @@ function nextContiguousFreeWindow(
   fromDate: string,
 ): { date_debut: string; date_fin: string } | null {
   const neededHours = hours > 0 ? hours : HOURS_PER_SLOT;
-  let cursor = firstDateWithoutOccupancy(
-    occupancy,
-    snapshot,
-    rowId,
-    fromDate,
-  );
+  let cursor = firstDateWithoutOccupancy(occupancy, snapshot, rowId, fromDate);
   if (!cursor) return null;
   for (let attempt = 0; attempt < SEARCH_DAYS; attempt += 1) {
     const slots = allocateHoursFrom(
@@ -476,7 +462,9 @@ function nextContiguousFreeWindow(
       date_debut: slots[0].date,
       date_fin: slots[slots.length - 1].date,
     };
-    if (!windowOverlapsOccupancy(occupancy, snapshot, rowId, neededHours, window)) {
+    if (
+      !windowOverlapsOccupancy(occupancy, snapshot, rowId, neededHours, window)
+    ) {
       return window;
     }
     const next = firstDateWithoutOccupancy(
@@ -605,7 +593,13 @@ function placeChantierOnOccupancy(
     let logEnd: OccupiedSlot | null = null;
     let livEnd: OccupiedSlot | null = null;
 
-    for (const type of ["administratif", "fabrication", "logistique", "livraison", "pose"] as TypePhase[]) {
+    for (const type of [
+      "administratif",
+      "fabrication",
+      "logistique",
+      "livraison",
+      "pose",
+    ] as TypePhase[]) {
       const source = element.phases.find((phase) => phase.type_phase === type);
       const hours = source?.duree_estimee_heures ?? 0;
       const phaseUrgent = urgent || Boolean(source?.urgent);
@@ -642,6 +636,7 @@ function placeChantierOnOccupancy(
           date_debut: debut,
           date_fin: fin,
           duree_estimee_heures: hours,
+          heure_debut: source.heure_debut,
         });
         const owners = overlappingOwners(occupancy, manualSlots);
         const blocking = owners.filter((id) => {
@@ -722,7 +717,10 @@ function placeChantierOnOccupancy(
         const after = logEnd ?? fabEnd;
         if (after) {
           const next = nextAfter(snapshot, after);
-          if (next.date > cursor.date || (next.date === cursor.date && next.half > cursor.half)) {
+          if (
+            next.date > cursor.date ||
+            (next.date === cursor.date && next.half > cursor.half)
+          ) {
             cursor = { rowId: cursor.rowId, date: next.date, half: next.half };
           }
         }
@@ -732,7 +730,10 @@ function placeChantierOnOccupancy(
         const after = livEnd ?? logEnd ?? fabEnd;
         if (after) {
           const next = nextAfter(snapshot, after);
-          if (next.date > cursor.date || (next.date === cursor.date && next.half > cursor.half)) {
+          if (
+            next.date > cursor.date ||
+            (next.date === cursor.date && next.half > cursor.half)
+          ) {
             cursor = { rowId: cursor.rowId, date: next.date, half: next.half };
           }
         }
@@ -836,12 +837,19 @@ function occupancyKeepingNonDisplaceable(
 ): Map<string, string> {
   const occupancy = new Map<string, string>();
   for (const phase of snapshot.phases) {
-    const element = snapshot.elements.find((item) => item.id === phase.element_id);
+    const element = snapshot.elements.find(
+      (item) => item.id === phase.element_id,
+    );
     if (!element) continue;
     const chantier = chantierById(snapshot, element.chantier_id);
     if (!chantier) continue;
-    if (canDisplace(chantier.priorite, incomingPriorite, incomingUrgent)) continue;
-    occupySlots(occupancy, slotsFromExistingPhase(snapshot, phase), chantier.id);
+    if (canDisplace(chantier.priorite, incomingPriorite, incomingUrgent))
+      continue;
+    occupySlots(
+      occupancy,
+      slotsFromExistingPhase(snapshot, phase),
+      chantier.id,
+    );
   }
   return occupancy;
 }
@@ -857,7 +865,9 @@ function incomingSlotsFromPlan(
     const rowId =
       phase.type_phase === "logistique" ? LOGISTIQUE_ROW_ID : phase.employe_id;
     if (!rowId || hours <= 0) continue;
-    slots.push(...workingHalvesFrom(snapshot, rowId, phase.date_debut, 0, hours));
+    slots.push(
+      ...workingHalvesFrom(snapshot, rowId, phase.date_debut, 0, hours),
+    );
   }
   return slots;
 }
@@ -883,8 +893,14 @@ function buildDisplacements(
     if (!canDisplace(chantier.priorite, priorite, urgent)) continue;
 
     const chantierPhases = snapshot.phases.filter((phase) => {
-      const element = snapshot.elements.find((item) => item.id === phase.element_id);
-      return element?.chantier_id === chantierId && phase.date_debut && phase.date_fin;
+      const element = snapshot.elements.find(
+        (item) => item.id === phase.element_id,
+      );
+      return (
+        element?.chantier_id === chantierId &&
+        phase.date_debut &&
+        phase.date_fin
+      );
     });
 
     let resolved = false;
@@ -892,7 +908,9 @@ function buildDisplacements(
     const maxShift = chantierToleranceWorkingDays(chantier);
     if (maxShift <= 0) continue;
     const tryShift = (amount: number) => {
-      const next = chantierPhases.map((phase) => shiftPhaseDates(phase, amount));
+      const next = chantierPhases.map((phase) =>
+        shiftPhaseDates(phase, amount),
+      );
       const stillOverlap = slots.some((slot) =>
         next.some((phase) => {
           const rowId =
@@ -1032,7 +1050,8 @@ export function planChantier(
     status: "placed",
     phases: best.phases,
     displacements: [],
-    message: "Placement trouvé à la suite (fabrication → thermolaquage → pose), sans écraser l’existant.",
+    message:
+      "Placement trouvé à la suite (fabrication → thermolaquage → pose), sans écraser l’existant.",
     logisticsGaps: best.gaps,
   };
 }
@@ -1155,7 +1174,9 @@ export function listPlacementAlternatives(
     if (!freeOnSlot) {
       if (overlapping.length > 0) {
         const labels = overlapping.map((phase) => {
-          const element = snapshot.elements.find((item) => item.id === phase.element_id);
+          const element = snapshot.elements.find(
+            (item) => item.id === phase.element_id,
+          );
           const chantier = snapshot.chantiers.find(
             (item) => item.id === element?.chantier_id,
           );
@@ -1202,7 +1223,11 @@ export function inspectManualSlotConflict(
   input: NewChantierInput,
 ): SlotConflict | null {
   const occupancy = buildOccupancy(snapshot);
-  for (let elementIndex = 0; elementIndex < input.elements.length; elementIndex += 1) {
+  for (
+    let elementIndex = 0;
+    elementIndex < input.elements.length;
+    elementIndex += 1
+  ) {
     const element = input.elements[elementIndex];
     for (const phase of element.phases) {
       if (!phase.date_debut) continue;
@@ -1225,6 +1250,7 @@ export function inspectManualSlotConflict(
         date_debut: debut,
         date_fin: fin,
         duree_estimee_heures: phase.duree_estimee_heures,
+        heure_debut: phase.heure_debut,
       });
       const owners = overlappingOwners(occupancy, slots);
       if (owners.length === 0) continue;
@@ -1291,7 +1317,8 @@ export function mergePlanIntoInput(
       phases: element.phases.map((phase) => {
         const match = planned.find(
           (item) =>
-            item.elementIndex === elementIndex && item.type_phase === phase.type_phase,
+            item.elementIndex === elementIndex &&
+            item.type_phase === phase.type_phase,
         );
         if (!match) {
           return { ...phase, urgent: urgent || phase.urgent };
@@ -1394,6 +1421,97 @@ function runNextFreeWindowSelfCheck() {
     throw new Error(
       `planner: le créneau proposé chevauche encore (${retry.message})`,
     );
+  }
+
+  const adjacent = inspectManualSlotConflict(
+    {
+      ...snapshot,
+      phases: [
+        {
+          id: "ph-morning",
+          element_id: "el-aaa",
+          type_phase: "fabrication",
+          duree_estimee_heures: 2,
+          date_debut: "2026-09-22",
+          date_fin: "2026-09-22",
+          heure_debut: "08:00",
+          employe_id: "jon",
+          statut: "a_faire",
+          urgent: false,
+        },
+      ],
+    },
+    {
+      nom_client: "Suite",
+      adresse: "",
+      lien_dossier_onedrive: null,
+      priorite: "normal",
+      elements: [
+        {
+          nom_element: "Suite",
+          phases: [
+            {
+              type_phase: "pose",
+              duree_estimee_heures: 2,
+              date_debut: "2026-09-22",
+              date_fin: "2026-09-22",
+              heure_debut: "10:00",
+              employe_id: "jon",
+              urgent: false,
+            },
+          ],
+        },
+      ],
+    },
+  );
+  if (adjacent) {
+    throw new Error(
+      `planner: 08:00–10:00 et 10:00–12:00 le même matin ne doivent pas être un conflit (${adjacent.message})`,
+    );
+  }
+  const clashHours = inspectManualSlotConflict(
+    {
+      ...snapshot,
+      phases: [
+        {
+          id: "ph-morning",
+          element_id: "el-aaa",
+          type_phase: "fabrication",
+          duree_estimee_heures: 4,
+          date_debut: "2026-09-22",
+          date_fin: "2026-09-22",
+          heure_debut: "08:00",
+          employe_id: "jon",
+          statut: "a_faire",
+          urgent: false,
+        },
+      ],
+    },
+    {
+      nom_client: "Suite",
+      adresse: "",
+      lien_dossier_onedrive: null,
+      priorite: "normal",
+      elements: [
+        {
+          nom_element: "Suite",
+          phases: [
+            {
+              type_phase: "pose",
+              duree_estimee_heures: 2,
+              date_debut: "2026-09-22",
+              date_fin: "2026-09-22",
+              heure_debut: "09:00",
+              employe_id: "jon",
+              urgent: false,
+            },
+          ],
+        },
+      ],
+    },
+  );
+  if (!clashHours) {
+    throw new Error("planner: 08:00–12:00 et 09:00–11:00 doivent être en conflit");
   }
 }
 

@@ -6,6 +6,7 @@ import {
   AssignmentChip,
   absencesForCell,
   assignmentIndex,
+  assignmentClockLabel,
   assignmentsForCell,
   assignmentsForDay,
   uniqueAssignmentsByChantier,
@@ -39,9 +40,11 @@ import {
 } from "@/lib/dates";
 import { formatClock, formatHoursLabel, hoursForSlot, workWindowsForRow } from "@/lib/engine/hours";
 import {
+  shiftChantierBlockByMinutes,
   shiftOrMoveChantierBlock,
   type OccupiedHalf,
 } from "@/lib/engine/drag-shift";
+import { clampToWorkWindows } from "@/lib/engine/hour-grid";
 import { halfFromLabel } from "@/lib/engine/slots";
 import { usePlanning } from "@/lib/planning-context";
 import { useFormDraftReopen } from "@/lib/form-draft";
@@ -92,6 +95,7 @@ export function CalendarBoard() {
     startX: number;
     startY: number;
     moved: boolean;
+    startMin?: number;
   } | null>(null);
   const savingDrag = useRef(false);
   const [focusCell, setFocusCell] = useState<{
@@ -175,9 +179,61 @@ export function CalendarBoard() {
     return { rowId, date, half: Number(halfRaw) as 0 | 1 };
   }
 
+  function planDayDropFromPoint(clientX: number, clientY: number) {
+    const node = document
+      .elementFromPoint(clientX, clientY)
+      ?.closest("[data-plan-track]");
+    if (!node) return null;
+    const raw = node.getAttribute("data-plan-track");
+    if (!raw) return null;
+    const [rowId, date, startRaw, endRaw] = raw.split("|");
+    if (!rowId || !date) return null;
+    const dayStart = Number(startRaw);
+    const dayEnd = Number(endRaw);
+    if (!Number.isFinite(dayStart) || !Number.isFinite(dayEnd) || dayEnd <= dayStart) {
+      return null;
+    }
+    const rect = node.getBoundingClientRect();
+    const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / Math.max(1, rect.width)));
+    const rawMin = dayStart + ratio * (dayEnd - dayStart);
+    const windows = workWindowsForRow(snapshot, rowId, date);
+    const clamped = clampToWorkWindows(windows, rawMin);
+    if (!clamped) return null;
+    return {
+      rowId,
+      date,
+      half: clamped.half,
+      startMin: clamped.minutes,
+    };
+  }
+
   function updateDragPreview(clientX: number, clientY: number) {
     const drag = dragRef.current;
     if (!drag) return;
+    if (view === "day" && drag.startMin != null) {
+      const drop = planDayDropFromPoint(clientX, clientY);
+      if (!drop) {
+        setDragPreview({ cells: new Set(), blocked: false });
+        return;
+      }
+      const result = shiftChantierBlockByMinutes({
+        snapshot,
+        fromRowId: drag.rowId,
+        toRowId: drop.rowId,
+        chantierId: drag.chantierId,
+        grab: { ...drag.grab, startMin: drag.startMin },
+        drop,
+      });
+      const keys = new Set<string>();
+      for (const cell of result.preview) {
+        keys.add(`${cell.rowId}|${cell.date}|${cell.half}`);
+      }
+      if (keys.size === 0) {
+        keys.add(`${drag.rowId}|${drag.grab.date}|${drag.grab.half}`);
+      }
+      setDragPreview({ cells: keys, blocked: result.blocked });
+      return;
+    }
     const drop = planCellFromPoint(clientX, clientY);
     if (!drop) {
       setDragPreview({ cells: new Set(), blocked: false });
@@ -207,16 +263,18 @@ export function CalendarBoard() {
     chantierId: string,
     date: string,
     half: 0 | 1,
+    startMin?: number,
   ) {
     event.currentTarget.setPointerCapture(event.pointerId);
     dragRef.current = {
       pointerId: event.pointerId,
       rowId,
       chantierId,
-      grab: { date, half },
+      grab: { date, half, startMin },
       startX: event.clientX,
       startY: event.clientY,
       moved: false,
+      startMin,
     };
     setDragError(null);
   }
@@ -258,16 +316,29 @@ export function CalendarBoard() {
       setSelectedPhaseId(phaseId);
       return;
     }
-    const drop = planCellFromPoint(clientX, clientY);
+    const drop =
+      view === "day" && drag.startMin != null
+        ? planDayDropFromPoint(clientX, clientY)
+        : planCellFromPoint(clientX, clientY);
     if (!drop || savingDrag.current) return;
-    const { patches, blocked } = shiftOrMoveChantierBlock({
-      snapshot,
-      fromRowId: drag.rowId,
-      toRowId: drop.rowId,
-      chantierId: drag.chantierId,
-      grab: drag.grab,
-      drop,
-    });
+    const { patches, blocked } =
+      view === "day" && drag.startMin != null && "startMin" in drop
+        ? shiftChantierBlockByMinutes({
+            snapshot,
+            fromRowId: drag.rowId,
+            toRowId: drop.rowId,
+            chantierId: drag.chantierId,
+            grab: { ...drag.grab, startMin: drag.startMin },
+            drop: drop as OccupiedHalf & { startMin: number },
+          })
+        : shiftOrMoveChantierBlock({
+            snapshot,
+            fromRowId: drag.rowId,
+            toRowId: drop.rowId,
+            chantierId: drag.chantierId,
+            grab: drag.grab,
+            drop: { date: drop.date, half: drop.half },
+          });
     if (blocked) {
       setDragError(
         "Créneau occupé : le chantier est revenu à sa place. Impossible de déposer sur une absence, un créneau hors horaire (0 h) ou un autre chantier.",
@@ -311,8 +382,9 @@ export function CalendarBoard() {
         <div>
           <h2 className="font-serif text-3xl text-stone-900">Planning équipe</h2>
           <p className="mt-1 text-sm text-stone-600">
-            Une ligne par personne, chaque jour en matin / après-midi. Le
-            thermolaquage sous-traité et les livraisons ont chacun leur ligne.
+            Une ligne par personne, chaque jour en matin / après-midi (l’heure
+            est écrite sur le bloc). En vue Jour, vous déposez au cran de
+            30 minutes ; un trou en fin de journée reste vide. Le thermolaquage sous-traité et les livraisons ont chacun leur ligne.
             Les livraisons restent aussi sur la ligne du salarié responsable.
             Glissez un chantier vers une autre date ou vers un autre salarié,
             y compris en vue Jour. Les blocs collés sur
@@ -667,6 +739,7 @@ export function CalendarBoard() {
                               dragging={Boolean(dragPreview)}
                               showLivraisonAddress={row.id === TRANSPORT_ROW_ID}
                               allowDrag={row.id !== TRANSPORT_ROW_ID}
+                              clockLabel={assignmentClockLabel(snapshot, assignment)}
 
                               onPointerDragStart={(event) => {
                                 beginChipDrag(
@@ -795,6 +868,7 @@ function DayDetail({
     chantierId: string,
     date: string,
     half: 0 | 1,
+    startMin?: number,
   ) => void;
   onChipDragMove: (event: PointerEvent<HTMLButtonElement>) => void;
   onChipDragEnd: (
@@ -922,7 +996,30 @@ function DayDetail({
                   <AbsenceChip key={absence.id} absence={absence} />
                 ))}
                 {windows.length > 0 && absences.length === 0 && (
-                  <div className="relative h-16">
+                  <div
+                    className="relative mt-3 h-16"
+                    data-plan-track={`${row.id}|${iso}|${dayStart}|${dayEnd}`}
+                  >
+                    {Array.from(
+                      { length: Math.floor((dayEnd - dayStart) / 30) + 1 },
+                      (_, index) => dayStart + index * 30,
+                    )
+                      .filter((mark) =>
+                        windows.some((window) => mark >= window.start && mark <= window.end),
+                      )
+                      .map((mark) => (
+                        <div
+                          key={`tick-${mark}`}
+                          className="pointer-events-none absolute top-0 h-full border-l border-stone-300/70"
+                          style={{
+                            left: `${((mark - dayStart) / span) * 100}%`,
+                          }}
+                        >
+                          <span className="absolute -top-3 left-0 -translate-x-1/2 text-[9px] tabular-nums text-stone-400">
+                            {formatClock(mark)}
+                          </span>
+                        </div>
+                      ))}
                     {windows.map((window) => {
                       const cellKey = `${row.id}|${iso}|${window.half}`;
                       const dropTarget = dragPreview?.cells.has(cellKey);
@@ -1002,6 +1099,7 @@ function DayDetail({
                                         assignment.chantier.id,
                                         iso,
                                         slot.half,
+                                        start,
                                       )
                                   : undefined
                               }
@@ -1091,6 +1189,7 @@ function PhaseChipButton({
   dragging,
   showLivraisonAddress,
   allowDrag = true,
+  clockLabel,
   onPointerDragStart,
   onPointerDragMove,
   onPointerDragEnd,
@@ -1100,6 +1199,7 @@ function PhaseChipButton({
   dragging?: boolean;
   showLivraisonAddress?: boolean;
   allowDrag?: boolean;
+  clockLabel?: string | null;
   onPointerDragStart: (event: PointerEvent<HTMLButtonElement>) => void;
   onPointerDragMove: (event: PointerEvent<HTMLButtonElement>) => void;
   onPointerDragEnd: (
@@ -1124,6 +1224,7 @@ function PhaseChipButton({
         assignment={assignment}
         compact={compact}
         showLivraisonAddress={showLivraisonAddress}
+        clockLabel={clockLabel}
       />
     </button>
   );

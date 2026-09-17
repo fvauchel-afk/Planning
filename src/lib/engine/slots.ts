@@ -58,7 +58,12 @@ export function slotKey(rowId: string, date: string, half: Half): string {
   return `${rowId}|${date}|${half}`;
 }
 
-function spanKey(rowId: string, date: string, start: number, end: number): string {
+function spanKey(
+  rowId: string,
+  date: string,
+  start: number,
+  end: number,
+): string {
   return `span:${rowId}|${date}|${start}|${end}`;
 }
 
@@ -113,7 +118,10 @@ export function rowIdForPhase(
   return employeId;
 }
 
-export function isCompanyHoliday(snapshot: PlanningSnapshot, date: string): boolean {
+export function isCompanyHoliday(
+  snapshot: PlanningSnapshot,
+  date: string,
+): boolean {
   return snapshot.absences.some(
     (absence) =>
       absence.type === "ferie_entreprise" &&
@@ -176,7 +184,10 @@ export function nextOpenSlot(
   return { rowId, date: cursorDate, half: cursorHalf };
 }
 
-export function advanceSlot(date: string, half: Half): { date: string; half: Half } {
+export function advanceSlot(
+  date: string,
+  half: Half,
+): { date: string; half: Half } {
   if (half === 0) return { date, half: 1 };
   return { date: addDays(date, 1), half: 0 };
 }
@@ -195,7 +206,10 @@ export function subtractRanges(
         continue;
       }
       if (block.start > range.start) {
-        next.push({ start: range.start, end: Math.min(block.start, range.end) });
+        next.push({
+          start: range.start,
+          end: Math.min(block.start, range.end),
+        });
       }
       if (block.end < range.end) {
         next.push({ start: Math.max(block.end, range.start), end: range.end });
@@ -309,7 +323,8 @@ export function spansFromExistingPhase(
   let fromMin = windows[0]?.start ?? 0;
   const parsedStart = minutesFromHeureDebut(phase.heure_debut);
   if (parsedStart != null) fromMin = parsedStart;
-  const half = windows.find((window) => fromMin < window.end)?.half ??
+  const half =
+    windows.find((window) => fromMin < window.end)?.half ??
     (fromMin >= 12 * 60 ? 1 : 0);
   if (hours > 0) {
     const slots = allocateHoursFrom(
@@ -331,7 +346,13 @@ export function spansFromExistingPhase(
       }));
     }
   }
-  return fallbackSpansForDatedPhase(snapshot, rowId, startDate, untilDate, half);
+  return fallbackSpansForDatedPhase(
+    snapshot,
+    rowId,
+    startDate,
+    untilDate,
+    half,
+  );
 }
 
 function fallbackSpansForDatedPhase(
@@ -393,7 +414,9 @@ export function lastOccupiedSlotForRow(
   snapshot: PlanningSnapshot,
   rowId: string,
 ): OccupiedSlot | null {
-  const spans = occupancySpans(occupancy).filter((span) => span.rowId === rowId);
+  const spans = occupancySpans(occupancy).filter(
+    (span) => span.rowId === rowId,
+  );
   let last: OccupiedSpan | null = null;
   for (const span of spans) {
     if (
@@ -494,7 +517,9 @@ export function buildOccupancy(
   const occupancy = new Map<string, string>();
   for (const phase of snapshot.phases) {
     if (ignorePhaseIds.has(phase.id)) continue;
-    const element = snapshot.elements.find((item) => item.id === phase.element_id);
+    const element = snapshot.elements.find(
+      (item) => item.id === phase.element_id,
+    );
     const chantierId = element?.chantier_id ?? phase.id;
     occupySlots(occupancy, slotsFromExistingPhase(snapshot, phase), chantierId);
   }
@@ -508,13 +533,49 @@ export function occupySlots(
 ) {
   for (const slot of slots) {
     occupancy.set(slotKey(slot.rowId, slot.date, slot.half), ownerId);
-    const start =
-      slot.startMin ?? (slot.half === 0 ? 8 * 60 : 13 * 60);
+    const start = slot.startMin ?? (slot.half === 0 ? 8 * 60 : 13 * 60);
     const end = slot.endMin ?? (slot.half === 0 ? 12 * 60 : 17 * 60);
     if (end > start) {
       occupancy.set(spanKey(slot.rowId, slot.date, start, end), ownerId);
     }
   }
+}
+
+/** Chevauchement d’heures (la fin pile = pas de conflit). */
+export function minuteRangesOverlap(
+  left: { date: string; start: number; end: number },
+  right: { date: string; start: number; end: number },
+): boolean {
+  if (left.date !== right.date) return false;
+  return left.start < right.end && right.start < left.end;
+}
+
+export function overlappingOwners(
+  occupancy: Map<string, string>,
+  slots: OccupiedSlot[],
+): string[] {
+  const ids = new Set<string>();
+  const busy = occupancySpans(occupancy);
+  for (const slot of slots) {
+    if (slot.startMin != null && slot.endMin != null) {
+      for (const span of busy) {
+        if (span.rowId !== slot.rowId) continue;
+        if (
+          !minuteRangesOverlap(
+            { date: slot.date, start: slot.startMin, end: slot.endMin },
+            { date: span.date, start: span.start, end: span.end },
+          )
+        ) {
+          continue;
+        }
+        if (!span.ownerId.startsWith("incoming")) ids.add(span.ownerId);
+      }
+      continue;
+    }
+    const owner = occupancy.get(slotKey(slot.rowId, slot.date, slot.half));
+    if (owner && !owner.startsWith("incoming")) ids.add(owner);
+  }
+  return Array.from(ids);
 }
 
 export function slotHours(slot: OccupiedSlot): number {
