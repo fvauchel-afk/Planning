@@ -7,6 +7,7 @@ import { AuthOpenBanner } from "@/components/AuthOpenBanner";
 import { OnedriveBanner } from "@/components/OnedriveBanner";
 import { CommandeAlert } from "@/components/CommandeAlert";
 import { LancementAlert } from "@/components/LancementAlert";
+import { AdministratifIdleAlert } from "@/components/AdministratifIdleAlert";
 import { lancementsEnAttente } from "@/lib/dates-estimatives";
 import { useSession } from "@/lib/auth/session-context";
 import { usePlanning } from "@/lib/planning-context";
@@ -218,6 +219,7 @@ export function AppShell({
         ) : null}
         <CommandeAlert />
         <LancementAlert />
+        <AdministratifIdleAlert />
         {children}
       </main>
     </div>

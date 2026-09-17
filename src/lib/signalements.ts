@@ -12,12 +12,26 @@ import {
 export const PENDING_CHANTIER_MESSAGE =
   "Un signalement est en attente de validation — merci de le traiter avant d’ajouter un nouveau chantier.";
 
+export const ADMINISTRATIF_IDLE_KIND = "administratif_creux";
+
 export function pendingSignalements(snapshot: PlanningSnapshot) {
   return (snapshot.signalements ?? []).filter((item) => item.statut === "en_attente");
 }
 
+export function isAdministratifIdleSuggestion(item: {
+  proposition?: SignalementProposition | null;
+}): boolean {
+  return parseProposition(item.proposition)?.kind === ADMINISTRATIF_IDLE_KIND;
+}
+
+export function pendingBlockingSignalements(snapshot: PlanningSnapshot) {
+  return pendingSignalements(snapshot).filter(
+    (item) => !isAdministratifIdleSuggestion(item),
+  );
+}
+
 export function hasPendingSignalements(snapshot: PlanningSnapshot): boolean {
-  return pendingSignalements(snapshot).length > 0;
+  return pendingBlockingSignalements(snapshot).length > 0;
 }
 
 export function needsAlgoValidation(result: {
@@ -39,6 +53,9 @@ export function parseProposition(raw: unknown): SignalementProposition | null {
     ),
     repercussions: Array.isArray(value.repercussions) ? value.repercussions : [],
     createChantier: value.createChantier,
+    kind: typeof value.kind === "string" ? value.kind : undefined,
+    from: typeof value.from === "string" ? value.from : undefined,
+    to: typeof value.to === "string" ? value.to : undefined,
     alternatives: Array.isArray(value.alternatives)
       ? value.alternatives.filter(
           (item): item is NonNullable<SignalementProposition["alternatives"]>[number] =>

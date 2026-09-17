@@ -179,6 +179,10 @@ export type SignalementProposition = {
   createChantier?: NewChantierInput;
   /** Autres plans proposés (le premier est aussi dans patches / message). */
   alternatives?: PlanningSolution[];
+  /** suggestion_admin : bloc Administratif 7 jours, à valider. */
+  kind?: string;
+  from?: string;
+  to?: string;
 };
 
 export type Signalement = {

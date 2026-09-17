@@ -68,6 +68,7 @@ import {
 } from "@/lib/demandes";
 import {
   hasPendingSignalements,
+  isAdministratifIdleSuggestion,
   PENDING_CHANTIER_MESSAGE,
 } from "@/lib/signalements";
 import {
@@ -329,10 +330,11 @@ export async function POST(request: NextRequest) {
           ? proposition?.createChantier
           : body.createChantier ?? undefined;
       if (toCreate) {
-        if (hasPendingSignalements({
+        const othersPending = hasPendingSignalements({
           ...current,
           signalements: current.signalements.filter((row) => row.id !== body.id),
-        })) {
+        });
+        if (othersPending && !isAdministratifIdleSuggestion(item ?? {})) {
           return NextResponse.json({ error: PENDING_CHANTIER_MESSAGE }, { status: 400 });
         }
         createdForPlanId = await supabaseCreateChantier(toCreate);
