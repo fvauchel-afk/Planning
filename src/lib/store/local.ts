@@ -4,6 +4,7 @@ import {
   scheduleChantierSlotDays,
   schedulePhaseInserts,
 } from "@/lib/engine/schedule-chantier";
+import { phasesForCreate } from "@/lib/engine/create-phases";
 import { ordreAffichageFromNom } from "@/lib/display-order";
 import { defaultHoraires, normalizeHoraire, normalizeHorairesEmploye, parseSaisonForcee } from "@/lib/engine/hours";
 import { normalizePhasesForPlanning } from "@/lib/engine/normalize-phases";
@@ -198,11 +199,8 @@ export function localCreateChantier(
             heures_supplementaires_par_jour: 0,
             dates_estimatives: Boolean(input.dates_estimatives),
           }));
-    const uniqueByType = new Map<(typeof phases)[number]["type_phase"], (typeof phases)[number]>();
-    for (const phase of phases) {
-      uniqueByType.set(phase.type_phase, phase);
-    }
-    for (const phase of Array.from(uniqueByType.values())) {
+    const uniqueByType = phasesForCreate(phases);
+    for (const phase of uniqueByType) {
       next.phases.push({
         id: newId(),
         element_id: elementId,

@@ -23,6 +23,7 @@ import {
 } from "@/lib/engine/earliest-date";
 import { generatePlanSolutions, propositionFromSolutions } from "@/lib/engine/plan-solutions";
 import { applyPhaseChainOnCreate, missingRequiredAssignee } from "@/lib/engine/phase-chain";
+import { withExtraPoseurs } from "@/lib/engine/create-phases";
 import { moisToToleranceJours } from "@/lib/priorite";
 import { EmployeePhaseSelect } from "@/components/EmployeePhaseSelect";
 import {
@@ -138,7 +139,7 @@ export function ChantierForm() {
   const [dureeLivraison, setDureeLivraison] = useState("2");
   const [employeLivraison, setEmployeLivraison] = useState("");
   const [employeFabrication, setEmployeFabrication] = useState("");
-  const [employePose, setEmployePose] = useState("");
+  const [poseurIds, setPoseurIds] = useState<string[]>([]);
   const [delaiLaquage, setDelaiLaquage] = useState("5");
   const [dateLaquageDebut, setDateLaquageDebut] = useState("");
   const [dateLaquageFin, setDateLaquageFin] = useState("");
@@ -161,6 +162,43 @@ export function ChantierForm() {
       .filter((employee) => employee.actif)
       .sort(compareEmployeesByOrdre);
   }, [snapshot.employees]);
+
+  const employePose = poseurIds[0] ?? "";
+  const poseCandidates = useMemo(
+    () => employeesForPhaseSelect(employeesByRole, "pose", employePose),
+    [employeesByRole, employePose],
+  );
+  const poseDateDebut =
+    dateDebut ||
+    elements
+      .flatMap((element) => element.phases)
+      .find((phase) => phase.type_phase === "pose")?.date_debut ||
+    "";
+  const poseDateFin =
+    dateFin ||
+    elements
+      .flatMap((element) => element.phases)
+      .find((phase) => phase.type_phase === "pose")?.date_fin ||
+    poseDateDebut;
+  const suggestedPoseurs = useMemo(() => {
+    if (!poseDateDebut) return [];
+    return poseCandidates.filter((employee) =>
+      employeeAvailableOnRange(
+        snapshot,
+        employee,
+        poseDateDebut,
+        poseDateFin || poseDateDebut,
+      ),
+    );
+  }, [poseCandidates, poseDateDebut, poseDateFin, snapshot]);
+
+  function togglePoseur(id: string) {
+    setPoseurIds((current) =>
+      current.includes(id)
+        ? current.filter((item) => item !== id)
+        : [...current, id],
+    );
+  }
 
   function updateElement(key: string, patch: Partial<ElementForm>) {
     setElements((current) =>
@@ -298,9 +336,12 @@ export function ChantierForm() {
         })),
       })),
     };
-    return applyPhaseChainOnCreate(
-      snapshot,
-      ensureChantierDatesOnCreate(snapshot, input),
+    return withExtraPoseurs(
+      applyPhaseChainOnCreate(
+        snapshot,
+        ensureChantierDatesOnCreate(snapshot, input),
+      ),
+      poseurIds.slice(1),
     );
   }
 
@@ -775,19 +816,50 @@ export function ChantierForm() {
             </label>
           </div>
           {avecPose ? (
-            <label className="mt-3 block">
-              <span className="mb-1 block font-medium">
-                Salarié responsable de la pose
-              </span>
-              <EmployeePhaseSelect
-                employees={employeesByRole}
-                type="pose"
-                value={employePose}
-                onChange={setEmployePose}
-                emptyLabel="Auto (premier disponible)"
-                className="w-full rounded border border-stone-300 bg-white px-3 py-2"
-              />
-            </label>
+            <div className="mt-3 space-y-2">
+              <span className="mb-1 block font-medium">Poseurs</span>
+              <p className="text-xs text-stone-600">
+                Cochez un ou plusieurs poseurs. Si vous n’en choisissez aucun,
+                le premier disponible est pris tout seul.
+              </p>
+              <div className="flex flex-col gap-1">
+                {poseCandidates.map((employee) => {
+                  const suggested = suggestedPoseurs.some(
+                    (item) => item.id === employee.id,
+                  );
+                  return (
+                    <label
+                      key={employee.id}
+                      className="inline-flex items-center gap-2 text-sm"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={poseurIds.includes(employee.id)}
+                        onChange={() => togglePoseur(employee.id)}
+                      />
+                      <span>{employee.nom}</span>
+                      {poseDateDebut ? (
+                        <span
+                          className={
+                            suggested
+                              ? "text-xs text-emerald-700"
+                              : "text-xs text-stone-400"
+                          }
+                        >
+                          {suggested ? "libre sur les dates de pose" : "pas dispo ce jour-là"}
+                        </span>
+                      ) : null}
+                    </label>
+                  );
+                })}
+              </div>
+              {poseDateDebut && suggestedPoseurs.length === 0 ? (
+                <p className="text-xs text-amber-800">
+                  Aucun poseur n’est libre sur ces dates. Vous pouvez quand
+                  même en cocher un.
+                </p>
+              ) : null}
+            </div>
           ) : null}
         </fieldset>
         <fieldset className="rounded-lg border border-stone-300 bg-stone-50/60 p-3 text-sm md:col-span-2">

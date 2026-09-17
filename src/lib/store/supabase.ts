@@ -13,6 +13,7 @@ import {
   scheduleChantierSlotDays,
   schedulePhaseInserts,
 } from "@/lib/engine/schedule-chantier";
+import { phasesForCreate } from "@/lib/engine/create-phases";
 import { compareEmployeesByOrdre, ordreAffichageFromNom } from "@/lib/display-order";
 import { defaultHoraires, normalizeHoraire, normalizeHorairesEmploye, parseSaisonForcee } from "@/lib/engine/hours";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -516,11 +517,7 @@ export async function supabaseCreateChantier(
             dates_estimatives: Boolean(input.dates_estimatives),
           }));
 
-    const uniqueByType = new Map<TypePhase, (typeof phases)[number]>();
-    for (const phase of phases) {
-      uniqueByType.set(phase.type_phase, phase);
-    }
-    const rows = Array.from(uniqueByType.values()).map((phase) => ({
+    const rows = phasesForCreate(phases).map((phase) => ({
       element_id: elementRow.id,
       type_phase: phase.type_phase,
       duree_estimee_heures: phase.duree_estimee_heures,
