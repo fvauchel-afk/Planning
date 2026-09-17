@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-17-fab-dates-sync",
+    title: "Dates chantier et fabrication liées",
+    items: [
+      "Dans Nouveau chantier, remplir le début ou la fin du chantier recopie les mêmes dates sur la phase Fabrication.",
+      "Remplir les dates de fabrication recopie aussi les dates du chantier. Les deux zones restent affichées.",
+    ],
+  },
+  {
     id: "2026-09-17-duree-phase-presets",
     title: "Durée d’une phase : heures, 1 j, 1,5 j, 2 j",
     items: [

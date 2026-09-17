@@ -189,6 +189,24 @@ export function ChantierForm() {
     );
   }
 
+  function applyChantierAndFabricationDates(nextDebut: string, nextFin: string) {
+    let debut = nextDebut;
+    let fin = nextFin;
+    if (debut && fin && fin < debut) fin = debut;
+    setDateDebut(debut);
+    setDateFin(fin);
+    setElements((current) =>
+      current.map((element) => ({
+        ...element,
+        phases: element.phases.map((phase) =>
+          phase.type_phase === "fabrication"
+            ? { ...phase, date_debut: debut, date_fin: fin }
+            : phase,
+        ),
+      })),
+    );
+  }
+
   function buildInput(): NewChantierInput | null {
     if (!nomClient.trim()) {
       setError("Le nom du client est obligatoire.");
@@ -675,7 +693,8 @@ export function ChantierForm() {
           <p className="text-xs text-stone-600">
             Laissez vide pour un calage automatique au plus tôt. Les dates
             estimatives restent visuellement distinctes tant qu’elles ne sont
-            pas confirmées.
+            pas confirmées. Remplir ici remplit aussi la fabrication, et
+            inversement.
           </p>
           <div className="mt-2 grid gap-3 sm:grid-cols-2">
             <label className="block text-sm">
@@ -684,9 +703,10 @@ export function ChantierForm() {
                 type="date"
                 value={dateDebut}
                 onChange={(event) => {
-                  const next = event.target.value;
-                  setDateDebut(next);
-                  if (dateFin && next && dateFin < next) setDateFin(next);
+                  applyChantierAndFabricationDates(
+                    event.target.value,
+                    dateFin,
+                  );
                 }}
                 className="w-full rounded border border-stone-300 bg-white px-3 py-2"
               />
@@ -697,7 +717,12 @@ export function ChantierForm() {
                 type="date"
                 value={dateFin}
                 min={dateDebut || undefined}
-                onChange={(event) => setDateFin(event.target.value)}
+                onChange={(event) =>
+                  applyChantierAndFabricationDates(
+                    dateDebut,
+                    event.target.value,
+                  )
+                }
                 className="w-full rounded border border-stone-300 bg-white px-3 py-2"
               />
             </label>
@@ -1100,11 +1125,19 @@ export function ChantierForm() {
                         <input
                           type="date"
                           value={phase.date_debut}
-                          onChange={(event) =>
+                          onChange={(event) => {
+                            const next = event.target.value;
+                            if (phase.type_phase === "fabrication") {
+                              applyChantierAndFabricationDates(
+                                next,
+                                phase.date_fin || dateFin,
+                              );
+                              return;
+                            }
                             updatePhase(element.key, phase.type_phase, {
-                              date_debut: event.target.value,
-                            })
-                          }
+                              date_debut: next,
+                            });
+                          }}
                           className="rounded border border-stone-300 px-2 py-1"
                         />
                       </td>
@@ -1112,11 +1145,19 @@ export function ChantierForm() {
                         <input
                           type="date"
                           value={phase.date_fin}
-                          onChange={(event) =>
+                          onChange={(event) => {
+                            const next = event.target.value;
+                            if (phase.type_phase === "fabrication") {
+                              applyChantierAndFabricationDates(
+                                phase.date_debut || dateDebut,
+                                next,
+                              );
+                              return;
+                            }
                             updatePhase(element.key, phase.type_phase, {
-                              date_fin: event.target.value,
-                            })
-                          }
+                              date_fin: next,
+                            });
+                          }}
                           className="rounded border border-stone-300 px-2 py-1"
                         />
                       </td>
