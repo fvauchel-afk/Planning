@@ -33,6 +33,10 @@ export function LancementAlert() {
         {rows.map((row) => (
           <li key={row.phaseId} className="flex flex-wrap items-center gap-2">
             <span className="font-medium">{row.nomClient}</span>
+            <span className="text-xs text-orange-800">
+              début {row.dateDebut.split("-").reverse().join("/")}
+              {row.employeNom ? ` · ${row.employeNom}` : ""}
+            </span>
             <LaunchValidateButton phaseId={row.phaseId} />
           </li>
         ))}

@@ -236,6 +236,8 @@ export type LancementEnAttente = {
   nomClient: string;
   phaseId: string;
   dateDebut: string;
+  employeId: string | null;
+  employeNom: string | null;
 };
 
 export function lancementsEnAttente(
@@ -248,6 +250,9 @@ export function lancementsEnAttente(
   const chantierById = new Map(
     snapshot.chantiers.map((chantier) => [chantier.id, chantier]),
   );
+  const employeeById = new Map(
+    snapshot.employees.map((employee) => [employee.id, employee]),
+  );
   const rows: LancementEnAttente[] = [];
   const seen = new Set<string>();
   for (const phase of snapshot.phases) {
@@ -257,11 +262,16 @@ export function lancementsEnAttente(
     const chantier = chantierById.get(element.chantier_id);
     if (!chantier || seen.has(chantier.id)) continue;
     seen.add(chantier.id);
+    const employee = phase.employe_id
+      ? employeeById.get(phase.employe_id)
+      : undefined;
     rows.push({
       chantierId: chantier.id,
       nomClient: chantier.nom_client,
       phaseId: phase.id,
       dateDebut: phase.date_debut!.slice(0, 10),
+      employeId: phase.employe_id,
+      employeNom: employee?.nom ?? null,
     });
   }
   rows.sort((a, b) => a.dateDebut.localeCompare(b.dateDebut) || a.nomClient.localeCompare(b.nomClient, "fr"));

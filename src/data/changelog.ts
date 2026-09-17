@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-17-lancement-mail-absence",
+    title: "Rappel lancement fabrication",
+    items: [
+      "Le bandeau liste les fabrications déjà commencées sans « Je valide le lancement », avec la date et le salarié.",
+      "Le jour du début, un e-mail part au fabricant (s’il a une adresse dans EMPLOYEE_EMAILS). S’il est en congé ce jour-là, rien n’est envoyé.",
+    ],
+  },
+  {
     id: "2026-09-17-multi-poseurs",
     title: "Plusieurs poseurs sur un chantier",
     items: [
