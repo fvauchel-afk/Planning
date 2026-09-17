@@ -19,6 +19,15 @@ function line(text: string, max = 90) {
   return `${value.slice(0, max - 1)}…`;
 }
 
+export function receptionSignatureDate(now: Date = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Paris",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(now);
+}
+
 export async function buildReceptionPdf(
   input: ReceptionPdfInput,
 ): Promise<{ bytes: Uint8Array; fileName: string }> {
@@ -149,3 +158,28 @@ export function pngDataUrlToBytes(dataUrl: string): Uint8Array {
   const b64 = match ? match[1] : dataUrl;
   return Uint8Array.from(Buffer.from(b64, "base64"));
 }
+
+export function receptionDocumentDate(
+  _phaseStartIso: string | null | undefined,
+  signedOnIso: string = receptionSignatureDate(),
+): string {
+  return signedOnIso;
+}
+
+function runReceptionPdfDateSelfCheck() {
+  if (receptionSignatureDate(new Date("2026-09-17T10:00:00.000Z")) !== "2026-09-17") {
+    throw new Error("reception-pdf: le matin UTC doit rester le 17/09 à Paris");
+  }
+  if (receptionSignatureDate(new Date("2026-09-17T22:30:00.000Z")) !== "2026-09-18") {
+    throw new Error(
+      "reception-pdf: après minuit Paris le PDF doit dater du jour de signature, pas du 17 UTC",
+    );
+  }
+  if (receptionDocumentDate("2026-09-18", "2026-09-17") !== "2026-09-17") {
+    throw new Error(
+      "reception-pdf: ignorer phase.date_debut au profit du jour de signature",
+    );
+  }
+}
+
+runReceptionPdfDateSelfCheck();

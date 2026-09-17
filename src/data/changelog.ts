@@ -11,6 +11,13 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-17-pdf-date-signature",
+    title: "Date du PDF de réception",
+    items: [
+      "Le PDF de réception ou de bon de livraison porte la date du jour de la signature (heure de Paris), et non plus la date de début de la pose ou de la livraison.",
+    ],
+  },
+  {
     id: "2026-09-17-pdf-apercu-ios",
     title: "Aperçu PDF sur iPhone",
     items: [

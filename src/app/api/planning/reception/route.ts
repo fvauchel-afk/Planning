@@ -6,7 +6,6 @@ import {
   unauthorized,
 } from "@/lib/auth/guard";
 import { idsEqual } from "@/lib/auth/ids";
-import { todayIso } from "@/lib/engine/slots";
 import {
   createClientFolder,
   uploadBytesToShareFolder,
@@ -15,7 +14,7 @@ import {
   setReceptionOnedriveErreur,
   updateChantierOnedriveLink,
 } from "@/lib/onedrive/db";
-import { buildReceptionPdf, pngDataUrlToBytes } from "@/lib/reception/pdf";
+import { buildReceptionPdf, pngDataUrlToBytes, receptionDocumentDate } from "@/lib/reception/pdf";
 import {
   fetchSupabaseSnapshot,
   invalidateSupabaseSnapshotCache,
@@ -82,7 +81,7 @@ export async function POST(request: NextRequest) {
     );
     const salarie = snapshot.employees.find((item) => item.id === phase.employe_id);
     const kind = phase.type_phase === "livraison" ? "livraison" : "reception";
-    const dateDocument = phase.date_debut || todayIso();
+    const dateDocument = receptionDocumentDate(phase.date_debut);
     const pdf = await buildReceptionPdf({
       kind,
       nomClient: chantier?.nom_client ?? "Client",
