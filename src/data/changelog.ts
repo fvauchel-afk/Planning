@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-17-onedrive-statut-domaine",
+    title: "OneDrive : statut à jour, même depuis le domaine atelier",
+    items: [
+      "L’onglet OneDrive affiche l’état réel (plus un statut figé au moment de la mise en ligne).",
+      "Le bouton « Connecter OneDrive » revient toujours vers l’adresse Microsoft déjà enregistrée, y compris si vous ouvrez le planning via gestion.lametalleriedusud.com.",
+    ],
+  },
+  {
     id: "2026-09-17-pin-reactivate",
     title: "Code PIN à nouveau obligatoire",
     items: [
