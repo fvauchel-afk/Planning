@@ -153,7 +153,8 @@ export function mergePhaseEdits(first: PhaseEdits, second: PhaseEdits): PhaseEdi
   const patchById = new Map<string, PhasePatch>();
   for (const patch of [...(first.patches ?? []), ...(second.patches ?? [])]) {
     if (deleted.has(patch.id)) continue;
-    patchById.set(patch.id, patch);
+    const previous = patchById.get(patch.id);
+    patchById.set(patch.id, previous ? { ...previous, ...patch } : patch);
   }
   const patches = Array.from(patchById.values());
   const inserts = [...(first.inserts ?? []), ...(second.inserts ?? [])];

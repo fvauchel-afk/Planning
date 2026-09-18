@@ -29,8 +29,13 @@ import {
   chantierPhaseOptions,
   missingGridAssignee,
   planChantierOptionEdits,
+  planChantierDurationEdits,
 } from "@/lib/engine/phase-chain";
 import { EmployeePhaseSelect } from "@/components/EmployeePhaseSelect";
+import {
+  DUREE_JOUR_PRESETS,
+  hoursFromDayPreset,
+} from "@/lib/engine/duree-presets";
 import { compareEmployeesByOrdre } from "@/lib/display-order";
 import { moisToToleranceJours, toleranceJoursToMois } from "@/lib/priorite";
 import { usePlanning } from "@/lib/planning-context";
@@ -62,13 +67,92 @@ import {
   TRANSPORT_ROW_ID,
   PRIORITES,
   PRIORITE_LABELS,
+  PHASE_LABELS,
   type Chantier,
+  type PhaseEdits,
   type PlanningSnapshot,
   type Priorite,
+  type TypePhase,
 } from "@/lib/types";
 
 const DELETE_CONFIRM =
   "Êtes-vous sûr ? Cette action est irréversible et supprimera aussi toutes les phases planifiées liées.";
+
+const DURATION_TYPES: TypePhase[] = [
+  "administratif",
+  "fabrication",
+  "livraison",
+  "pose",
+];
+
+function hoursByPhaseIdFromSnapshot(
+  snapshot: PlanningSnapshot,
+  chantierId: string,
+): Record<string, string> {
+  const elementIds = new Set(
+    snapshot.elements
+      .filter((element) => element.chantier_id === chantierId)
+      .map((element) => element.id),
+  );
+  const hours: Record<string, string> = {};
+  for (const phase of snapshot.phases) {
+    if (!elementIds.has(phase.element_id)) continue;
+    hours[phase.id] = String(phase.duree_estimee_heures ?? "");
+  }
+  return hours;
+}
+
+function durationRowsForChantier(
+  snapshot: PlanningSnapshot,
+  chantierId: string,
+  flags: {
+    avecFabrication: boolean;
+    avecPose: boolean;
+    avecLivraison: boolean;
+  },
+): Array<{
+  phaseId: string;
+  label: string;
+  type: TypePhase;
+  employeId: string | null;
+}> {
+  const elements = snapshot.elements.filter(
+    (element) => element.chantier_id === chantierId,
+  );
+  const rows: Array<{
+    phaseId: string;
+    label: string;
+    type: TypePhase;
+    employeId: string | null;
+  }> = [];
+  for (const element of elements) {
+    const phases = snapshot.phases.filter(
+      (phase) => phase.element_id === element.id,
+    );
+    for (const type of DURATION_TYPES) {
+      if (type === "fabrication" && !flags.avecFabrication) continue;
+      if (type === "pose" && !flags.avecPose) continue;
+      if (type === "livraison" && !flags.avecLivraison) continue;
+      const matches = phases.filter((phase) => phase.type_phase === type);
+      for (const phase of matches) {
+        const employee = snapshot.employees.find(
+          (item) => item.id === phase.employe_id,
+        );
+        const who =
+          matches.length > 1 && employee?.nom ? ` — ${employee.nom}` : "";
+        const which =
+          elements.length > 1 ? ` (${element.nom_element})` : "";
+        rows.push({
+          phaseId: phase.id,
+          label: `${PHASE_LABELS[type]}${who}${which}`,
+          type,
+          employeId: phase.employe_id,
+        });
+      }
+    }
+  }
+  return rows;
+}
 
 function onedriveHref(raw: string): string | null {
   const value = raw.trim();
@@ -152,6 +236,9 @@ export function ChantierEditModal({
     chantier.telephone_livraison ?? "",
   );
   const [dureeLivraison, setDureeLivraison] = useState("2");
+  const [phaseHours, setPhaseHours] = useState<Record<string, string>>(() =>
+    hoursByPhaseIdFromSnapshot(snapshot, chantier.id),
+  );
   const [employeLivraison, setEmployeLivraison] = useState("");
   const [employeFabrication, setEmployeFabrication] = useState("");
   const [employePose, setEmployePose] = useState("");
@@ -216,6 +303,7 @@ export function ChantierEditModal({
       );
     });
     setDureeLivraison(String(liv?.duree_estimee_heures || 2));
+    setPhaseHours(hoursByPhaseIdFromSnapshot(source, chantier.id));
     setEmployeLivraison(liv?.employe_id ?? "");
     const fab = source.phases.find((phase) => {
       const element = source.elements.find((item) => item.id === phase.element_id);
@@ -327,6 +415,65 @@ export function ChantierEditModal({
     () => chantierVisibleOnGrid(snapshot, chantier.id),
     [snapshot, chantier.id],
   );
+  const durationRows = useMemo(
+    () =>
+      durationRowsForChantier(snapshot, chantier.id, {
+        avecFabrication,
+        avecPose,
+        avecLivraison,
+      }),
+    [snapshot, chantier.id, avecFabrication, avecPose, avecLivraison],
+  );
+
+  function parsedHoursByPhaseId(): Record<string, number> {
+    const hours: Record<string, number> = {};
+    for (const row of durationRows) {
+      const raw =
+        row.type === "livraison" ? dureeLivraison : phaseHours[row.phaseId];
+      const value = Number(raw);
+      if (Number.isFinite(value) && value >= 0) hours[row.phaseId] = value;
+    }
+    return hours;
+  }
+
+  function combinedPhaseEdits(source: PlanningSnapshot): PhaseEdits {
+    const dateEdits =
+      visibleOnGrid && datesDirty
+        ? planChantierDateEdits(
+            source,
+            chantier.id,
+            planDate,
+            planEnd || planDate,
+          )
+        : {};
+    const preview = previewPhaseEdits(source, dateEdits);
+    const optionEdits = planChantierOptionEdits(preview, chantier.id, {
+      avecFabrication,
+      avecPose,
+      avecThermolaquage,
+      avecLivraison,
+      dureeLivraisonHeures: Number(dureeLivraison || 2),
+      employeLivraisonId: employeLivraison || null,
+      employeFabricationId: employeFabrication || null,
+      employePoseId: employePose || null,
+      delayDays: Number(delaiLaquage || 5),
+      datesEstimatives,
+    });
+    const afterOptions = previewPhaseEdits(preview, optionEdits);
+    const durationEdits = planChantierDurationEdits(
+      afterOptions,
+      chantier.id,
+      parsedHoursByPhaseId(),
+      Number(delaiLaquage || 5),
+    );
+    return mergePhaseEdits(mergePhaseEdits(dateEdits, optionEdits), durationEdits);
+  }
+
+  function setHoursForPhase(phaseId: string, type: TypePhase, value: string) {
+    markCascade();
+    setPhaseHours((current) => ({ ...current, [phaseId]: value }));
+    if (type === "livraison") setDureeLivraison(value);
+  }
 
   const activeEmployees = useMemo(
     () =>
@@ -358,35 +505,13 @@ export function ChantierEditModal({
 
   const previewRange = useMemo(() => {
     try {
-      const dateEdits =
-        visibleOnGrid && datesDirty
-          ? planChantierDateEdits(
-              snapshot,
-              chantier.id,
-              planDate,
-              planEnd || planDate,
-            )
-          : {};
-      const preview = previewPhaseEdits(snapshot, dateEdits);
-      const optionEdits = planChantierOptionEdits(preview, chantier.id, {
-        avecFabrication,
-        avecPose,
-        avecThermolaquage,
-        avecLivraison,
-        dureeLivraisonHeures: Number(dureeLivraison || 2),
-        employeLivraisonId: employeLivraison || null,
-        employeFabricationId: employeFabrication || null,
-        employePoseId: employePose || null,
-        delayDays: Number(delaiLaquage || 5),
-        datesEstimatives,
-      });
-      return chantierDateRange(
-        previewPhaseEdits(preview, optionEdits),
-        chantier.id,
-      );
+      const edits = combinedPhaseEdits(snapshot);
+      return chantierDateRange(previewPhaseEdits(snapshot, edits), chantier.id);
     } catch {
       return { firstDate: planDate || null, lastDate: planEnd || null };
     }
+    // combinedPhaseEdits reads the cascade fields listed below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     snapshot,
     chantier.id,
@@ -404,6 +529,8 @@ export function ChantierEditModal({
     employePose,
     delaiLaquage,
     datesEstimatives,
+    phaseHours,
+    durationRows,
   ]);
 
   useEffect(() => {
@@ -520,30 +647,8 @@ export function ChantierEditModal({
       if (forceCreate) return;
     }
     const snap = latestSnap.current;
-    const dateEdits =
-      visibleOnGrid && datesDirty
-        ? planChantierDateEdits(
-            snap,
-            chantier.id,
-            planDate,
-            planEnd || planDate,
-          )
-        : {};
-    const preview = previewPhaseEdits(snap, dateEdits);
-    const optionEdits = planChantierOptionEdits(preview, chantier.id, {
-      avecFabrication,
-      avecPose,
-      avecThermolaquage,
-      avecLivraison,
-      dureeLivraisonHeures: Number(dureeLivraison || 2),
-      employeLivraisonId: employeLivraison || null,
-      employeFabricationId: employeFabrication || null,
-      employePoseId: employePose || null,
-      delayDays: Number(delaiLaquage || 5),
-      datesEstimatives,
-    });
-    const edits = mergePhaseEdits(dateEdits, optionEdits);
-    const after = previewPhaseEdits(preview, optionEdits);
+    const edits = combinedPhaseEdits(snap);
+    const after = previewPhaseEdits(snap, edits);
     const missing = missingGridAssignee(after, chantier.id);
     if (missing) {
       throw new Error(missing);
@@ -727,7 +832,7 @@ export function ChantierEditModal({
         </p>
         <p className="mt-2 text-xs text-stone-500">
           Nom, adresse, priorité et lien OneDrive s’enregistrent tout seuls. Les
-          dates, salariés et Oui/Non des phases s’appliquent avec Enregistrer.
+          dates, durées, salariés et Oui/Non des phases s’appliquent avec Enregistrer.
         </p>
         {staleCascade ? (
           <p className="mt-2 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950">
@@ -1171,7 +1276,15 @@ export function ChantierEditModal({
                     value={dureeLivraison}
                     onChange={(event) => {
                       markCascade();
-                      setDureeLivraison(event.target.value);
+                      const value = event.target.value;
+                      setDureeLivraison(value);
+                      setPhaseHours((current) => {
+                        const next = { ...current };
+                        for (const row of durationRows) {
+                          if (row.type === "livraison") next[row.phaseId] = value;
+                        }
+                        return next;
+                      });
                     }}
                     className="w-full rounded border border-stone-300 bg-white px-3 py-2"
                   />
@@ -1203,6 +1316,71 @@ export function ChantierEditModal({
               </div>
             ) : null}
           </fieldset>
+
+          {durationRows.length > 0 ? (
+            <fieldset className="rounded-lg border border-stone-300 bg-stone-50/60 p-3 text-sm">
+              <legend className="px-1 font-medium text-stone-800">
+                Durées estimées
+              </legend>
+              <p className="mt-1 text-xs text-stone-600">
+                Mêmes durées qu’à la création (heures, 1 j, 1,5 j, 2 j). Changer
+                une durée recale les phases suivantes.
+              </p>
+              <div className="mt-3 space-y-3">
+                {durationRows.map((row) => {
+                  const value =
+                    row.type === "livraison"
+                      ? dureeLivraison
+                      : (phaseHours[row.phaseId] ?? "");
+                  return (
+                    <div key={row.phaseId}>
+                      <span className="mb-1 block font-medium">{row.label}</span>
+                      <div className="flex flex-wrap items-center gap-1">
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.5"
+                          value={value}
+                          onChange={(event) =>
+                            setHoursForPhase(
+                              row.phaseId,
+                              row.type,
+                              event.target.value,
+                            )
+                          }
+                          className="w-20 rounded border border-stone-300 bg-white px-2 py-1"
+                          aria-label={`Durée en heures — ${row.label}`}
+                        />
+                        <span className="text-xs text-stone-500">h</span>
+                        {DUREE_JOUR_PRESETS.map((preset) => (
+                          <button
+                            key={preset.id}
+                            type="button"
+                            className="rounded border border-stone-300 bg-white px-1.5 py-0.5 text-xs text-stone-700 hover:bg-stone-100"
+                            onClick={() =>
+                              setHoursForPhase(
+                                row.phaseId,
+                                row.type,
+                                String(
+                                  hoursFromDayPreset(
+                                    snapshot,
+                                    row.employeId,
+                                    preset.days,
+                                  ),
+                                ),
+                              )
+                            }
+                          >
+                            {preset.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </fieldset>
+          ) : null}
 
           <fieldset className="rounded-lg border border-amber-200 bg-amber-50/50 p-3">
             <legend className="px-1 text-sm font-medium text-stone-800">

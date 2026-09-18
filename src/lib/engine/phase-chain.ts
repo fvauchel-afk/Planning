@@ -1100,6 +1100,57 @@ export function planChantierOptionEdits(
   return { patches, inserts, deleteIds };
 }
 
+/** Met à jour la durée estimée d’une phase et recale la suite (comme à la création). */
+export function planChantierDurationEdits(
+  snapshot: PlanningSnapshot,
+  chantierId: string,
+  hoursByPhaseId: Record<string, number>,
+  delayDays?: number | null,
+): { patches: PhasePatch[]; inserts: PhaseInsert[]; deleteIds: string[] } {
+  const chantier = snapshot.chantiers.find((item) => item.id === chantierId);
+  const delay = clampDelay(
+    delayDays ?? chantier?.delai_sous_traitance_jours,
+  );
+  const patches: PhasePatch[] = [];
+  const inserts: PhaseInsert[] = [];
+  const deleteIds: string[] = [];
+  const elements = snapshot.elements.filter(
+    (element) => element.chantier_id === chantierId,
+  );
+
+  for (const element of elements) {
+    const siblings = snapshot.phases.filter(
+      (phase) => phase.element_id === element.id,
+    );
+    let fromType: TypePhase | null = null;
+    for (const phase of siblings) {
+      if (!(phase.id in hoursByPhaseId)) continue;
+      const nextHours = Math.max(0, Number(hoursByPhaseId[phase.id]) || 0);
+      const currentHours = Number(phase.duree_estimee_heures) || 0;
+      if (nextHours === currentHours) continue;
+      mergePhasePatch(patches, phase, { duree_estimee_heures: nextHours });
+      if (
+        !fromType ||
+        PHASE_ORDER.indexOf(phase.type_phase) < PHASE_ORDER.indexOf(fromType)
+      ) {
+        fromType = phase.type_phase;
+      }
+    }
+    if (fromType) {
+      recaleElementChain(
+        snapshot,
+        element.id,
+        fromType,
+        delay,
+        patches,
+        inserts,
+        deleteIds,
+      );
+    }
+  }
+  return { patches, inserts, deleteIds };
+}
+
 function runPhaseChainSelfCheck() {
   const snapshot: PlanningSnapshot = {
     employees: [
@@ -1519,6 +1570,23 @@ function runPhaseChainSelfCheck() {
   });
   if (!removed.deleteIds.includes("pose-edit")) {
     throw new Error("phase-chain: passer Pose à Non doit supprimer la phase");
+  }
+
+  const longerFab = planChantierDurationEdits(withPose, "ch-edit", {
+    "fab-edit": 16,
+  });
+  const longerFabPatch = longerFab.patches.find((item) => item.id === "fab-edit");
+  if (longerFabPatch?.duree_estimee_heures !== 16) {
+    throw new Error("phase-chain: la durée fabrication doit pouvoir être modifiée");
+  }
+  const poseAfterLongerFab = longerFab.patches.find((item) => item.id === "pose-edit");
+  if (
+    !poseAfterLongerFab?.date_debut ||
+    poseAfterLongerFab.date_debut <= (longerFabPatch?.date_fin || "2026-09-14")
+  ) {
+    throw new Error(
+      `phase-chain: allonger la fabrication doit recaler la pose, reçu ${poseAfterLongerFab?.date_debut}`,
+    );
   }
 
   const addedLivraison = planChantierOptionEdits(editBase, "ch-edit", {

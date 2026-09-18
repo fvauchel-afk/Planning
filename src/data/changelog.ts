@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-18-edit-duree-phases",
+    title: "Durées dans Modifier le chantier",
+    items: [
+      "En cliquant sur le crayon, vous voyez le temps estimé de chaque phase (heures, 1 j, 1,5 j, 2 j), comme à la création.",
+      "Vous pouvez le changer dans cette fenêtre : les dates des phases suivantes se recalent. Validez avec Enregistrer.",
+    ],
+  },
+  {
     id: "2026-09-18-phase-oui-non-fab",
     title: "Chantier avec pose seulement",
     items: [
