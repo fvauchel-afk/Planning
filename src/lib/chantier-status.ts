@@ -68,6 +68,16 @@ export function chantierDateRange(
   return { firstDate, lastDate };
 }
 
+/** Jour (date ISO) du dernier créneau planifié du chantier. */
+export function isChantierLastPlannedDay(
+  snapshot: PlanningSnapshot,
+  chantierId: string,
+  iso: string,
+): boolean {
+  const { lastDate } = chantierDateRange(snapshot, chantierId);
+  return Boolean(lastDate) && lastDate === iso.slice(0, 10);
+}
+
 export function statutChantierFromRange(
   firstDate: string | null,
   lastDate: string | null,
@@ -139,6 +149,44 @@ function runChantierStatusSelfCheck() {
   }
   if (calendarDaysBetween("2026-09-10", "2026-09-12") !== 2) {
     throw new Error("chantier-status: décalage calendaire");
+  }
+  const lastDaySnap: PlanningSnapshot = {
+    employees: [],
+    chantiers: [
+      {
+        id: "c1",
+        nom_client: "Blaevoet Baie",
+        adresse: "",
+        lien_dossier_onedrive: null,
+        priorite: "normal",
+        date_creation: "2026-09-01",
+      },
+    ],
+    elements: [{ id: "e1", chantier_id: "c1", nom_element: "Portail" }],
+    phases: [
+      {
+        id: "p1",
+        element_id: "e1",
+        type_phase: "fabrication",
+        duree_estimee_heures: 16,
+        date_debut: "2026-09-17",
+        date_fin: "2026-09-18",
+        employe_id: "jon",
+        statut: "a_faire",
+        urgent: false,
+      },
+    ],
+    absences: [],
+    signalements: [],
+    receptions: [],
+    demandes: [],
+    horaires: [],
+  };
+  if (isChantierLastPlannedDay(lastDaySnap, "c1", "2026-09-17")) {
+    throw new Error("chantier-status: retard seulement le dernier jour");
+  }
+  if (!isChantierLastPlannedDay(lastDaySnap, "c1", "2026-09-18")) {
+    throw new Error("chantier-status: le 18 est le dernier jour planifié");
   }
 }
 

@@ -25,6 +25,7 @@ import { LaunchValidateButton } from "@/components/LaunchValidateButton";
 import { PhaseFicheModal } from "@/components/PhaseFicheModal";
 import { ReceptionModal } from "@/components/ReceptionModal";
 import { fabricationAwaitingLaunch, phaseIsEstimative } from "@/lib/dates-estimatives";
+import { isChantierLastPlannedDay } from "@/lib/chantier-status";
 
 export function MonPlanningPage() {
   const { snapshot, loading } = usePlanning();
@@ -178,12 +179,16 @@ export function MonPlanningPage() {
               <div className="mt-2 grid grid-cols-2 gap-2">
                 <SlotBlock
                   title="Matin"
+                  dateIso={iso}
+                  snapshot={snapshot}
                   assignments={morning}
                   onOpenPhase={setSelectedPhaseId}
                   onReception={setReceptionPhaseId}
                 />
                 <SlotBlock
                   title="Après-midi"
+                  dateIso={iso}
+                  snapshot={snapshot}
                   assignments={afternoon}
                   onOpenPhase={setSelectedPhaseId}
                   onReception={setReceptionPhaseId}
@@ -211,11 +216,15 @@ export function MonPlanningPage() {
 
 function SlotBlock({
   title,
+  dateIso,
+  snapshot,
   assignments,
   onOpenPhase,
   onReception,
 }: {
   title: string;
+  dateIso: string;
+  snapshot: ReturnType<typeof usePlanning>["snapshot"];
   assignments: ReturnType<typeof assignmentsForCell>;
   onOpenPhase: (phaseId: string) => void;
   onReception: (phaseId: string) => void;
@@ -284,16 +293,22 @@ function SlotBlock({
                   Faire signer le bon de livraison
                 </button>
               )}
-            <div className="mt-1.5 grid grid-cols-2 gap-1">
-              <Link
-                href={`/moi/retard?phase=${assignment.phase.id}&sens=retard`}
-                className="rounded bg-black/15 px-1 py-1 text-center text-[10px] font-medium leading-tight"
-              >
-                Signaler un retard
-              </Link>
+            <div className="mt-1.5 flex flex-wrap gap-1">
+              {isChantierLastPlannedDay(
+                snapshot,
+                assignment.chantier.id,
+                dateIso,
+              ) ? (
+                <Link
+                  href={`/moi/retard?phase=${assignment.phase.id}&sens=retard`}
+                  className="flex-1 rounded bg-black/15 px-1 py-1 text-center text-[10px] font-medium leading-tight"
+                >
+                  Signaler un retard
+                </Link>
+              ) : null}
               <Link
                 href={`/moi/retard?phase=${assignment.phase.id}&sens=avance`}
-                className="rounded bg-black/15 px-1 py-1 text-center text-[10px] font-medium leading-tight"
+                className="flex-1 rounded bg-black/15 px-1 py-1 text-center text-[10px] font-medium leading-tight"
               >
                 Signaler une avance
               </Link>

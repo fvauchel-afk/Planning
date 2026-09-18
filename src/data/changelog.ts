@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-18-retard-dernier-jour",
+    title: "Signaler un retard : dernier jour seulement",
+    items: [
+      "Sur Mon planning, « Signaler un retard » n’apparaît que le dernier jour planifié du chantier, pas sur chaque matin, après-midi ou jour précédent.",
+      "« Signaler une avance » reste disponible sur tous les jours du chantier.",
+    ],
+  },
+  {
     id: "2026-09-18-bon-commande-onedrive",
     title: "Bon de commande dans le dossier OneDrive",
     items: [
