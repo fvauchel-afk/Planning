@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-18-bon-commande-onedrive",
+    title: "Bon de commande dans le dossier OneDrive",
+    items: [
+      "À l’envoi, le PDF du bon de commande est copié dans le dossier OneDrive du chantier (celui du lien sur la fiche), en plus de l’e-mail au sous-traitant.",
+      "Le fichier va bien dans ce dossier-là, pas dans un autre dossier au même nom.",
+    ],
+  },
+  {
     id: "2026-09-18-bon-commande-pieces",
     title: "Pièces sur le bon de commande",
     items: [

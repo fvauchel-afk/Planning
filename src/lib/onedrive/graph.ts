@@ -3,6 +3,10 @@ import { getOnedriveConfig } from "@/lib/onedrive/config";
 import { sanitizeOnedriveName } from "@/lib/onedrive/sanitize";
 import { toGraphMeDrivePath } from "@/lib/onedrive/personal-path";
 import {
+  onedriveFolderNamesEqual,
+  parseOnedriveItemIdFromUrl,
+} from "@/lib/onedrive/share-url";
+import {
   getValidAccessToken,
   loadOnedriveTokens,
   saveOnedriveRoot,
@@ -118,8 +122,168 @@ type DriveItem = {
   id: string;
   name?: string;
   webUrl?: string;
-  parentReference?: { driveId?: string };
+  folder?: unknown;
+  file?: unknown;
+  parentReference?: { driveId?: string; id?: string };
 };
+
+async function listChildItems(
+  token: string,
+  parentId: string,
+): Promise<DriveItem[]> {
+  const items: DriveItem[] = [];
+  let path: string =
+    `${meItemPath(parentId)}/children?$select=id,name,folder,file,parentReference,webUrl&$top=200`;
+  for (let pageIndex = 0; pageIndex < 10; pageIndex += 1) {
+    const page: {
+      value?: DriveItem[];
+      "@odata.nextLink"?: string;
+    } = await graphFetch(token, path);
+    items.push(...(page.value ?? []));
+    const next = page["@odata.nextLink"]?.trim();
+    if (!next) break;
+    const stripped = next.startsWith(GRAPH_BASE)
+      ? next.slice(GRAPH_BASE.length)
+      : next.replace(/^https:\/\/graph\.microsoft\.com\/v1\.0/i, "");
+    if (!stripped.startsWith("/")) break;
+    path = stripped;
+  }
+  return items;
+}
+
+async function findNamedChildFolder(
+  token: string,
+  parentId: string,
+  name: string,
+): Promise<DriveItem | null> {
+  const wanted = sanitizeOnedriveName(name, "Client");
+  const children = await listChildItems(token, parentId);
+  const folders = children.filter((item) => item.folder && item.name);
+  return (
+    folders.find((item) => onedriveFolderNamesEqual(item.name ?? "", wanted)) ??
+    null
+  );
+}
+
+async function createNamedChildFolder(
+  token: string,
+  parentId: string,
+  name: string,
+): Promise<DriveItem> {
+  return graphFetch<DriveItem>(token, `${meItemPath(parentId)}/children`, {
+    method: "POST",
+    body: JSON.stringify({
+      name: sanitizeOnedriveName(name, "Client"),
+      folder: {},
+      "@microsoft.graph.conflictBehavior": "fail",
+    }),
+  });
+}
+
+async function followShareUrlItemId(shareUrl: string): Promise<string | null> {
+  const direct = parseOnedriveItemIdFromUrl(shareUrl);
+  if (direct) return direct;
+  try {
+    const res = await fetch(shareUrl, {
+      method: "GET",
+      redirect: "follow",
+      headers: { Accept: "text/html,application/xhtml+xml" },
+    });
+    const fromFinal = parseOnedriveItemIdFromUrl(res.url);
+    if (fromFinal) return fromFinal;
+    const html = await res.text();
+    const match = html.match(/resid=([^&"'\\s]+)/i);
+    if (!match?.[1]) return null;
+    return parseOnedriveItemIdFromUrl(
+      `https://onedrive.live.com/redir?resid=${match[1]}`,
+    );
+  } catch {
+    return null;
+  }
+}
+
+async function driveItemById(
+  token: string,
+  itemId: string,
+): Promise<DriveItem | null> {
+  try {
+    return await graphFetch<DriveItem>(
+      token,
+      `${meItemPath(itemId)}?$select=id,name,folder,file,parentReference,webUrl`,
+    );
+  } catch {
+    return null;
+  }
+}
+
+async function searchFolderByName(
+  token: string,
+  name: string,
+): Promise<DriveItem | null> {
+  const wanted = sanitizeOnedriveName(name, "Client");
+  const safeQuery = wanted.replace(/['"]/g, " ").trim();
+  if (!safeQuery) return null;
+  try {
+    const page = await graphFetch<{ value?: DriveItem[] }>(
+      token,
+      `/me/drive/root/search(q='${encodeURIComponent(safeQuery)}')?$select=id,name,folder,parentReference,webUrl&$top=25`,
+    );
+    const folders = (page.value ?? []).filter(
+      (item) => item.folder && item.name,
+    );
+    return (
+      folders.find((item) => onedriveFolderNamesEqual(item.name ?? "", wanted)) ??
+      null
+    );
+  } catch {
+    return null;
+  }
+}
+
+async function resolveChantierUploadFolder(
+  token: string,
+  input: { shareUrl: string; folderName?: string },
+): Promise<{ itemId: string; driveId: string }> {
+  const fromUrl = await followShareUrlItemId(input.shareUrl);
+  if (fromUrl) {
+    const item = await driveItemById(token, fromUrl);
+    if (item?.id && item.folder) {
+      return {
+        itemId: item.id,
+        driveId: item.parentReference?.driveId || "",
+      };
+    }
+  }
+  try {
+    return await resolveShareItem(token, input.shareUrl);
+  } catch {
+    // Compte Hotmail : /shares est souvent refusé (JWT). On cible le dossier par nom.
+  }
+  const folderName = input.folderName?.trim();
+  if (folderName) {
+    const root = await getRootFolder();
+    const child = await findNamedChildFolder(token, root.itemId, folderName);
+    if (child?.id) {
+      return {
+        itemId: child.id,
+        driveId: child.parentReference?.driveId || root.driveId,
+      };
+    }
+    const searched = await searchFolderByName(token, folderName);
+    if (searched?.id) {
+      return {
+        itemId: searched.id,
+        driveId: searched.parentReference?.driveId || root.driveId,
+      };
+    }
+    const created = await createNamedChildFolder(token, root.itemId, folderName);
+    return {
+      itemId: created.id,
+      driveId: created.parentReference?.driveId || root.driveId,
+    };
+  }
+  throw new Error("Impossible de trouver le dossier OneDrive du chantier.");
+}
 
 async function resolveShareItem(
   token: string,
@@ -302,44 +466,28 @@ export async function ensureChildFolder(name: string): Promise<{
 }> {
   const token = await getValidAccessToken();
   const root = await getRootFolder();
-  const encoded = encodeURIComponent(name);
-  try {
-    const existing = await graphFetch<DriveItem>(
-      token,
-      `${meItemPath(root.itemId)}:/${encoded}`,
-    );
+  const existing = await findNamedChildFolder(token, root.itemId, name);
+  if (existing?.id) {
     return {
       itemId: existing.id,
       driveId: existing.parentReference?.driveId || root.driveId,
     };
+  }
+  try {
+    const created = await createNamedChildFolder(token, root.itemId, name);
+    return {
+      itemId: created.id,
+      driveId: created.parentReference?.driveId || root.driveId,
+    };
   } catch {
-    try {
-      const created = await graphFetch<DriveItem>(
-        token,
-        `${meItemPath(root.itemId)}/children`,
-        {
-          method: "POST",
-          body: JSON.stringify({
-            name,
-            folder: {},
-            "@microsoft.graph.conflictBehavior": "fail",
-          }),
-        },
-      );
+    const retry = await findNamedChildFolder(token, root.itemId, name);
+    if (retry?.id) {
       return {
-        itemId: created.id,
-        driveId: created.parentReference?.driveId || root.driveId,
-      };
-    } catch {
-      const existing = await graphFetch<DriveItem>(
-        token,
-        `${meItemPath(root.itemId)}:/${encoded}`,
-      );
-      return {
-        itemId: existing.id,
-        driveId: existing.parentReference?.driveId || root.driveId,
+        itemId: retry.id,
+        driveId: retry.parentReference?.driveId || root.driveId,
       };
     }
+    throw new Error(`Impossible de trouver ou créer le dossier « ${name} ».`);
   }
 }
 
@@ -484,14 +632,17 @@ async function uploadToMeDriveItem(
 ): Promise<void> {
   const safeName = sanitizeOnedriveName(fileName, "document.bin");
   const encodedName = encodeURIComponent(safeName);
-  const raw = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  const raw = Buffer.from(bytes);
   const res = await graphRequest(
     token,
     `${meItemPath(itemId)}:/${encodedName}:/content`,
     {
       method: "PUT",
-      headers: { "Content-Type": contentType },
-      body: raw as unknown as BodyInit,
+      headers: {
+        "Content-Type": contentType,
+        Prefer: "conflictBehavior=replace",
+      },
+      body: raw,
     },
   );
   if (!res.ok) {
@@ -508,28 +659,17 @@ export async function uploadBytesToShareFolder(input: {
   folderName?: string;
 }): Promise<void> {
   const token = await getValidAccessToken();
-  try {
-    const folder = await resolveShareItem(token, input.shareUrl);
-    await uploadToMeDriveItem(
-      token,
-      folder.itemId,
-      input.fileName,
-      input.bytes,
-      input.contentType,
-    );
-    return;
-  } catch (err) {
-    const folderName = input.folderName?.trim();
-    if (!folderName) throw err;
-    const child = await ensureChildFolder(folderName);
-    await uploadToMeDriveItem(
-      token,
-      child.itemId,
-      input.fileName,
-      input.bytes,
-      input.contentType,
-    );
-  }
+  const folder = await resolveChantierUploadFolder(token, {
+    shareUrl: input.shareUrl,
+    folderName: input.folderName,
+  });
+  await uploadToMeDriveItem(
+    token,
+    folder.itemId,
+    input.fileName,
+    input.bytes,
+    input.contentType,
+  );
 }
 
 export async function uploadPngToShareFolder(input: {
