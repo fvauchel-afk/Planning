@@ -28,8 +28,8 @@ export function AdministratifIdleAlert() {
           : `${rows.length} salariés sans chantier sur 7 jours : ${names}${extra}.`}
       </p>
       <p className="mt-1 text-xs">
-        Une suggestion de bloc Administratif attend votre validation. Rien n’est
-        ajouté au planning tant que vous n’avez pas accepté.
+        Les jours vides sont remplis automatiquement par un bloc Administratif
+        (priorité Pas pressé), sauf si un autre signalement urgent attend.
       </p>
       <Link href="/signalements" className="mt-1 inline-block font-medium underline">
         Ouvrir les signalements
