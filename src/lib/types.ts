@@ -1,4 +1,5 @@
 import type { LigneFourniture } from "@/lib/fournitures";
+import type { LigneBonCommande } from "@/lib/bon-commande/lignes";
 import type { FinitionLaquage } from "@/lib/thermolaquage";
 
 export const ROLES = [
@@ -108,6 +109,7 @@ export type Chantier = {
   telephone_livraison?: string | null;
   plan_valide?: boolean;
   fournitures?: LigneFourniture[];
+  lignes_bon_commande?: LigneBonCommande[];
   plan_demande_id?: string | null;
 };
 
@@ -368,6 +370,7 @@ export type ChantierSimplePatch = {
   adresse_livraison?: string | null;
   telephone_livraison?: string | null;
   fournitures?: LigneFourniture[];
+  lignes_bon_commande?: LigneBonCommande[];
   couleur_ral?: string | null;
   finition?: FinitionLaquage | null;
 };

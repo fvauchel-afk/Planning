@@ -1,7 +1,13 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { BonCommandeLignesEditor } from "@/components/BonCommandeLignesEditor";
 import { PdfPreview } from "@/components/PdfPreview";
+import {
+  defaultLignesBonCommande,
+  normalizeLignesBonCommande,
+  type LigneBonCommande,
+} from "@/lib/bon-commande/lignes";
 import { usePlanning } from "@/lib/planning-context";
 import { planningApiPost } from "@/lib/planning/api";
 import type { SousTraitant } from "@/lib/types";
@@ -25,10 +31,20 @@ export function BonCommandeModal({
 }) {
   const { snapshot, refresh } = usePlanning();
   const chantier = snapshot.chantiers.find((item) => item.id === chantierId);
+  const elements = useMemo(
+    () => snapshot.elements.filter((item) => item.chantier_id === chantierId),
+    [snapshot.elements, chantierId],
+  );
   const rows = useMemo(() => snapshot.sousTraitants ?? [], [snapshot.sousTraitants]);
   const [sousTraitantId, setSousTraitantId] = useState(
     chantier?.sous_traitant_id ?? "",
   );
+  const [lignes, setLignes] = useState<LigneBonCommande[]>(() => {
+    if (chantier?.lignes_bon_commande?.length) {
+      return chantier.lignes_bon_commande;
+    }
+    return defaultLignesBonCommande(elements);
+  });
   const [specialite, setSpecialite] = useState(() => {
     const saved = rows.find((row) => row.id === chantier?.sous_traitant_id);
     return saved?.specialite || "tout";
@@ -55,12 +71,18 @@ export function BonCommandeModal({
       setError("Choisissez un sous-traitant.");
       return;
     }
+    const pieces = normalizeLignesBonCommande(lignes);
+    if (!pieces.length) {
+      setError("Ajoutez au moins une pièce (quantité et descriptif).");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
       const data = await planningApiPost<Preview>("/api/planning/bon-commande", {
         chantierId,
         sousTraitantId,
+        lignes: pieces,
         confirm: false,
       });
       setPreview(data);
@@ -73,6 +95,11 @@ export function BonCommandeModal({
 
   async function send() {
     if (!sousTraitantId || !preview) return;
+    const pieces = normalizeLignesBonCommande(lignes);
+    if (!pieces.length) {
+      setError("Ajoutez au moins une pièce (quantité et descriptif).");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -82,6 +109,7 @@ export function BonCommandeModal({
       }>("/api/planning/bon-commande", {
         chantierId,
         sousTraitantId,
+        lignes: pieces,
         confirm: true,
       });
       await refresh();
@@ -117,8 +145,9 @@ export function BonCommandeModal({
         ) : (
           <>
             <p className="mt-1 text-sm text-stone-600">
-              Choisissez le sous-traitant, vérifiez l’aperçu, puis confirmez
-              l’envoi. Rien ne part sans cette confirmation.
+              Renseignez les pièces (quantité et descriptif), choisissez le
+              sous-traitant, vérifiez l’aperçu, puis confirmez l’envoi. Rien ne
+              part sans cette confirmation.
             </p>
             {rows.length === 0 ? (
               <p className="mt-3 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
@@ -169,6 +198,17 @@ export function BonCommandeModal({
                 ) : null}
               </div>
             )}
+            <div className="mt-3">
+              <p className="mb-1 text-sm font-medium">Pièces</p>
+              <BonCommandeLignesEditor
+                rows={lignes}
+                disabled={busy}
+                onChange={(next) => {
+                  setLignes(next);
+                  setPreview(null);
+                }}
+              />
+            </div>
             {error ? (
               <p className="mt-3 text-sm text-red-700">{error}</p>
             ) : null}

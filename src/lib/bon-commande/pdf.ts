@@ -4,11 +4,16 @@ import path from "node:path";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { formatIsoFr } from "@/lib/dates";
 import { FINITION_LAQUAGE_LABELS } from "@/lib/thermolaquage";
-import type { Chantier, ElementChantier, PhasePlanning, SousTraitant } from "@/lib/types";
+import {
+  formatQuantiteBonCommande,
+  normalizeLignesBonCommande,
+  type LigneBonCommande,
+} from "@/lib/bon-commande/lignes";
+import type { Chantier, PhasePlanning, SousTraitant } from "@/lib/types";
 
 export type BonCommandePdfInput = {
   chantier: Chantier;
-  elements: ElementChantier[];
+  lignes: LigneBonCommande[];
   fabrication: PhasePlanning | null;
   sousTraitant: SousTraitant;
   dateDocument: string;
@@ -20,11 +25,48 @@ function line(text: string, max = 90) {
   return `${value.slice(0, max - 1)}…`;
 }
 
+function wrapToWidth(
+  text: string,
+  font: { widthOfTextAtSize: (value: string, size: number) => number },
+  size: number,
+  maxWidth: number,
+): string[] {
+  const value = text.replace(/\s+/g, " ").trim() || "—";
+  const words = value.split(" ");
+  const lines: string[] = [];
+  let current = "";
+  const fits = (candidate: string) =>
+    font.widthOfTextAtSize(candidate, size) <= maxWidth;
+
+  const flushLong = (chunk: string) => {
+    let rest = chunk;
+    while (rest && !fits(rest)) {
+      let cut = rest.length - 1;
+      while (cut > 1 && !fits(rest.slice(0, cut))) cut -= 1;
+      lines.push(rest.slice(0, cut));
+      rest = rest.slice(cut);
+    }
+    return rest;
+  };
+
+  for (const word of words) {
+    const next = current ? `${current} ${word}` : word;
+    if (fits(next)) {
+      current = next;
+      continue;
+    }
+    if (current) lines.push(current);
+    current = fits(word) ? word : flushLong(word);
+  }
+  if (current) lines.push(current);
+  return lines.length ? lines : ["—"];
+}
+
 export async function buildBonCommandePdf(
   input: BonCommandePdfInput,
 ): Promise<{ bytes: Uint8Array; fileName: string }> {
   const pdf = await PDFDocument.create();
-  const page = pdf.addPage([595.28, 841.89]);
+  let page = pdf.addPage([595.28, 841.89]);
   const font = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
   const { height } = page.getSize();
@@ -129,20 +171,68 @@ export async function buildBonCommandePdf(
     font,
   });
   y -= 24;
-  page.drawText("Ouvrages / description", { x: 48, y, size: 13, font: bold });
-  y -= 20;
-  const description =
-    input.elements.map((item) => item.nom_element).filter(Boolean).join(", ") ||
-    "Non renseigne";
-  page.drawText(line(description, 92), { x: 48, y, size: 11, font });
-  if (input.fabrication?.duree_estimee_heures) {
+  page.drawText("Pieces", { x: 48, y, size: 13, font: bold });
+  y -= 18;
+  page.drawText("Qte", { x: 48, y, size: 10, font: bold });
+  page.drawText("Descriptif", { x: 92, y, size: 10, font: bold });
+  y -= 14;
+  const pieces = normalizeLignesBonCommande(input.lignes);
+  const qtyX = 48;
+  const descX = 92;
+  const descWidth = 455;
+  const footerY = 56;
+
+  const ensureSpace = (needed: number) => {
+    if (y - needed >= footerY) return;
+    page.drawText("Ferronnerie Vauchel — Planning", {
+      x: 48,
+      y: 48,
+      size: 9,
+      font,
+      color: rgb(0.45, 0.4, 0.35),
+    });
+    page = pdf.addPage([595.28, 841.89]);
+    y = height - 56;
+    page.drawText("Pieces (suite)", { x: 48, y, size: 13, font: bold });
+    y -= 18;
+    page.drawText("Qte", { x: 48, y, size: 10, font: bold });
+    page.drawText("Descriptif", { x: 92, y, size: 10, font: bold });
+    y -= 14;
+  };
+
+  if (!pieces.length) {
+    page.drawText("Aucune piece renseignee", { x: 48, y, size: 11, font });
     y -= 16;
+  } else {
+    for (const piece of pieces) {
+      const wrapped = wrapToWidth(piece.descriptif, font, 11, descWidth);
+      ensureSpace(wrapped.length * 14);
+      page.drawText(formatQuantiteBonCommande(piece.quantite), {
+        x: qtyX,
+        y,
+        size: 11,
+        font,
+      });
+      wrapped.forEach((part, index) => {
+        if (index > 0) {
+          y -= 14;
+          ensureSpace(14);
+        }
+        page.drawText(part, { x: descX, y, size: 11, font });
+      });
+      y -= 16;
+    }
+  }
+  if (input.fabrication?.duree_estimee_heures) {
+    ensureSpace(16);
     page.drawText(
       `Charge fabrication : ${input.fabrication.duree_estimee_heures} h`,
       { x: 48, y, size: 11, font },
     );
+    y -= 16;
   }
-  y -= 36;
+  y -= 20;
+  ensureSpace(32);
   page.drawText(
     "Merci de traiter cette commande selon le delai habituel de 5 jours ouvres",
     { x: 48, y, size: 10, font, color: rgb(0.25, 0.22, 0.18) },
