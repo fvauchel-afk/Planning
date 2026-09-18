@@ -328,6 +328,7 @@ export type NewChantierInput = {
   date_debut?: string | null;
   date_fin?: string | null;
   dates_estimatives?: boolean;
+  avec_fabrication?: boolean;
   avec_pose?: boolean;
   avec_thermolaquage?: boolean;
   avec_livraison?: boolean;

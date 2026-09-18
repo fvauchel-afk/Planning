@@ -132,6 +132,7 @@ export function ChantierForm() {
   const [dateFin, setDateFin] = useState("");
   const [datesEstimatives, setDatesEstimatives] = useState(true);
   const [avecPose, setAvecPose] = useState<boolean | null>(null);
+  const [avecFabrication, setAvecFabrication] = useState<boolean | null>(null);
   const [avecThermolaquage, setAvecThermolaquage] = useState<boolean | null>(null);
   const [avecLivraison, setAvecLivraison] = useState<boolean | null>(null);
   const [adresseLivraison, setAdresseLivraison] = useState("");
@@ -227,17 +228,24 @@ export function ChantierForm() {
     );
   }
 
-  function applyChantierAndFabricationDates(nextDebut: string, nextFin: string) {
+  function applyChantierAndLinkedPhaseDates(nextDebut: string, nextFin: string) {
     const debut = nextDebut;
     let fin = nextFin;
     if (debut && fin && fin < debut) fin = debut;
     setDateDebut(debut);
     setDateFin(fin);
+    const linked: TypePhase | null =
+      avecFabrication === true
+        ? "fabrication"
+        : avecFabrication === false && avecPose === true
+          ? "pose"
+          : null;
+    if (!linked) return;
     setElements((current) =>
       current.map((element) => ({
         ...element,
         phases: element.phases.map((phase) =>
-          phase.type_phase === "fabrication"
+          phase.type_phase === linked
             ? { ...phase, date_debut: debut, date_fin: fin }
             : phase,
         ),
@@ -257,6 +265,10 @@ export function ChantierForm() {
     }
     if (avecPose === null) {
       setError("Indiquez si le chantier comprend une installation / pose.");
+      return null;
+    }
+    if (avecFabrication === null) {
+      setError("Indiquez si le chantier comprend une fabrication.");
       return null;
     }
     if (avecThermolaquage === null) {
@@ -298,6 +310,7 @@ export function ChantierForm() {
       date_fin: dateFin || dateDebut || null,
       dates_estimatives: datesEstimatives,
       avec_pose: avecPose,
+      avec_fabrication: avecFabrication,
       avec_thermolaquage: avecThermolaquage,
       avec_livraison: avecLivraison,
       adresse_livraison: avecLivraison ? adresseLivraison.trim() : null,
@@ -325,7 +338,9 @@ export function ChantierForm() {
               ? null
               : phase.type_phase === "livraison" && avecLivraison
                 ? employeLivraison
-                : phase.type_phase === "fabrication" && employeFabrication
+                : phase.type_phase === "fabrication" &&
+                    avecFabrication &&
+                    employeFabrication
                   ? employeFabrication
                   : phase.type_phase === "pose" && avecPose && employePose
                     ? employePose
@@ -744,7 +759,7 @@ export function ChantierForm() {
                 type="date"
                 value={dateDebut}
                 onChange={(event) => {
-                  applyChantierAndFabricationDates(
+                  applyChantierAndLinkedPhaseDates(
                     event.target.value,
                     dateFin,
                   );
@@ -759,7 +774,7 @@ export function ChantierForm() {
                 value={dateFin}
                 min={dateDebut || undefined}
                 onChange={(event) =>
-                  applyChantierAndFabricationDates(
+                  applyChantierAndLinkedPhaseDates(
                     dateDebut,
                     event.target.value,
                   )
@@ -864,21 +879,45 @@ export function ChantierForm() {
         </fieldset>
         <fieldset className="rounded-lg border border-stone-300 bg-stone-50/60 p-3 text-sm md:col-span-2">
           <legend className="px-1 font-medium text-stone-800">
-            Fabrication
+            Fabrication <span className="text-red-700">*</span>
           </legend>
-          <label className="mt-1 block">
-            <span className="mb-1 block font-medium">
-              Salarié responsable de la fabrication
-            </span>
-            <EmployeePhaseSelect
-              employees={employeesByRole}
-              type="fabrication"
-              value={employeFabrication}
-              onChange={setEmployeFabrication}
-              emptyLabel="Auto (premier disponible)"
-              className="w-full rounded border border-stone-300 bg-white px-3 py-2"
-            />
-          </label>
+          <div className="flex flex-wrap gap-4">
+            <label className="inline-flex items-center gap-2">
+              <input
+                type="radio"
+                name="avec-fabrication"
+                required
+                checked={avecFabrication === true}
+                onChange={() => setAvecFabrication(true)}
+              />
+              Oui
+            </label>
+            <label className="inline-flex items-center gap-2">
+              <input
+                type="radio"
+                name="avec-fabrication"
+                required
+                checked={avecFabrication === false}
+                onChange={() => setAvecFabrication(false)}
+              />
+              Non
+            </label>
+          </div>
+          {avecFabrication ? (
+            <label className="mt-3 block">
+              <span className="mb-1 block font-medium">
+                Salarié responsable de la fabrication
+              </span>
+              <EmployeePhaseSelect
+                employees={employeesByRole}
+                type="fabrication"
+                value={employeFabrication}
+                onChange={setEmployeFabrication}
+                emptyLabel="Auto (premier disponible)"
+                className="w-full rounded border border-stone-300 bg-white px-3 py-2"
+              />
+            </label>
+          ) : null}
         </fieldset>
         <fieldset className="rounded-lg border border-stone-300 bg-stone-50/60 p-3 text-sm md:col-span-2">
           <legend className="px-1 font-medium text-stone-800">
@@ -1134,6 +1173,12 @@ export function ChantierForm() {
                         return false;
                       }
                       if (
+                        phase.type_phase === "fabrication" &&
+                        avecFabrication !== true
+                      ) {
+                        return false;
+                      }
+                      if (
                         phase.type_phase === "logistique" &&
                         avecThermolaquage === false
                       ) {
@@ -1199,8 +1244,14 @@ export function ChantierForm() {
                           value={phase.date_debut}
                           onChange={(event) => {
                             const next = event.target.value;
-                            if (phase.type_phase === "fabrication") {
-                              applyChantierAndFabricationDates(
+                            if (
+                              (avecFabrication === true &&
+                                phase.type_phase === "fabrication") ||
+                              (avecFabrication === false &&
+                                avecPose === true &&
+                                phase.type_phase === "pose")
+                            ) {
+                              applyChantierAndLinkedPhaseDates(
                                 next,
                                 phase.date_fin || dateFin,
                               );
@@ -1219,8 +1270,14 @@ export function ChantierForm() {
                           value={phase.date_fin}
                           onChange={(event) => {
                             const next = event.target.value;
-                            if (phase.type_phase === "fabrication") {
-                              applyChantierAndFabricationDates(
+                            if (
+                              (avecFabrication === true &&
+                                phase.type_phase === "fabrication") ||
+                              (avecFabrication === false &&
+                                avecPose === true &&
+                                phase.type_phase === "pose")
+                            ) {
+                              applyChantierAndLinkedPhaseDates(
                                 phase.date_debut || dateDebut,
                                 next,
                               );

@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-18-phase-oui-non-fab",
+    title: "Chantier avec pose seulement",
+    items: [
+      "À la création et dans Modifier, Fabrication a un Oui / Non, comme la pose, le thermolaquage et la livraison.",
+      "Si vous répondez Non, la phase disparaît : plus de durée, de dates ni de salarié. Les dates du chantier se recopient alors sur la pose s’il y en a une.",
+    ],
+  },
+  {
     id: "2026-09-18-administratif-auto-7j",
     title: "Administratif sur 7 jours vides",
     items: [

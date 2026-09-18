@@ -131,6 +131,9 @@ export function ChantierEditModal({
     [snapshot, chantier.id],
   );
   const [avecPose, setAvecPose] = useState(currentOptions.avecPose);
+  const [avecFabrication, setAvecFabrication] = useState(
+    currentOptions.avecFabrication,
+  );
   const [avecThermolaquage, setAvecThermolaquage] = useState(
     currentOptions.avecThermolaquage,
   );
@@ -199,6 +202,7 @@ export function ChantierEditModal({
       source.chantiers.find((item) => item.id === chantier.id) ?? chantier;
     setDatesEstimatives(chantierHasEstimativeDates(source, chantier.id));
     setAvecPose(options.avecPose);
+    setAvecFabrication(options.avecFabrication);
     setAvecThermolaquage(options.avecThermolaquage);
     setAvecLivraison(options.avecLivraison);
     setDelaiLaquage(String(latest.delai_sous_traitance_jours || 5));
@@ -237,6 +241,7 @@ export function ChantierEditModal({
   function applyChantierDraft(draft: ChantierCascadeDraft) {
     setDatesEstimatives(draft.datesEstimatives);
     setAvecPose(draft.avecPose);
+    setAvecFabrication(draft.avecFabrication ?? true);
     setAvecThermolaquage(draft.avecThermolaquage);
     setAvecLivraison(draft.avecLivraison);
     setDelaiLaquage(draft.delaiLaquage);
@@ -364,6 +369,7 @@ export function ChantierEditModal({
           : {};
       const preview = previewPhaseEdits(snapshot, dateEdits);
       const optionEdits = planChantierOptionEdits(preview, chantier.id, {
+        avecFabrication,
         avecPose,
         avecThermolaquage,
         avecLivraison,
@@ -389,6 +395,7 @@ export function ChantierEditModal({
     planDate,
     planEnd,
     avecPose,
+    avecFabrication,
     avecThermolaquage,
     avecLivraison,
     dureeLivraison,
@@ -417,6 +424,7 @@ export function ChantierEditModal({
       planEmployeeId,
       datesEstimatives,
       avecPose,
+      avecFabrication,
       avecThermolaquage,
       avecLivraison,
       delaiLaquage,
@@ -435,6 +443,7 @@ export function ChantierEditModal({
     planEmployeeId,
     datesEstimatives,
     avecPose,
+    avecFabrication,
     avecThermolaquage,
     avecLivraison,
     delaiLaquage,
@@ -522,6 +531,7 @@ export function ChantierEditModal({
         : {};
     const preview = previewPhaseEdits(snap, dateEdits);
     const optionEdits = planChantierOptionEdits(preview, chantier.id, {
+      avecFabrication,
       avecPose,
       avecThermolaquage,
       avecLivraison,
@@ -576,6 +586,9 @@ export function ChantierEditModal({
       }
       if (hadCascadeEdits) {
       const removed: string[] = [];
+      if (currentOptions.avecFabrication && !avecFabrication) {
+        removed.push("Fabrication");
+      }
       if (currentOptions.avecThermolaquage && !avecThermolaquage) {
         removed.push("Thermolaquage / galvanisation");
       }
@@ -940,22 +953,50 @@ export function ChantierEditModal({
           </fieldset>
           <fieldset className="rounded-lg border border-stone-300 bg-stone-50/60 p-3 text-sm">
             <legend className="px-1 font-medium text-stone-800">Fabrication</legend>
-            <label className="mt-1 block">
-              <span className="mb-1 block font-medium">
-                Salarié responsable de la fabrication
-              </span>
-              <EmployeePhaseSelect
-                employees={activeEmployees}
-                type="fabrication"
-                value={employeFabrication}
-                onChange={(id) => {
-                  markCascade();
-                  setEmployeFabrication(id);
-                }}
-                emptyLabel="Auto (premier disponible)"
-                className="w-full rounded border border-stone-300 bg-white px-3 py-2"
-              />
-            </label>
+            <div className="mt-1 flex flex-wrap gap-4">
+              <label className="inline-flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="edit-avec-fabrication"
+                  checked={avecFabrication}
+                  onChange={() => {
+                    markCascade();
+                    setAvecFabrication(true);
+                  }}
+                />
+                Oui
+              </label>
+              <label className="inline-flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="edit-avec-fabrication"
+                  checked={!avecFabrication}
+                  onChange={() => {
+                    markCascade();
+                    setAvecFabrication(false);
+                  }}
+                />
+                Non
+              </label>
+            </div>
+            {avecFabrication ? (
+              <label className="mt-3 block">
+                <span className="mb-1 block font-medium">
+                  Salarié responsable de la fabrication
+                </span>
+                <EmployeePhaseSelect
+                  employees={activeEmployees}
+                  type="fabrication"
+                  value={employeFabrication}
+                  onChange={(id) => {
+                    markCascade();
+                    setEmployeFabrication(id);
+                  }}
+                  emptyLabel="Auto (premier disponible)"
+                  className="w-full rounded border border-stone-300 bg-white px-3 py-2"
+                />
+              </label>
+            ) : null}
           </fieldset>
           <fieldset className="rounded-lg border border-stone-300 bg-stone-50/60 p-3 text-sm">
             <legend className="px-1 font-medium text-stone-800">
