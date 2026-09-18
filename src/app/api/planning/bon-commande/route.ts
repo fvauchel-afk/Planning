@@ -6,6 +6,11 @@ import {
   unauthorized,
 } from "@/lib/auth/guard";
 import { canGenerateBonCommande } from "@/lib/bon-commande/active-phase";
+import {
+  formatLignesBonCommandeText,
+  normalizeLignesBonCommande,
+  parseLignesBonCommande,
+} from "@/lib/bon-commande/lignes";
 import { BON_COMMANDE_CC, sendBonCommandeEmail } from "@/lib/bon-commande/mail";
 import { buildBonCommandePdf } from "@/lib/bon-commande/pdf";
 import { FINITION_LAQUAGE_LABELS } from "@/lib/thermolaquage";
@@ -24,6 +29,7 @@ import {
   supabaseListSousTraitants,
   supabaseMarkBonCommande,
   supabaseConfirmPhaseDates,
+  supabasePatchChantier,
 } from "@/lib/store/supabase";
 import { formatIsoFr } from "@/lib/dates";
 import {
@@ -40,9 +46,14 @@ type Body = {
   chantierId?: string;
   sousTraitantId?: string;
   confirm?: boolean;
+  lignes?: unknown;
 };
 
-async function prepare(chantierId: string, sousTraitantId: string) {
+async function prepare(
+  chantierId: string,
+  sousTraitantId: string,
+  lignesRaw: unknown,
+) {
   const snapshot = await fetchSupabaseSnapshot();
   const chantier = snapshot.chantiers.find((item) => item.id === chantierId);
   if (!chantier) throw new Error("Chantier introuvable.");
@@ -67,9 +78,15 @@ async function prepare(chantierId: string, sousTraitantId: string) {
     ) ?? null;
   const dateDocument =
     fabrication?.date_debut || todayIso();
+  const lignes = normalizeLignesBonCommande(parseLignesBonCommande(lignesRaw));
+  if (!lignes.length) {
+    throw new Error(
+      "Ajoutez au moins une pièce (quantité et descriptif) avant de générer le bon.",
+    );
+  }
   const pdf = await buildBonCommandePdf({
     chantier,
-    elements,
+    lignes,
     fabrication,
     sousTraitant,
     dateDocument,
@@ -87,6 +104,7 @@ async function prepare(chantierId: string, sousTraitantId: string) {
     chantier,
     sousTraitant,
     pdf,
+    lignes,
     dateDocument,
     sendDate,
     delay,
@@ -110,9 +128,20 @@ export async function POST(request: NextRequest) {
     );
   }
   try {
-    const prepared = await prepare(body.chantierId, body.sousTraitantId);
-    const { chantier, sousTraitant, pdf, dateDocument, sendDate, delay } =
-      prepared;
+    const prepared = await prepare(
+      body.chantierId,
+      body.sousTraitantId,
+      body.lignes,
+    );
+    const {
+      chantier,
+      sousTraitant,
+      pdf,
+      lignes,
+      dateDocument,
+      sendDate,
+      delay,
+    } = prepared;
     const subject = `Bon de commande — ${chantier.nom_client} — ${sousTraitant.specialite}`;
     const text = [
       `Bon de commande Ferronnerie Vauchel / La Métallerie du Sud.`,
@@ -126,10 +155,19 @@ export async function POST(request: NextRequest) {
         : "",
       `Départ fabrication prévu : ${formatIsoFr(dateDocument)}`,
       `Sous-traitant : ${sousTraitant.nom} (${sousTraitant.specialite})`,
+      "",
+      "Pièces :",
+      formatLignesBonCommandeText(lignes),
+      "",
       `Délai officiel : 5 jours ouvrés à compter de l’envoi (${formatIsoFr(sendDate)}).`,
     ]
       .filter(Boolean)
       .join("\n");
+
+    await supabasePatchChantier({
+      id: chantier.id,
+      lignes_bon_commande: lignes,
+    });
 
     if (!body.confirm) {
       return NextResponse.json({

@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-18-bon-commande-pieces",
+    title: "Pièces sur le bon de commande",
+    items: [
+      "Avant l’aperçu et l’envoi, vous remplissez les lignes du bon : quantité et descriptif de chaque pièce.",
+      "Vous pouvez ajouter ou supprimer des lignes. Elles s’affichent sur le PDF et dans l’e-mail, et restent sur la fiche chantier.",
+    ],
+  },
+  {
     id: "2026-09-18-moi-retour-accueil",
     title: "Retour au planning depuis Mon planning",
     items: [

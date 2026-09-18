@@ -58,6 +58,10 @@ import type {
   SousTraitant,
 } from "@/lib/types";
 import { formatFournituresMessage, normalizeFournitures, parseFournitures } from "@/lib/fournitures";
+import {
+  normalizeLignesBonCommande,
+  parseLignesBonCommande,
+} from "@/lib/bon-commande/lignes";
 import { parseFinitionLaquage } from "@/lib/thermolaquage";
 import { TYPES_PHASE } from "@/lib/types";
 import {
@@ -229,6 +233,10 @@ async function fetchSupabaseSnapshotOnce(): Promise<PlanningSnapshot> {
       ),
       fournitures: parseFournitures(
         (chantier as Chantier & { fournitures?: unknown }).fournitures,
+      ),
+      lignes_bon_commande: parseLignesBonCommande(
+        (chantier as Chantier & { lignes_bon_commande?: unknown })
+          .lignes_bon_commande,
       ),
       plan_demande_id:
         typeof (chantier as Chantier & { plan_demande_id?: unknown })
@@ -676,6 +684,7 @@ const CHANTIER_OPTIONAL_COLUMNS = [
   "dates_estimatives",
   "plan_valide",
   "fournitures",
+  "lignes_bon_commande",
   "plan_demande_id",
   "couleur_ral",
   "finition",
@@ -726,6 +735,11 @@ export async function supabasePatchChantier(
   }
   if (input.fournitures !== undefined) {
     payload.fournitures = normalizeFournitures(input.fournitures);
+  }
+  if (input.lignes_bon_commande !== undefined) {
+    payload.lignes_bon_commande = normalizeLignesBonCommande(
+      input.lignes_bon_commande,
+    );
   }
   if (input.couleur_ral !== undefined) {
     payload.couleur_ral = input.couleur_ral?.trim() || null;

@@ -177,6 +177,7 @@ export function localCreateChantier(
             ),
     plan_valide: false,
     fournitures: [],
+    lignes_bon_commande: [],
   });
   for (const element of input.elements) {
     const elementId = newId();
@@ -669,6 +670,8 @@ export function localPatchChantier(
             ? null
             : chantier.tolerance_deplacement_jours,
       fournitures: input.fournitures ?? chantier.fournitures,
+      lignes_bon_commande:
+        input.lignes_bon_commande ?? chantier.lignes_bon_commande,
       couleur_ral:
         input.couleur_ral !== undefined
           ? input.couleur_ral
