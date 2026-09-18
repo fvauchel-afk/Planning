@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { AbsenceImpactEditor } from "@/components/AbsenceImpactEditor";
 import { ConflictModal } from "@/components/ConflictModal";
@@ -25,6 +25,7 @@ import {
   clearFormDraft,
   readFormDraft,
   setUnsavedWork,
+  useFlushFormDraft,
   useFormDraftReopen,
   writeFormDraft,
 } from "@/lib/form-draft";
@@ -200,8 +201,7 @@ export function AbsencesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- ouvrir une seule fois le brouillon
   }, [reopen, snapshot.absences, clearReopen]);
 
-  useEffect(() => {
-    if (!cascadeDirty.current) return;
+  const persistDraft = useCallback(() => {
     if (!editingId) return;
     writeFormDraft({
       kind: "absence",
@@ -212,6 +212,13 @@ export function AbsencesPage() {
       dateFin,
     });
   }, [pathname, editingId, employeId, dateDebut, dateFin]);
+
+  useFlushFormDraft(persistDraft);
+
+  useEffect(() => {
+    if (!cascadeDirty.current) return;
+    persistDraft();
+  }, [persistDraft]);
 
   useEffect(
     () => () => {

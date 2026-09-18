@@ -13,6 +13,7 @@ import { usePathname, useRouter } from "next/navigation";
 
 const STORAGE_KEY = "vauchel_form_draft";
 const UNSAVED_EVENT = "vauchel-unsaved-work";
+const FLUSH_DRAFT_EVENT = "vauchel-flush-form-draft";
 
 const unsavedKeys = new Set<string>();
 
@@ -73,6 +74,18 @@ export function useHasUnsavedWork() {
     return () => window.removeEventListener(UNSAVED_EVENT, sync);
   }, []);
   return value;
+}
+
+export function requestFlushFormDraft() {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new Event(FLUSH_DRAFT_EVENT));
+}
+
+export function useFlushFormDraft(flush: () => void) {
+  useEffect(() => {
+    window.addEventListener(FLUSH_DRAFT_EVENT, flush);
+    return () => window.removeEventListener(FLUSH_DRAFT_EVENT, flush);
+  }, [flush]);
 }
 
 export function writeFormDraft(draft: FormDraft) {
