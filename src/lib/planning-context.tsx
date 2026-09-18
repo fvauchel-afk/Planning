@@ -49,6 +49,7 @@ import { fetchPlanningSnapshot, planningMutate } from "@/lib/planning/api";
 import { syntheseMessageConge } from "@/lib/demandes";
 import { shouldUseSharedDatabase } from "@/lib/supabase/client";
 import { DATABASE_UNAVAILABLE_MESSAGE, formatSaveError } from "@/lib/supabase/errors";
+import { useSession } from "@/lib/auth/session-context";
 import type {
   Absence,
   NewAbsenceInput,
@@ -181,6 +182,8 @@ const PlanningContext = createContext<PlanningContextValue | null>(null);
 
 export function PlanningProvider({ children }: { children: React.ReactNode }) {
   const useShared = shouldUseSharedDatabase();
+  const { session } = useSession();
+  const createdByNom = session?.nom?.trim() || null;
   const [snapshot, setSnapshot] = useState<PlanningSnapshot>(() =>
     useShared ? createEmptySnapshot() : createSeedSnapshot(),
   );
@@ -321,13 +324,13 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
       }
       let chantierId = "";
       setSnapshot((current) => {
-        const created = localCreateChantier(current, input);
+        const created = localCreateChantier(current, input, createdByNom);
         chantierId = created.chantierId;
         return created.snapshot;
       });
       if (chantierId) queueOnedriveFolder(input, chantierId);
     },
-    [useShared, refresh, assertWritable, mutate, queueOnedriveFolder],
+    [useShared, refresh, assertWritable, mutate, queueOnedriveFolder, createdByNom],
   );
 
   const updateChantier = useCallback(
@@ -560,13 +563,13 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
       setSnapshot((current) => {
         const shifted =
           patches.length > 0 ? localApplyPhasePatches(current, patches) : current;
-        const created = localCreateChantier(shifted, input);
+        const created = localCreateChantier(shifted, input, createdByNom);
         chantierId = created.chantierId;
         return created.snapshot;
       });
       if (chantierId) queueOnedriveFolder(input, chantierId);
     },
-    [useShared, refresh, assertWritable, mutate, queueOnedriveFolder],
+    [useShared, refresh, assertWritable, mutate, queueOnedriveFolder, createdByNom],
   );
 
   const createSignalement = useCallback(
@@ -613,10 +616,10 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
         return;
       }
       setSnapshot((current) =>
-        localValidateSignalement(current, id, patches, createChantier),
+        localValidateSignalement(current, id, patches, createChantier, createdByNom),
       );
     },
-    [useShared, refresh, assertWritable, mutate],
+    [useShared, refresh, assertWritable, mutate, createdByNom],
   );
 
   const createReception = useCallback(

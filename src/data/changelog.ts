@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-18-chantier-createur",
+    title: "Qui a créé le chantier",
+    items: [
+      "Sur chaque fiche et dans la liste Chantiers, on voit qui a créé l’affaire et à quelle date.",
+      "Les chantiers déjà en base n’ont souvent pas de nom : ils s’affichent « Inconnu », avec la date de création connue.",
+    ],
+  },
+  {
     id: "2026-09-18-photos-bon-commande",
     title: "Photos sur le bon de commande",
     items: [

@@ -74,6 +74,7 @@ import {
   type Priorite,
   type TypePhase,
 } from "@/lib/types";
+import { formatChantierOrigine } from "@/lib/chantier-origine";
 
 const DELETE_CONFIRM =
   "Êtes-vous sûr ? Cette action est irréversible et supprimera aussi toutes les phases planifiées liées.";
@@ -829,6 +830,9 @@ export function ChantierEditModal({
           {info.rangeLabel ? ` · ${info.rangeLabel}` : ""}
           {datesEstimatives ? " · Estimatif" : ""}
           {planValide ? " · Plan validé" : " · Plan à faire"}
+        </p>
+        <p className="mt-1 text-sm font-medium text-stone-700">
+          {formatChantierOrigine(chantier)}
         </p>
         <p className="mt-2 text-xs text-stone-500">
           Nom, adresse, priorité et lien OneDrive s’enregistrent tout seuls. Les

@@ -145,16 +145,20 @@ function newId(): string {
 export function localCreateChantier(
   snapshot: PlanningSnapshot,
   input: NewChantierInput,
+  createdBy?: string | null,
 ): { snapshot: PlanningSnapshot; chantierId: string } {
   const next = clone(snapshot);
   const chantierId = newId();
+  const now = new Date().toISOString();
   next.chantiers.push({
     id: chantierId,
     nom_client: input.nom_client,
     adresse: input.adresse,
     lien_dossier_onedrive: input.lien_dossier_onedrive,
     priorite: input.priorite,
-    date_creation: new Date().toISOString().slice(0, 10),
+    date_creation: now.slice(0, 10),
+    created_by: createdBy?.trim() || null,
+    created_at: now,
     dates_estimatives: Boolean(input.dates_estimatives),
     adresse_livraison: input.adresse_livraison ?? null,
     telephone_livraison: input.telephone_livraison ?? null,
@@ -472,6 +476,7 @@ export function localValidateSignalement(
   id: string,
   patches: PhasePatch[],
   createChantier?: NewChantierInput | null,
+  createdBy?: string | null,
 ): PlanningSnapshot {
   const item = (snapshot.signalements ?? []).find((row) => row.id === id);
   const proposition = item?.proposition;
@@ -485,7 +490,7 @@ export function localValidateSignalement(
       ? proposition?.createChantier
       : createChantier ?? undefined;
   if (toCreate) {
-    next = localCreateChantier(next, toCreate).snapshot;
+    next = localCreateChantier(next, toCreate, createdBy).snapshot;
   }
   return localSetSignalementStatut(next, id, "valide");
 }

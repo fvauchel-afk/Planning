@@ -218,6 +218,15 @@ async function fetchSupabaseSnapshotOnce(): Promise<PlanningSnapshot> {
     chantiers: ((chantiers.data ?? []) as Chantier[]).map((chantier) => ({
       ...chantier,
       date_creation: asIsoDate(chantier.date_creation) ?? chantier.date_creation,
+      created_by:
+        typeof (chantier as Chantier).created_by === "string"
+          ? (chantier as Chantier).created_by?.trim() || null
+          : null,
+      created_at:
+        typeof (chantier as Chantier).created_at === "string" &&
+        (chantier as Chantier).created_at?.trim()
+          ? (chantier as Chantier).created_at
+          : null,
       dates_estimatives: Boolean(chantier.dates_estimatives),
       date_bon_commande: asIsoDate(chantier.date_bon_commande) ?? chantier.date_bon_commande ?? null,
       sous_traitant_id: chantier.sous_traitant_id ?? null,
@@ -373,8 +382,13 @@ function optionalTable<T>(result: {
 
 export async function supabaseCreateChantier(
   input: NewChantierInput,
+  createdBy?: string | null,
 ): Promise<string> {
   const supabase = createSupabaseServerClient();
+  const origine = {
+    created_by: createdBy?.trim() || null,
+    created_at: new Date().toISOString(),
+  };
   const payload = {
     nom_client: input.nom_client,
     adresse: input.adresse,
@@ -410,12 +424,27 @@ export async function supabaseCreateChantier(
     finition: input.avec_thermolaquage
       ? parseFinitionLaquage(input.finition)
       : null,
+    ...origine,
   };
   let inserted = await supabase
     .from("chantiers")
     .insert(payload)
     .select("id")
     .single();
+  if (
+    inserted.error &&
+    (isMissingColumnError(inserted.error, "created_by") ||
+      isMissingColumnError(inserted.error, "created_at"))
+  ) {
+    const withoutOrigine = { ...payload } as Record<string, unknown>;
+    delete withoutOrigine.created_by;
+    delete withoutOrigine.created_at;
+    inserted = await supabase
+      .from("chantiers")
+      .insert(withoutOrigine)
+      .select("id")
+      .single();
+  }
   if (
     inserted.error &&
     (isMissingColumnError(inserted.error, "couleur_ral") ||
@@ -447,6 +476,7 @@ export async function supabaseCreateChantier(
         delai_sous_traitance_jours: payload.delai_sous_traitance_jours,
         adresse_livraison: payload.adresse_livraison,
         telephone_livraison: payload.telephone_livraison,
+        ...origine,
       })
       .select("id")
       .single();
@@ -461,6 +491,7 @@ export async function supabaseCreateChantier(
         priorite: payload.priorite,
         dates_estimatives: payload.dates_estimatives,
         delai_sous_traitance_jours: payload.delai_sous_traitance_jours,
+        ...origine,
       })
       .select("id")
       .single();
@@ -474,6 +505,7 @@ export async function supabaseCreateChantier(
         lien_dossier_onedrive: payload.lien_dossier_onedrive,
         priorite: payload.priorite,
         dates_estimatives: payload.dates_estimatives,
+        ...origine,
       })
       .select("id")
       .single();
@@ -486,6 +518,7 @@ export async function supabaseCreateChantier(
         adresse: payload.adresse,
         lien_dossier_onedrive: payload.lien_dossier_onedrive,
         priorite: payload.priorite,
+        ...origine,
       })
       .select("id")
       .single();
