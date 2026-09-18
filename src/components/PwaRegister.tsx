@@ -10,8 +10,8 @@ import { useHasUnsavedWork } from "@/lib/form-draft";
 const CHECK_MS = 15_000;
 const STORAGE_BUILD = "vauchel_seen_build";
 const STORAGE_CHANGELOG = "vauchel_seen_changelog";
+const STORAGE_SNOOZE = "vauchel_snooze_build";
 const CLIENT_BUILD = process.env.NEXT_PUBLIC_APP_BUILD_ID || "dev";
-const GATE_ROOT_ID = "update-gate-root";
 
 type VersionPayload = {
   buildId?: string;
@@ -34,11 +34,15 @@ function unseenEntries(changelog: ChangelogEntry[]): ChangelogEntry[] {
   return changelog.filter((entry) => !seen.has(entry.id));
 }
 
-export function PwaRegister({
-  onLockChange,
-}: {
-  onLockChange?: (locked: boolean) => void;
-}) {
+function readSnoozedBuild(): string | null {
+  try {
+    return window.sessionStorage.getItem(STORAGE_SNOOZE);
+  } catch {
+    return null;
+  }
+}
+
+export function PwaRegister() {
   const pathname = usePathname();
   const { session, ready } = useSession();
   const hasUnsaved = useHasUnsavedWork();
@@ -93,6 +97,7 @@ export function PwaRegister({
         const waitingSw = Boolean(
           registration?.waiting && navigator.serviceWorker.controller,
         );
+        if (readSnoozedBuild() === buildId) return;
         if (serverNewer || clientStale || waitingSw || unseen.length > 0) {
           showUpdate(buildId, changelog);
         }
@@ -109,7 +114,9 @@ export function PwaRegister({
           });
           if (registration.waiting && navigator.serviceWorker.controller) {
             const seenBuild = window.localStorage.getItem(STORAGE_BUILD);
-            if (seenBuild) showUpdate(CLIENT_BUILD, CHANGELOG);
+            if (seenBuild && readSnoozedBuild() !== CLIENT_BUILD) {
+              showUpdate(CLIENT_BUILD, CHANGELOG);
+            }
           }
           registration.addEventListener("updatefound", () => {
             const installing = registration?.installing;
@@ -165,86 +172,6 @@ export function PwaRegister({
 
   const loggedIn =
     ready && Boolean(session) && pathname !== "/connexion" && pending !== null;
-  const showGate = loggedIn && !hasUnsaved;
-  const showNudge = loggedIn && hasUnsaved;
-
-  useEffect(() => {
-    onLockChange?.(showGate);
-  }, [onLockChange, showGate]);
-
-  useEffect(() => {
-    if (!showGate) return;
-    const html = document.documentElement;
-    const previousHtmlOverflow = html.style.overflow;
-    const previousBodyOverflow = document.body.style.overflow;
-    const previousBodyPosition = document.body.style.position;
-    html.classList.add("update-gate-open");
-    html.style.overflow = "hidden";
-    document.body.style.overflow = "hidden";
-    document.body.style.position = "relative";
-    const focusTimer = window.setTimeout(() => buttonRef.current?.focus(), 30);
-
-    const allow = (target: EventTarget | null) => {
-      const node = target as Node | null;
-      const root = document.getElementById(GATE_ROOT_ID);
-      return Boolean(root && node && root.contains(node));
-    };
-
-    const block = (event: Event) => {
-      if (allow(event.target)) return;
-      event.preventDefault();
-      event.stopPropagation();
-      event.stopImmediatePropagation();
-    };
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (!allow(event.target)) {
-        event.preventDefault();
-        event.stopPropagation();
-        event.stopImmediatePropagation();
-        buttonRef.current?.focus();
-        return;
-      }
-      if (event.key === "Escape") {
-        event.preventDefault();
-        event.stopPropagation();
-      }
-      if (event.key === "Tab") {
-        event.preventDefault();
-        buttonRef.current?.focus();
-      }
-    };
-
-    const types: Array<keyof DocumentEventMap> = [
-      "pointerdown",
-      "pointerup",
-      "click",
-      "mousedown",
-      "mouseup",
-      "touchstart",
-      "touchmove",
-      "wheel",
-      "scroll",
-    ];
-    for (const type of types) {
-      document.addEventListener(type, block, { capture: true, passive: false });
-    }
-    document.addEventListener("keydown", onKeyDown, true);
-    window.addEventListener("scroll", block, { capture: true, passive: false });
-
-    return () => {
-      window.clearTimeout(focusTimer);
-      html.classList.remove("update-gate-open");
-      html.style.overflow = previousHtmlOverflow;
-      document.body.style.overflow = previousBodyOverflow;
-      document.body.style.position = previousBodyPosition;
-      for (const type of types) {
-        document.removeEventListener(type, block, true);
-      }
-      document.removeEventListener("keydown", onKeyDown, true);
-      window.removeEventListener("scroll", block, true);
-    };
-  }, [showGate]);
 
   async function applyUpdate() {
     if (!pending) return;
@@ -293,54 +220,36 @@ export function PwaRegister({
     reloadOnce();
   }
 
-  if (!mounted || (!showGate && !showNudge) || !pending) return null;
-
-  if (showNudge) {
-    return createPortal(
-      <div
-        className="pointer-events-none fixed inset-x-0 top-0 z-[80] flex justify-center p-3"
-        role="status"
-      >
-        <div className="pointer-events-auto max-w-lg rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950 shadow-lg">
-          <p>
-            Une mise à jour est prête, elle s’appliquera à la fermeture de cette
-            fiche.
-          </p>
-          <button
-            type="button"
-            disabled={reloading}
-            onClick={() => void applyUpdate()}
-            className="mt-2 text-sm font-medium underline disabled:opacity-60"
-          >
-            {reloading ? "Mise à jour…" : "Mettre à jour maintenant"}
-          </button>
-        </div>
-      </div>,
-      document.body,
-    );
+  function snooze() {
+    if (!pending) return;
+    try {
+      window.sessionStorage.setItem(STORAGE_SNOOZE, pending.buildId);
+    } catch {
+      // ignore
+    }
+    setPending(null);
   }
+
+  if (!mounted || !loggedIn || !pending) return null;
 
   return createPortal(
     <div
-      id={GATE_ROOT_ID}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="update-gate-title"
-      className="fixed inset-0 z-[2147483647] flex items-center justify-center bg-stone-950/90 p-4"
-      style={{ touchAction: "none" }}
+      className="pointer-events-none fixed inset-x-0 top-0 z-[80] flex justify-center p-3"
+      role="status"
     >
-      <div
-        className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl"
-        style={{ touchAction: "auto" }}
-      >
-        <h2 id="update-gate-title" className="font-serif text-2xl text-stone-900">
+      <div className="pointer-events-auto max-h-[70vh] w-full max-w-lg overflow-y-auto rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950 shadow-lg">
+        <h2 className="font-serif text-lg text-stone-900">
           Une nouvelle version est disponible
         </h2>
-        <p className="mt-2 text-sm text-stone-600">
-          Cliquez sur Mettre à jour pour continuer. Tant que ce n’est pas fait,
-          l’application reste bloquée.
+        <p className="mt-1 text-sm text-stone-700">
+          Cliquez sur Mettre à jour pour l’appliquer. Vous pouvez continuer à
+          travailler : la session en cours n’est pas coupée tant que vous n’avez
+          pas mis à jour.
+          {hasUnsaved
+            ? " Une fiche est ouverte : votre saisie sera remise si vous mettez à jour maintenant."
+            : ""}
         </p>
-        <div className="mt-4 space-y-4">
+        <div className="mt-3 space-y-3">
           {pending.entries.map((entry) => (
             <div key={entry.id}>
               <h3 className="text-sm font-semibold text-stone-800">{entry.title}</h3>
@@ -352,15 +261,25 @@ export function PwaRegister({
             </div>
           ))}
         </div>
-        <button
-          ref={buttonRef}
-          type="button"
-          disabled={reloading}
-          onClick={() => void applyUpdate()}
-          className="mt-6 w-full rounded-lg bg-amber-700 px-4 py-3 text-base font-semibold text-amber-50 disabled:opacity-60"
-        >
-          {reloading ? "Mise à jour…" : "Mettre à jour"}
-        </button>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button
+            ref={buttonRef}
+            type="button"
+            disabled={reloading}
+            onClick={() => void applyUpdate()}
+            className="rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-amber-50 disabled:opacity-60"
+          >
+            {reloading ? "Mise à jour…" : "Mettre à jour"}
+          </button>
+          <button
+            type="button"
+            disabled={reloading}
+            onClick={snooze}
+            className="rounded-lg border border-amber-400 bg-white px-4 py-2 text-sm text-amber-950 disabled:opacity-60"
+          >
+            Plus tard
+          </button>
+        </div>
       </div>
     </div>,
     document.body,
