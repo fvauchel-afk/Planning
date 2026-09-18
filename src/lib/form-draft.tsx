@@ -26,6 +26,7 @@ export type ChantierCascadeDraft = {
   planEmployeeId: string;
   datesEstimatives: boolean;
   avecPose: boolean;
+  avecFabrication?: boolean;
   avecThermolaquage: boolean;
   avecLivraison: boolean;
   delaiLaquage: string;

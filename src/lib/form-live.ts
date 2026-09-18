@@ -45,6 +45,7 @@ export function chantierCascadeFingerprint(
   return JSON.stringify({
     phases,
     pose: opt.avecPose,
+    fab: opt.avecFabrication,
     thermo: opt.avecThermolaquage,
     liv: opt.avecLivraison,
     delay: chantier.delai_sous_traitance_jours ?? null,
