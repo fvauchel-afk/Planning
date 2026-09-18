@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-18-onedrive-oauth-303",
+    title: "Bouton Connecter OneDrive",
+    items: [
+      "Le bouton « Connecter OneDrive » ouvre bien la page Microsoft avec le bon identifiant d’application.",
+      "Plus d’erreur « client_id manquant » (AADSTS900144) en cliquant sur Connecter.",
+    ],
+  },
+  {
     id: "2026-09-17-lancement-mail-absence",
     title: "Rappel lancement fabrication",
     items: [
