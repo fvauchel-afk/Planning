@@ -14,7 +14,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     id: "2026-09-18-maj-sans-couper-session",
     title: "Mise à jour sans bloquer la session",
     items: [
-      "Quand une nouvelle version arrive, un bandeau propose Mettre à jour. Vous pouvez continuer à travailler : la session n’est pas coupée.",
+      "Quand une nouvelle version arrive, un bandeau propose Mettre à jour. Rien n’est bloqué derrière : vous pouvez continuer à travailler.",
       "Plus tard range le bandeau jusqu’à la prochaine version. Mettre à jour recharge la page quand vous le choisissez.",
     ],
   },

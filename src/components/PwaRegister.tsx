@@ -232,25 +232,30 @@ export function PwaRegister() {
 
   if (!mounted || !loggedIn || !pending) return null;
 
+  const visibleEntries = pending.entries.slice(0, 3);
+  const hiddenCount = pending.entries.length - visibleEntries.length;
+
+  // Pas d’overlay, pas d’inert, pas de capture : uniquement une carte en haut.
+  // Les clics autour passent à l’application (la session n’est pas bloquée).
   return createPortal(
     <div
-      className="pointer-events-none fixed inset-x-0 top-0 z-[80] flex justify-center p-3"
+      className="fixed left-1/2 top-3 z-[80] w-[min(calc(100%-1.5rem),32rem)] -translate-x-1/2"
       role="status"
     >
-      <div className="pointer-events-auto max-h-[70vh] w-full max-w-lg overflow-y-auto rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950 shadow-lg">
+      <div className="max-h-[40vh] overflow-y-auto rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950 shadow-lg">
         <h2 className="font-serif text-lg text-stone-900">
           Une nouvelle version est disponible
         </h2>
         <p className="mt-1 text-sm text-stone-700">
-          Cliquez sur Mettre à jour pour l’appliquer. Vous pouvez continuer à
-          travailler : la session en cours n’est pas coupée tant que vous n’avez
-          pas mis à jour.
+          Vous pouvez continuer à travailler : rien n’est bloqué derrière ce
+          bandeau. Cliquez sur Mettre à jour pour appliquer la nouvelle version
+          quand vous le voulez.
           {hasUnsaved
             ? " Une fiche est ouverte : votre saisie sera remise si vous mettez à jour maintenant."
             : ""}
         </p>
         <div className="mt-3 space-y-3">
-          {pending.entries.map((entry) => (
+          {visibleEntries.map((entry) => (
             <div key={entry.id}>
               <h3 className="text-sm font-semibold text-stone-800">{entry.title}</h3>
               <ul className="mt-1 list-disc space-y-1 pl-5 text-sm text-stone-700">
@@ -260,6 +265,12 @@ export function PwaRegister() {
               </ul>
             </div>
           ))}
+          {hiddenCount > 0 ? (
+            <p className="text-sm text-stone-600">
+              + {hiddenCount} autre{hiddenCount > 1 ? "s" : ""} point
+              {hiddenCount > 1 ? "s" : ""} dans cette version.
+            </p>
+          ) : null}
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
           <button
