@@ -8,7 +8,17 @@ import {
   sanitizeReturnOrigin,
 } from "@/lib/onedrive/oauth-state";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 const NO_STORE = { "Cache-Control": "private, no-store, max-age=0" };
+
+/** 303 : un 307/308 garderait le POST du bouton HTML, Microsoft exige alors client_id dans le body. */
+function redirectSeeOther(url: string) {
+  const response = NextResponse.redirect(url, 303);
+  response.headers.set("Cache-Control", NO_STORE["Cache-Control"]);
+  return response;
+}
 
 /** GET ne doit jamais 302 vers Microsoft : prefetch / SW / préchargement Chrome. */
 export async function GET() {
@@ -42,23 +52,26 @@ export async function POST(request: NextRequest) {
     url.searchParams.set("scope", ONEDRIVE_SCOPES);
     url.searchParams.set("state", state);
     url.searchParams.set("prompt", "select_account");
-    const oauth = NextResponse.redirect(url.toString());
-    oauth.headers.set("Cache-Control", NO_STORE["Cache-Control"]);
+    if (!url.searchParams.get("client_id")) {
+      throw new Error(
+        "OneDrive n’est pas configuré (ONEDRIVE_CLIENT_ID / ONEDRIVE_CLIENT_SECRET).",
+      );
+    }
     console.info("[onedrive-oauth] login", {
       host: request.headers.get("host"),
       forwardedProto: request.headers.get("x-forwarded-proto"),
       redirectUri,
       returnOrigin,
       envRedirectUri: cfg.redirectUri,
+      hasClientId: true,
+      tenant: cfg.tenant,
     });
-    return oauth;
+    return redirectSeeOther(url.toString());
   } catch (err) {
     const message = err instanceof Error ? err.message : "Connexion OneDrive impossible.";
     const origin = sanitizeReturnOrigin(publicOrigin(request));
-    const fail = NextResponse.redirect(
+    return redirectSeeOther(
       `${origin}/admin/onedrive?error=${encodeURIComponent(message)}`,
     );
-    fail.headers.set("Cache-Control", NO_STORE["Cache-Control"]);
-    return fail;
   }
 }
