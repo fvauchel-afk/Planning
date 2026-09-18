@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { filterSnapshotForSession } from "@/lib/auth/scope";
 import { getSession, resolveSession, unauthorized } from "@/lib/auth/guard";
-import { administratifIdlePlans } from "@/lib/engine/administratif-idle";
-import { fetchSupabaseSnapshot, supabaseCreateSignalement } from "@/lib/store/supabase";
+import { applyAdministratifIdleAutofill } from "@/lib/engine/administratif-idle-apply";
+import { fetchSupabaseSnapshot } from "@/lib/store/supabase";
 import {
   hasSupabaseServiceRole,
   isSupabaseUrlConfigured,
@@ -39,25 +39,11 @@ export async function GET() {
     let snapshot = await fetchSupabaseSnapshot();
     if (session.isAdmin) {
       try {
-        const plans = administratifIdlePlans(snapshot);
-        for (const plan of plans) {
-          await supabaseCreateSignalement({
-            employe_id: plan.employeeId,
-            phase_id: null,
-            retard_demi_journees: 0,
-            sens: "avance",
-            note: plan.proposition.message,
-            origine: "decalage_admin",
-            proposition: plan.proposition,
-          });
-        }
-        if (plans.length > 0) {
-          snapshot = await fetchSupabaseSnapshot();
-        }
+        snapshot = await applyAdministratifIdleAutofill(snapshot);
       } catch (err) {
         console.warn(
           "[administratif-idle]",
-          err instanceof Error ? err.message : "suggestion impossible",
+          err instanceof Error ? err.message : "remplissage Administratif impossible",
         );
       }
     }

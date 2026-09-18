@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-18-administratif-auto-7j",
+    title: "Administratif sur 7 jours vides",
+    items: [
+      "Si un salarié n’a aucun chantier sur les 7 prochains jours, un bloc Administratif est ajouté tout seul sur les jours libres (priorité Pas pressé).",
+      "Rien n’est ajouté tant qu’un autre signalement (conflit, retard…) attend une validation. Un chantier client envoie toujours l’e-mail « PLAN A FAIRE MIKA MERCI ».",
+    ],
+  },
+  {
     id: "2026-09-18-onedrive-oauth-303",
     title: "Bouton Connecter OneDrive",
     items: [

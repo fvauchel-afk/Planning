@@ -144,7 +144,7 @@ export function SignalementsPage() {
                 </p>
                 <p className="mt-1 text-sm text-stone-600">
                   {idle
-                    ? "Aucun chantier sur les 7 prochains jours. Validez pour l’ajouter au planning, ou rejetez."
+                    ? "Aucun chantier sur les 7 prochains jours. Le bloc Administratif sera ajouté dès qu’il n’y a plus d’autre signalement en attente."
                     : item.proposition
                     ? "Proposition de l’algorithme"
                     : `${SENS_LABELS[item.sens ?? "retard"]} : ${item.retard_demi_journees} demi-journée${

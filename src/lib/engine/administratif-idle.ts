@@ -168,7 +168,7 @@ export function administratifIdlePlans(
     if (freeDays.length === 0) continue;
     if (alreadySuggestedAdministratif(snapshot, employee.id, from)) continue;
     const input = buildAdministratifChantierInput(snapshot, employee, freeDays);
-    const message = `${employee.nom} n’a aucun chantier du ${formatIsoFr(from)} au ${formatIsoFr(to)}. Proposition : bloc Administratif les jours libres (${freeDays.map(formatIsoFr).join(", ")}). Rien n’est mis au planning tant que vous n’avez pas validé.`;
+    const message = `${employee.nom} n’a aucun chantier du ${formatIsoFr(from)} au ${formatIsoFr(to)}. Bloc Administratif ajouté les jours libres (${freeDays.map(formatIsoFr).join(", ")}).`;
     const proposition: SignalementProposition = {
       kind: ADMINISTRATIF_IDLE_KIND,
       from,
