@@ -98,6 +98,10 @@ export type Chantier = {
   /** Marge ± en jours (décalage vers une date cible, et slack pas pressé / normal). */
   tolerance_deplacement_jours?: number | null;
   date_creation: string;
+  /** Nom de la personne connectée à la création (ou suggestion automatique). */
+  created_by?: string | null;
+  /** Instant de création (Europe/Paris à l’affichage). */
+  created_at?: string | null;
   /** Dates approximatives, pas encore confirmées. */
   dates_estimatives?: boolean;
   date_bon_commande?: string | null;

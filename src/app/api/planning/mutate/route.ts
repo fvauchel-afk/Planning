@@ -204,7 +204,7 @@ export async function POST(request: NextRequest) {
       if (hasPendingSignalements(current)) {
         return NextResponse.json({ error: PENDING_CHANTIER_MESSAGE }, { status: 400 });
       }
-      chantierId = await supabaseCreateChantier(body.input);
+      chantierId = await supabaseCreateChantier(body.input, session.nom);
       createdForPlanId = chantierId;
     } else if (body.action === "updateChantier") {
       await supabaseUpdateChantier(body.input);
@@ -235,7 +235,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: PENDING_CHANTIER_MESSAGE }, { status: 400 });
       }
       if (body.patches?.length) await supabaseApplyPhasePatches(body.patches);
-      chantierId = await supabaseCreateChantier(body.input);
+      chantierId = await supabaseCreateChantier(body.input, session.nom);
       createdForPlanId = chantierId;
     } else if (body.action === "upsertEmployee") {
       const pin = body.input.pin?.trim();
@@ -338,7 +338,7 @@ export async function POST(request: NextRequest) {
         if (othersPending && !isAdministratifIdleSuggestion(item ?? {})) {
           return NextResponse.json({ error: PENDING_CHANTIER_MESSAGE }, { status: 400 });
         }
-        createdForPlanId = await supabaseCreateChantier(toCreate);
+        createdForPlanId = await supabaseCreateChantier(toCreate, session.nom);
         chantierId = createdForPlanId;
         if (isAdministratifIdleSuggestion(item ?? {})) skipPlanMail = true;
       }

@@ -13,6 +13,10 @@ import { usePlanning } from "@/lib/planning-context";
 import { useFormDraftReopen } from "@/lib/form-draft";
 import { PRIORITE_LABELS, type Chantier } from "@/lib/types";
 import {
+  formatChantierCreatedAt,
+  formatChantierCreatedBy,
+} from "@/lib/chantier-origine";
+import {
   hasPendingSignalements,
   PENDING_CHANTIER_MESSAGE,
 } from "@/lib/signalements";
@@ -105,6 +109,8 @@ export function ChantiersPage() {
             <thead className="bg-stone-100 text-left">
               <tr>
                 <th className="px-3 py-2 font-medium">Nom</th>
+                <th className="px-3 py-2 font-medium">Créé par</th>
+                <th className="px-3 py-2 font-medium">Créé le</th>
                 <th className="px-3 py-2 font-medium">Adresse</th>
                 <th className="px-3 py-2 font-medium">Priorité</th>
                 <th className="px-3 py-2 font-medium">Statut</th>
@@ -122,6 +128,12 @@ export function ChantiersPage() {
                   >
                     <td className="px-3 py-2 font-medium text-stone-900">
                       {chantier.nom_client}
+                    </td>
+                    <td className="px-3 py-2 text-stone-600">
+                      {formatChantierCreatedBy(chantier)}
+                    </td>
+                    <td className="px-3 py-2 text-stone-600">
+                      {formatChantierCreatedAt(chantier) || "—"}
                     </td>
                     <td className="px-3 py-2 text-stone-600">
                       {chantier.adresse || "—"}
