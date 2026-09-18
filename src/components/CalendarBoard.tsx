@@ -42,7 +42,7 @@ import { formatClock, formatHoursLabel, hoursForSlot, workWindowsForRow } from "
 import {
   shiftChantierBlockByMinutes,
   shiftOrMoveChantierBlock,
-  shiftPhaseOrJump,
+  shiftPhaseDay,
   type OccupiedHalf,
 } from "@/lib/engine/drag-shift";
 import { clampToWorkWindows } from "@/lib/engine/hour-grid";
@@ -217,6 +217,16 @@ export function CalendarBoard() {
     drop: OccupiedHalf & { rowId: string; startMin?: number },
     phaseMode: boolean,
   ) {
+    if (phaseMode) {
+      return shiftPhaseDay({
+        snapshot,
+        fromRowId: drag.rowId,
+        toRowId: drop.rowId,
+        phaseId: drag.phaseId,
+        grab: { date: drag.grab.date, half: drag.grab.half },
+        drop: { date: drop.date, half: drop.half },
+      });
+    }
     if (view === "day" && drag.startMin != null && drop.startMin != null) {
       return shiftChantierBlockByMinutes({
         snapshot,
@@ -229,17 +239,7 @@ export function CalendarBoard() {
           half: drop.half,
           startMin: drop.startMin,
         },
-        phaseId: phaseMode ? drag.phaseId : undefined,
-      });
-    }
-    if (phaseMode) {
-      return shiftPhaseOrJump({
-        snapshot,
-        fromRowId: drag.rowId,
-        toRowId: drop.rowId,
-        phaseId: drag.phaseId,
-        grab: drag.grab,
-        drop: { date: drop.date, half: drop.half },
+        phaseId: undefined,
       });
     }
     return shiftOrMoveChantierBlock({
@@ -397,9 +397,10 @@ export function CalendarBoard() {
             la ligne d’arrivée reculent ou avancent pour laisser la place.
             Vous pouvez aussi déposer un chantier au milieu d’un autre : le
             début reste en place, la suite reprend juste après.
-            Avec « Cette phase », vous déplacez seulement l’étape (pose,
-            fabrication…) : elle se cale dans un creux, ou saute un autre
-            chantier (météo, pose intérieure / extérieure).
+            Avec « Cette phase », vous glissez un seul jour de l’étape
+            (pose, fabrication…) : les jours avant et après restent en place,
+            un creux vide reste à l’ancienne date. À l’arrivée, ce jour se
+            cale dans un trou libre ou saute un autre chantier.
             Un dépôt sur une absence ou un créneau hors horaire
             à 0 h (vendredi après-midi en 35 h, week-end) est annulé.
             Glissez une ligne de salarié (clic gauche maintenu sur le nom)

@@ -11,6 +11,15 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-18-decaler-jour-phase",
+    title: "Décaler un jour d’une phase",
+    items: [
+      "En mode Cette phase, glisser un jour (matin ou après-midi) déplace seulement cette journée.",
+      "Les jours avant et après restent à leur date. Un creux vide reste à l’ancienne place, sans être comblé tout seul.",
+      "À l’arrivée, le jour se cale dans un trou libre ou saute un autre chantier, comme avant.",
+    ],
+  },
+  {
     id: "2026-09-18-chantier-createur",
     title: "Qui a créé le chantier",
     items: [
