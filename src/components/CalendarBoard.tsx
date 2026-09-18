@@ -42,8 +42,7 @@ import { formatClock, formatHoursLabel, hoursForSlot, workWindowsForRow } from "
 import {
   shiftChantierBlockByMinutes,
   shiftOrMoveChantierBlock,
-  shiftPhaseOrJump,
-  shiftSingleHalf,
+  shiftPhaseDay,
   type OccupiedHalf,
 } from "@/lib/engine/drag-shift";
 import { clampToWorkWindows } from "@/lib/engine/hour-grid";
@@ -63,7 +62,7 @@ import {
 import { fabricationAwaitingLaunch } from "@/lib/dates-estimatives";
 
 type ViewMode = "overview" | "week" | "day";
-type DragScope = "chantier" | "phase" | "creneau";
+type DragScope = "chantier" | "phase";
 
 export function CalendarBoard() {
   const { snapshot, loading, error, usingSupabase, applyPhaseEdits, reorderEmployees } =
@@ -218,8 +217,8 @@ export function CalendarBoard() {
     drop: OccupiedHalf & { rowId: string; startMin?: number },
     phaseMode: boolean,
   ) {
-    if (drag.scope === "creneau") {
-      return shiftSingleHalf({
+    if (phaseMode) {
+      return shiftPhaseDay({
         snapshot,
         fromRowId: drag.rowId,
         toRowId: drop.rowId,
@@ -240,17 +239,7 @@ export function CalendarBoard() {
           half: drop.half,
           startMin: drop.startMin,
         },
-        phaseId: phaseMode ? drag.phaseId : undefined,
-      });
-    }
-    if (phaseMode) {
-      return shiftPhaseOrJump({
-        snapshot,
-        fromRowId: drag.rowId,
-        toRowId: drop.rowId,
-        phaseId: drag.phaseId,
-        grab: drag.grab,
-        drop: { date: drop.date, half: drop.half },
+        phaseId: undefined,
       });
     }
     return shiftOrMoveChantierBlock({
@@ -408,11 +397,10 @@ export function CalendarBoard() {
             la ligne d’arrivée reculent ou avancent pour laisser la place.
             Vous pouvez aussi déposer un chantier au milieu d’un autre : le
             début reste en place, la suite reprend juste après.
-            Avec « Cette phase », vous déplacez seulement l’étape (pose,
-            fabrication…) : elle se cale dans un creux, ou saute un autre
-            chantier (météo, pose intérieure / extérieure).
-            Avec « Ce créneau », vous déplacez seulement le matin ou
-            l’après-midi glissé, sans bouger le reste de la phase.
+            Avec « Cette phase », vous glissez un seul jour de l’étape
+            (pose, fabrication…) : les jours avant et après restent en place,
+            un creux vide reste à l’ancienne date. À l’arrivée, ce jour se
+            cale dans un trou libre ou saute un autre chantier.
             Un dépôt sur une absence ou un créneau hors horaire
             à 0 h (vendredi après-midi en 35 h, week-end) est annulé.
             Glissez une ligne de salarié (clic gauche maintenu sur le nom)
@@ -453,7 +441,6 @@ export function CalendarBoard() {
               [
                 ["chantier", "Chantier entier"],
                 ["phase", "Cette phase"],
-                ["creneau", "Ce créneau"],
               ] as const
             ).map(([id, label]) => (
               <button
@@ -743,7 +730,7 @@ export function CalendarBoard() {
                           slot,
                         );
                       const assignments =
-                        dragScope === "phase" || dragScope === "creneau"
+                        dragScope === "phase"
                           ? cellAssignments
                           : uniqueAssignmentsByChantier(cellAssignments);
                       const cellKey = `${row.id}|${iso}|${half}`;
@@ -971,7 +958,7 @@ function DayDetail({
           const windows = workWindowsForRow(snapshot, row.id, iso);
           const dayAssignments = assignmentsForDay(snapshot, row.id, iso);
           const assignments =
-            dragScope === "phase" || dragScope === "creneau"
+            dragScope === "phase"
               ? dayAssignments
               : uniqueAssignmentsByChantier(dayAssignments);
           const dayStart = windows[0]?.start ?? 7 * 60;

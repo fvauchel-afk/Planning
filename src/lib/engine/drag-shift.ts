@@ -1106,7 +1106,69 @@ export function shiftPhaseOrJump(input: {
   };
 }
 
-export function shiftSingleHalf(input: {
+function packWorkHalvesFrom(
+  snapshot: PlanningSnapshot,
+  rowId: string,
+  start: OccupiedHalf,
+  count: number,
+): OccupiedHalf[] | null {
+  if (count <= 0) return [];
+  const packed: OccupiedHalf[] = [];
+  let cursor: OccupiedHalf;
+  if (
+    isWorkHalf(snapshot, rowId, start.date, start.half) &&
+    !isSlotBlockedForRow(snapshot, rowId, start.date, start.half)
+  ) {
+    packed.push({ date: start.date, half: start.half });
+    cursor = start;
+  } else {
+    const next = nextOpenWorkHalf(snapshot, rowId, start);
+    if (!next) return null;
+    packed.push(next);
+    cursor = next;
+  }
+  while (packed.length < count) {
+    const next = nextOpenWorkHalf(snapshot, rowId, cursor);
+    if (!next) return null;
+    packed.push(next);
+    cursor = next;
+  }
+  return packed;
+}
+
+function landingConflictsKeepingHole(
+  snapshot: PlanningSnapshot,
+  toRowId: string,
+  landing: OccupiedHalf[],
+  phaseId: string,
+  freed: OccupiedHalf[],
+): boolean {
+  const freedKeys = new Set(freed.map((item) => halfKey(item)));
+  const cells = occupancyForRow(snapshot, toRowId).cells;
+  for (const slot of landing) {
+    if (isSlotBlockedForRow(snapshot, toRowId, slot.date, slot.half)) {
+      return true;
+    }
+    for (const occupant of cells) {
+      if (
+        occupant.half.date !== slot.date ||
+        occupant.half.half !== slot.half
+      ) {
+        continue;
+      }
+      if (
+        occupant.phaseId === phaseId &&
+        freedKeys.has(halfKey(occupant.half))
+      ) {
+        continue;
+      }
+      return true;
+    }
+  }
+  return false;
+}
+
+export function shiftPhaseDay(input: {
   snapshot: PlanningSnapshot;
   fromRowId: string;
   toRowId: string;
@@ -1123,8 +1185,7 @@ export function shiftSingleHalf(input: {
   }
   if (
     input.fromRowId === input.toRowId &&
-    input.grab.date === input.drop.date &&
-    input.grab.half === input.drop.half
+    input.grab.date === input.drop.date
   ) {
     return emptyDragShift();
   }
@@ -1140,36 +1201,90 @@ export function shiftSingleHalf(input: {
     input.phaseId,
   );
   if (!origin) return emptyDragShift();
-  const grabIndex = origin.halves.findIndex(
-    (half) => half.date === input.grab.date && half.half === input.grab.half,
+  const extracted = origin.halves.filter((half) => half.date === input.grab.date);
+  if (extracted.length === 0) return emptyDragShift();
+  const prefix = origin.halves.filter(
+    (half) => compareHalves(half, extracted[0]!) < 0,
   );
-  if (grabIndex < 0) return emptyDragShift();
-  const prefix = origin.halves.slice(0, grabIndex);
-  const suffix = origin.halves.slice(grabIndex + 1);
-  if (
-    [...prefix, ...suffix].some(
-      (half) => half.date === input.drop.date && half.half === input.drop.half,
-    )
-  ) {
+  const suffix = origin.halves.filter(
+    (half) => compareHalves(half, extracted[extracted.length - 1]!) > 0,
+  );
+
+  let landing = packWorkHalvesFrom(
+    input.snapshot,
+    input.toRowId,
+    input.drop,
+    extracted.length,
+  );
+  if (!landing) {
     return { ...emptyDragShift(previewDrop), blocked: true };
-  }
-  if (
-    landingHasConflict(
-      input.snapshot,
-      [{ rowId: input.toRowId, halves: [{ date: input.drop.date, half: input.drop.half }] }],
-      new Set([input.phaseId]),
-    )
-  ) {
-    return {
-      delta: 1,
-      patches: [],
-      chain: [origin],
-      preview: previewDrop,
-      blocked: true,
-    };
   }
   const phase = input.snapshot.phases.find((item) => item.id === input.phaseId);
   if (!phase) return emptyDragShift();
+  const originElement = input.snapshot.elements.find(
+    (item) => item.id === phase.element_id,
+  );
+  const chantierId = originElement?.chantier_id ?? "";
+
+  if (
+    landingConflictsKeepingHole(
+      input.snapshot,
+      input.toRowId,
+      landing,
+      input.phaseId,
+      extracted,
+    )
+  ) {
+    let jumped = false;
+    let cursorAfter: OccupiedHalf | null = lastOverlappingDestHalf(
+      input.snapshot,
+      input.toRowId,
+      landing,
+      chantierId,
+    );
+    if (!cursorAfter) {
+      cursorAfter = landing[landing.length - 1] ?? input.drop;
+    }
+    for (let guard = 0; guard < 16; guard += 1) {
+      const packed = packWorkHalvesAfter(
+        input.snapshot,
+        input.toRowId,
+        cursorAfter,
+        extracted.length,
+      );
+      if (!packed) break;
+      if (
+        !landingConflictsKeepingHole(
+          input.snapshot,
+          input.toRowId,
+          packed,
+          input.phaseId,
+          extracted,
+        )
+      ) {
+        landing = packed;
+        jumped = true;
+        break;
+      }
+      const nextDest = lastOverlappingDestHalf(
+        input.snapshot,
+        input.toRowId,
+        packed,
+        chantierId,
+      );
+      if (!nextDest) break;
+      cursorAfter = nextDest;
+    }
+    if (!jumped) {
+      return {
+        delta: 1,
+        patches: [],
+        chain: [origin],
+        preview: previewCellsForHalves(input.toRowId, landing),
+        blocked: true,
+      };
+    }
+  }
 
   const hoursOf = (halves: OccupiedHalf[], rowId: string) =>
     halves.reduce(
@@ -1177,10 +1292,9 @@ export function shiftSingleHalf(input: {
         sum + hoursForOccupiedHalf(input.snapshot, rowId, half),
       0,
     );
-  const landing: OccupiedHalf[] = [{ date: input.drop.date, half: input.drop.half }];
   const movedHours =
+    hoursOf(extracted, input.fromRowId) ||
     hoursOf(landing, input.toRowId) ||
-    hoursOf([input.grab], input.fromRowId) ||
     4;
   const prefixHours = hoursOf(prefix, input.fromRowId);
   const suffixHours = hoursOf(suffix, input.fromRowId);
@@ -1204,6 +1318,8 @@ export function shiftSingleHalf(input: {
 
   const patches: PhasePatch[] = [];
   const inserts: PhaseInsert[] = [];
+  const landingFirst = landing[0]!;
+  const landingLast = landing[landing.length - 1]!;
   if (prefix.length === 0 && suffix.length === 0) {
     patches.push(patchRange(landing, movedHours, input.toRowId));
   } else if (prefix.length > 0) {
@@ -1211,8 +1327,8 @@ export function shiftSingleHalf(input: {
     inserts.push(
       insertFromPhase(
         phase,
-        landing[0]!,
-        landing[0]!,
+        landingFirst,
+        landingLast,
         movedHours,
         input.toRowId,
       ),
@@ -1233,8 +1349,8 @@ export function shiftSingleHalf(input: {
     inserts.push(
       insertFromPhase(
         phase,
-        landing[0]!,
-        landing[0]!,
+        landingFirst,
+        landingLast,
         movedHours,
         input.toRowId,
       ),
@@ -1246,9 +1362,16 @@ export function shiftSingleHalf(input: {
     patches,
     inserts,
     chain: [origin],
-    preview: previewDrop,
+    preview: previewCellsForHalves(input.toRowId, landing),
     blocked: false,
   };
+}
+
+/** @deprecated alias — extraire un jour de phase */
+export function shiftSingleHalf(
+  input: Parameters<typeof shiftPhaseDay>[0],
+): DragShiftResult {
+  return shiftPhaseDay(input);
 }
 
 export function shiftChantierBlockByMinutes(input: {
@@ -2147,7 +2270,7 @@ function runDragShiftSelfCheck() {
     );
   }
   const middle = longHalves[2]!;
-  const extracted = shiftSingleHalf({
+  const extracted = shiftPhaseDay({
     snapshot: longPhaseSnapshot,
     fromRowId: "emp-a",
     toRowId: "emp-a",
@@ -2160,7 +2283,7 @@ function runDragShiftSelfCheck() {
     (item) => item.date_debut === "2026-09-10",
   );
   const suffixInsert = extracted.inserts?.find(
-    (item) => item.date_debut === "2026-09-08" && item.heure_debut === "13:00",
+    (item) => item.date_debut === "2026-09-09",
   );
   if (
     extracted.blocked ||
@@ -2168,13 +2291,14 @@ function runDragShiftSelfCheck() {
     kept?.date_fin !== "2026-09-07" ||
     !movedInsert ||
     !suffixInsert ||
-    suffixInsert.date_fin !== "2026-09-09"
+    suffixInsert.date_fin !== "2026-09-09" ||
+    extracted.inserts?.some((item) => item.date_debut === "2026-09-08")
   ) {
     throw new Error(
-      "drag-shift: extraire un créneau du milieu ne doit pas déplacer le reste de la phase",
+      "drag-shift: extraire un jour du milieu doit laisser un creux, sans recaler la suite",
     );
   }
-  const occupiedDrop = shiftSingleHalf({
+  const occupiedDrop = shiftPhaseDay({
     snapshot: {
       ...longPhaseSnapshot,
       chantiers: [
@@ -2214,9 +2338,19 @@ function runDragShiftSelfCheck() {
     grab: middle,
     drop: { date: "2026-09-10", half: 0 },
   });
-  if (!occupiedDrop.blocked) {
+  const jumpedDay = occupiedDrop.inserts?.find(
+    (item) => item.employe_id === "emp-a" && item.date_debut !== "2026-09-09",
+  );
+  const keptAfterJump = occupiedDrop.patches.find((item) => item.id === "ph-a");
+  if (
+    occupiedDrop.blocked ||
+    keptAfterJump?.date_debut !== "2026-09-07" ||
+    keptAfterJump?.date_fin !== "2026-09-07" ||
+    !jumpedDay ||
+    (jumpedDay.date_debut ?? "") < "2026-09-10"
+  ) {
     throw new Error(
-      "drag-shift: un créneau extrait ne doit pas écraser un autre chantier",
+      "drag-shift: le jour extrait doit sauter l’autre chantier, le creux reste vide",
     );
   }
 }

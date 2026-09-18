@@ -11,11 +11,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
-    id: "2026-09-18-decaler-creneau",
-    title: "Décaler un seul créneau",
+    id: "2026-09-18-decaler-jour-phase",
+    title: "Décaler un jour d’une phase",
     items: [
-      "Sur le planning, le mode Ce créneau déplace seulement le matin ou l’après-midi glissé.",
-      "Le reste de la phase (les autres jours) reste à sa place.",
+      "En mode Cette phase, glisser un jour (matin ou après-midi) déplace seulement cette journée.",
+      "Les jours avant et après restent à leur date. Un creux vide reste à l’ancienne place, sans être comblé tout seul.",
+      "À l’arrivée, le jour se cale dans un trou libre ou saute un autre chantier, comme avant.",
     ],
   },
   {
