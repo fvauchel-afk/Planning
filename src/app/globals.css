@@ -21,9 +21,3 @@ h2,
 h3 {
   font-family: var(--font-serif), Georgia, serif;
 }
-
-html.update-gate-open,
-html.update-gate-open body {
-  overflow: hidden !important;
-  overscroll-behavior: none;
-}

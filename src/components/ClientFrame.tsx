@@ -1,6 +1,5 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
 import { PwaRegister } from "@/components/PwaRegister";
@@ -28,23 +27,11 @@ function Shell({
 function FramedApp({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const login = pathname === "/connexion";
-  const [locked, setLocked] = useState(false);
-  const appRef = useRef<HTMLDivElement>(null);
-  const onLockChange = useCallback((next: boolean) => {
-    setLocked(next);
-  }, []);
-
-  useEffect(() => {
-    const node = appRef.current;
-    if (!node) return;
-    if (locked) node.setAttribute("inert", "");
-    else node.removeAttribute("inert");
-  }, [locked]);
 
   if (login) {
     return (
       <>
-        <PwaRegister onLockChange={onLockChange} />
+        <PwaRegister />
         <div>{children}</div>
       </>
     );
@@ -52,13 +39,7 @@ function FramedApp({ children }: { children: React.ReactNode }) {
 
   return (
     <>
-      <div
-        ref={appRef}
-        aria-hidden={locked || undefined}
-        className={
-          locked ? "pointer-events-none max-h-screen overflow-hidden" : undefined
-        }
-      >
+      <div>
         <PlanningProvider>
           <DatabaseUnavailableGate>
             <Shell pathname={pathname}>{children}</Shell>
@@ -67,7 +48,7 @@ function FramedApp({ children }: { children: React.ReactNode }) {
           </DatabaseUnavailableGate>
         </PlanningProvider>
       </div>
-      <PwaRegister onLockChange={onLockChange} />
+      <PwaRegister />
     </>
   );
 }
