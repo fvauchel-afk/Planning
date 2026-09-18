@@ -19,6 +19,22 @@ export const CHANGELOG: ChangelogEntry[] = [
     ],
   },
   {
+    id: "2026-09-18-maj-modale-bloquante",
+    title: "Mise à jour : l’écran bloque vraiment",
+    items: [
+      "Quand une nouvelle version arrive, une fenêtre bloque l’application jusqu’au bouton Mettre à jour.",
+      "Mettre à jour s’applique tout de suite. Si une fiche était ouverte, la saisie est remise après le rechargement.",
+    ],
+  },
+  {
+    id: "2026-09-18-maj-sans-couper-session",
+    title: "Mise à jour sans bloquer la session",
+    items: [
+      "Quand une nouvelle version arrive, un bandeau propose Mettre à jour. Rien n’est bloqué derrière : vous pouvez continuer à travailler.",
+      "Plus tard range le bandeau jusqu’à la prochaine version. Mettre à jour recharge la page quand vous le choisissez.",
+    ],
+  },
+  {
     id: "2026-09-18-photos-bon-commande",
     title: "Photos sur le bon de commande",
     items: [

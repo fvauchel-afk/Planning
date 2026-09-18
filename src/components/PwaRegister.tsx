@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { usePathname } from "next/navigation";
 import { CHANGELOG, type ChangelogEntry } from "@/data/changelog";
 import { useSession } from "@/lib/auth/session-context";
-import { useHasUnsavedWork } from "@/lib/form-draft";
+import { requestFlushFormDraft, useHasUnsavedWork } from "@/lib/form-draft";
 
 const CHECK_MS = 15_000;
 const STORAGE_BUILD = "vauchel_seen_build";
@@ -49,6 +49,7 @@ export function PwaRegister({
   const [reloading, setReloading] = useState(false);
   const [mounted, setMounted] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
+  const waitingRef = useRef<ServiceWorker | null>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -93,6 +94,7 @@ export function PwaRegister({
         const waitingSw = Boolean(
           registration?.waiting && navigator.serviceWorker.controller,
         );
+        if (registration?.waiting) waitingRef.current = registration.waiting;
         if (serverNewer || clientStale || waitingSw || unseen.length > 0) {
           showUpdate(buildId, changelog);
         }
@@ -108,6 +110,7 @@ export function PwaRegister({
             updateViaCache: "none",
           });
           if (registration.waiting && navigator.serviceWorker.controller) {
+            waitingRef.current = registration.waiting;
             const seenBuild = window.localStorage.getItem(STORAGE_BUILD);
             if (seenBuild) showUpdate(CLIENT_BUILD, CHANGELOG);
           }
@@ -165,8 +168,7 @@ export function PwaRegister({
 
   const loggedIn =
     ready && Boolean(session) && pathname !== "/connexion" && pending !== null;
-  const showGate = loggedIn && !hasUnsaved;
-  const showNudge = loggedIn && hasUnsaved;
+  const showGate = Boolean(loggedIn);
 
   useEffect(() => {
     onLockChange?.(showGate);
@@ -174,14 +176,20 @@ export function PwaRegister({
 
   useEffect(() => {
     if (!showGate) return;
+    requestFlushFormDraft();
     const html = document.documentElement;
     const previousHtmlOverflow = html.style.overflow;
     const previousBodyOverflow = document.body.style.overflow;
     const previousBodyPosition = document.body.style.position;
+    const previousBodyTop = document.body.style.top;
+    const previousBodyWidth = document.body.style.width;
+    const scrollY = window.scrollY;
     html.classList.add("update-gate-open");
     html.style.overflow = "hidden";
     document.body.style.overflow = "hidden";
-    document.body.style.position = "relative";
+    document.body.style.position = "fixed";
+    document.body.style.top = `-${scrollY}px`;
+    document.body.style.width = "100%";
     const focusTimer = window.setTimeout(() => buttonRef.current?.focus(), 30);
 
     const allow = (target: EventTarget | null) => {
@@ -218,19 +226,22 @@ export function PwaRegister({
     const types: Array<keyof DocumentEventMap> = [
       "pointerdown",
       "pointerup",
+      "pointermove",
       "click",
       "mousedown",
       "mouseup",
       "touchstart",
       "touchmove",
+      "touchend",
       "wheel",
       "scroll",
     ];
     for (const type of types) {
       document.addEventListener(type, block, { capture: true, passive: false });
+      window.addEventListener(type, block, { capture: true, passive: false });
     }
     document.addEventListener("keydown", onKeyDown, true);
-    window.addEventListener("scroll", block, { capture: true, passive: false });
+    window.addEventListener("keydown", onKeyDown, true);
 
     return () => {
       window.clearTimeout(focusTimer);
@@ -238,22 +249,21 @@ export function PwaRegister({
       html.style.overflow = previousHtmlOverflow;
       document.body.style.overflow = previousBodyOverflow;
       document.body.style.position = previousBodyPosition;
+      document.body.style.top = previousBodyTop;
+      document.body.style.width = previousBodyWidth;
+      window.scrollTo(0, scrollY);
       for (const type of types) {
         document.removeEventListener(type, block, true);
+        window.removeEventListener(type, block, true);
       }
       document.removeEventListener("keydown", onKeyDown, true);
-      window.removeEventListener("scroll", block, true);
+      window.removeEventListener("keydown", onKeyDown, true);
     };
   }, [showGate]);
 
-  async function applyUpdate() {
+  function applyUpdate() {
     if (!pending) return;
-    if (hasUnsaved) {
-      const ok = window.confirm(
-        "Vous avez une modification non enregistrée. Continuer recharge la page ; votre saisie sera remise ensuite.",
-      );
-      if (!ok) return;
-    }
+    requestFlushFormDraft();
     setReloading(true);
     window.localStorage.setItem(STORAGE_BUILD, pending.buildId);
     window.localStorage.setItem(
@@ -268,57 +278,18 @@ export function PwaRegister({
         ),
       ),
     );
-    const reloadOnce = () => {
-      window.location.reload();
-    };
-    navigator.serviceWorker?.addEventListener("controllerchange", reloadOnce, {
-      once: true,
-    });
     try {
-      const reg = await navigator.serviceWorker.getRegistration();
-      if (reg?.waiting) {
-        reg.waiting.postMessage({ type: "SKIP_WAITING" });
-        window.setTimeout(reloadOnce, 800);
-        return;
-      }
-      await reg?.update();
-      if (reg?.waiting) {
-        reg.waiting.postMessage({ type: "SKIP_WAITING" });
-        window.setTimeout(reloadOnce, 800);
-        return;
-      }
+      waitingRef.current?.postMessage({ type: "SKIP_WAITING" });
     } catch {
-      // fall through
+      // recharger quand même
     }
-    reloadOnce();
+    window.location.reload();
   }
 
-  if (!mounted || (!showGate && !showNudge) || !pending) return null;
+  if (!mounted || !showGate || !pending) return null;
 
-  if (showNudge) {
-    return createPortal(
-      <div
-        className="pointer-events-none fixed inset-x-0 top-0 z-[80] flex justify-center p-3"
-        role="status"
-      >
-        <div className="pointer-events-auto max-w-lg rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950 shadow-lg">
-          <p>
-            Une mise à jour est prête, elle s’appliquera à la fermeture de cette
-            fiche.
-          </p>
-          <button
-            type="button"
-            disabled={reloading}
-            onClick={() => void applyUpdate()}
-            className="mt-2 text-sm font-medium underline disabled:opacity-60"
-          >
-            {reloading ? "Mise à jour…" : "Mettre à jour maintenant"}
-          </button>
-        </div>
-      </div>,
-      document.body,
-    );
-  }
+  const visibleEntries = pending.entries.slice(0, 8);
+  const hiddenCount = pending.entries.length - visibleEntries.length;
 
   return createPortal(
     <div
@@ -339,9 +310,12 @@ export function PwaRegister({
         <p className="mt-2 text-sm text-stone-600">
           Cliquez sur Mettre à jour pour continuer. Tant que ce n’est pas fait,
           l’application reste bloquée.
+          {hasUnsaved
+            ? " Votre saisie en cours est enregistrée et sera remise après la mise à jour."
+            : ""}
         </p>
         <div className="mt-4 space-y-4">
-          {pending.entries.map((entry) => (
+          {visibleEntries.map((entry) => (
             <div key={entry.id}>
               <h3 className="text-sm font-semibold text-stone-800">{entry.title}</h3>
               <ul className="mt-1 list-disc space-y-1 pl-5 text-sm text-stone-700">
@@ -351,12 +325,18 @@ export function PwaRegister({
               </ul>
             </div>
           ))}
+          {hiddenCount > 0 ? (
+            <p className="text-sm text-stone-500">
+              + {hiddenCount} autre{hiddenCount > 1 ? "s" : ""} point
+              {hiddenCount > 1 ? "s" : ""} dans cette version.
+            </p>
+          ) : null}
         </div>
         <button
           ref={buttonRef}
           type="button"
           disabled={reloading}
-          onClick={() => void applyUpdate()}
+          onClick={() => applyUpdate()}
           className="mt-6 w-full rounded-lg bg-amber-700 px-4 py-3 text-base font-semibold text-amber-50 disabled:opacity-60"
         >
           {reloading ? "Mise à jour…" : "Mettre à jour"}
