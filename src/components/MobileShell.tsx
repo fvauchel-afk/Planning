@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { AuthOpenBanner } from "@/components/AuthOpenBanner";
+import { BrandMark } from "@/components/BrandMark";
 import { useSession } from "@/lib/auth/session-context";
 
 export function MobileShell({
@@ -31,9 +32,9 @@ export function MobileShell({
       <header className="sticky top-0 z-20 border-b border-stone-800 bg-stone-900 px-4 py-3 text-stone-100">
         <Link
           href={homeHref}
-          className="inline-block text-[10px] uppercase tracking-[0.2em] text-amber-500 hover:text-amber-400"
+          className="inline-block rounded-md outline-none hover:opacity-90 focus-visible:ring-2 focus-visible:ring-amber-500"
         >
-          Ferronnerie Vauchel
+          <BrandMark variant="dark" size="sm" />
         </Link>
         <div className="mt-0.5 flex items-baseline justify-between gap-3">
           <h1 className="font-serif text-xl">Mon planning</h1>

@@ -1,14 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192">
-  <rect width="192" height="192" rx="36" fill="#1c1917"/>
-  <g fill="#b45309">
-    <rect x="48" y="42" width="14" height="70" rx="2"/>
-    <rect x="48" y="42" width="42" height="14" rx="2"/>
-    <rect x="48" y="70" width="34" height="14" rx="2"/>
-  </g>
-  <g fill="#e7e5e4">
-    <polygon points="108,42 122,42 148,112 132,112"/>
-    <polygon points="162,42 148,42 122,112 138,112"/>
-  </g>
-  <rect x="42" y="136" width="108" height="12" rx="4" fill="#b45309"/>
-  <rect x="42" y="156" width="70" height="12" rx="4" fill="#d6d3d1"/>
+  <rect width="192" height="192" rx="28" fill="#ffffff"/>
+  <text x="96" y="78" text-anchor="middle" fill="#6d6d6d"
+        font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700"
+        letter-spacing="3.2">LA MÉTALLERIE</text>
+  <text x="70" y="118" text-anchor="middle" fill="#2a5790"
+        font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="700"
+        letter-spacing="2">DU SUD</text>
+  <polygon points="118,108 176,112 176,118 118,118" fill="#2a5790"/>
 </svg>

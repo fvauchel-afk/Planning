@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-18-metallerie-du-sud",
+    title: "La Métallerie du Sud",
+    items: [
+      "Le planning affiche désormais le nom officiel La Métallerie du Sud (en-tête, connexion, onglet du navigateur, et nom de l’app sur l’écran d’accueil).",
+      "Le logo (La Métallerie / Du Sud) remplace l’ancien nom Ferronnerie Vauchel, y compris l’icône de l’application.",
+    ],
+  },
+  {
     id: "2026-09-18-decaler-jour-phase",
     title: "Décaler un jour d’une phase",
     items: [

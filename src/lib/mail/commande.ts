@@ -1,4 +1,5 @@
 import "server-only";
+import { COMPANY_SIGN_OFF } from "@/lib/brand";
 import { sendGraphMail } from "@/lib/onedrive/graph";
 import { loadOnedriveTokens } from "@/lib/onedrive/tokens";
 import { CATEGORIE_DEMANDE_LABELS, type CategorieDemande } from "@/lib/types";
@@ -12,7 +13,7 @@ export const COMMANDE_MAIL_TEMPLATES = [
     subject: (auteur: string) => `Planning — nouvelle commande de ${auteur}`,
     body: (auteur: string, message: string) =>
       [
-        "Nouvelle commande depuis le planning Ferronnerie Vauchel.",
+        "Nouvelle commande depuis le planning La Métallerie du Sud.",
         "",
         `De : ${auteur}`,
         "",
@@ -31,7 +32,7 @@ export const COMMANDE_MAIL_TEMPLATES = [
         "",
         message,
         "",
-        "— Ferronnerie Vauchel",
+        COMPANY_SIGN_OFF,
       ].join("\n"),
   },
   {
@@ -44,7 +45,7 @@ export const COMMANDE_MAIL_TEMPLATES = [
         "",
         message,
         "",
-        "— Ferronnerie Vauchel",
+        COMPANY_SIGN_OFF,
       ].join("\n"),
   },
   {
@@ -57,7 +58,7 @@ export const COMMANDE_MAIL_TEMPLATES = [
         "",
         message,
         "",
-        "— Ferronnerie Vauchel",
+        COMPANY_SIGN_OFF,
       ].join("\n"),
   },
 ] as const;

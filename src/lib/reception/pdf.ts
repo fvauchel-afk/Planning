@@ -1,6 +1,7 @@
 import "server-only";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { formatIsoFr } from "@/lib/dates";
+import { COMPANY_NAME } from "@/lib/brand";
 
 export type ReceptionPdfInput = {
   kind: "reception" | "livraison";
@@ -40,20 +41,12 @@ export async function buildReceptionPdf(
   const title = isLivraison ? "Bon de livraison" : "Réception de chantier";
   let y = height - 64;
 
-  page.drawText("Ferronnerie Vauchel", {
+  page.drawText(COMPANY_NAME, {
     x: 48,
     y,
     size: 16,
     font: bold,
-    color: rgb(0.22, 0.16, 0.08),
-  });
-  y -= 18;
-  page.drawText("La Métallerie du Sud", {
-    x: 48,
-    y,
-    size: 11,
-    font,
-    color: rgb(0.45, 0.35, 0.2),
+    color: rgb(0.16, 0.34, 0.56),
   });
   y -= 36;
   page.drawText(title, {

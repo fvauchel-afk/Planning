@@ -1,4 +1,5 @@
 import "server-only";
+import { COMPANY_SIGN_OFF } from "@/lib/brand";
 import { sendResendTextEmail } from "@/lib/bon-commande/mail";
 import { normalizePersonName } from "@/lib/auth/restore-access";
 import type { LancementMailCible } from "@/lib/engine/lancement-mail";
@@ -51,7 +52,7 @@ export async function sendLancementReminderEmail(
     "Merci de cliquer « Je valide le lancement » sur le planning, ou d’ouvrir la fiche :",
     ficheUrl,
     "",
-    "— Ferronnerie Vauchel",
+    COMPANY_SIGN_OFF,
   ].join("\n");
   await sendResendTextEmail({
     to,

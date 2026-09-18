@@ -1,5 +1,6 @@
 import "server-only";
 import { Resend } from "resend";
+import { COMPANY_MAIL_FROM } from "@/lib/brand";
 
 export const BON_COMMANDE_CC = "f.vauchel@hotmail.com";
 
@@ -10,7 +11,7 @@ export function resendConfigured(): boolean {
 export function resendFromAddress(): string {
   return (
     process.env.RESEND_FROM?.trim() ||
-    "Ferronnerie Vauchel <commandes@lametalleriedusud.com>"
+    COMPANY_MAIL_FROM
   );
 }
 

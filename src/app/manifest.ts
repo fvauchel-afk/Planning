@@ -1,16 +1,17 @@
 import type { MetadataRoute } from "next";
+import { APP_DESCRIPTION, APP_NAME, BRAND_BLUE } from "@/lib/brand";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Ferronnerie Vauchel - Planning",
+    name: APP_NAME,
     short_name: "Planning",
-    description: "Planning d'équipe — Ferronnerie Vauchel",
+    description: APP_DESCRIPTION,
     start_url: "/connexion",
     scope: "/",
     display: "standalone",
     orientation: "any",
     background_color: "#1c1917",
-    theme_color: "#b45309",
+    theme_color: BRAND_BLUE,
     lang: "fr",
     icons: [
       {
