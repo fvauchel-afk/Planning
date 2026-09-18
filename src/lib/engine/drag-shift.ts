@@ -1106,6 +1106,151 @@ export function shiftPhaseOrJump(input: {
   };
 }
 
+export function shiftSingleHalf(input: {
+  snapshot: PlanningSnapshot;
+  fromRowId: string;
+  toRowId: string;
+  phaseId: string;
+  grab: OccupiedHalf;
+  drop: OccupiedHalf;
+}): DragShiftResult {
+  const previewDrop = previewCellsForHalves(input.toRowId, [input.drop]);
+  if (
+    isVirtualPlanningRow(input.toRowId) ||
+    isVirtualPlanningRow(input.fromRowId)
+  ) {
+    return { ...emptyDragShift(previewDrop), blocked: true };
+  }
+  if (
+    input.fromRowId === input.toRowId &&
+    input.grab.date === input.drop.date &&
+    input.grab.half === input.drop.half
+  ) {
+    return emptyDragShift();
+  }
+  const destEmployee = input.snapshot.employees.find(
+    (employee) => employee.id === input.toRowId && employee.actif,
+  );
+  if (!destEmployee) {
+    return { ...emptyDragShift(previewDrop), blocked: true };
+  }
+  const origin = blockForPhaseOnRow(
+    input.snapshot,
+    input.fromRowId,
+    input.phaseId,
+  );
+  if (!origin) return emptyDragShift();
+  const grabIndex = origin.halves.findIndex(
+    (half) => half.date === input.grab.date && half.half === input.grab.half,
+  );
+  if (grabIndex < 0) return emptyDragShift();
+  const prefix = origin.halves.slice(0, grabIndex);
+  const suffix = origin.halves.slice(grabIndex + 1);
+  if (
+    [...prefix, ...suffix].some(
+      (half) => half.date === input.drop.date && half.half === input.drop.half,
+    )
+  ) {
+    return { ...emptyDragShift(previewDrop), blocked: true };
+  }
+  if (
+    landingHasConflict(
+      input.snapshot,
+      [{ rowId: input.toRowId, halves: [{ date: input.drop.date, half: input.drop.half }] }],
+      new Set([input.phaseId]),
+    )
+  ) {
+    return {
+      delta: 1,
+      patches: [],
+      chain: [origin],
+      preview: previewDrop,
+      blocked: true,
+    };
+  }
+  const phase = input.snapshot.phases.find((item) => item.id === input.phaseId);
+  if (!phase) return emptyDragShift();
+
+  const hoursOf = (halves: OccupiedHalf[], rowId: string) =>
+    halves.reduce(
+      (sum, half) =>
+        sum + hoursForOccupiedHalf(input.snapshot, rowId, half),
+      0,
+    );
+  const landing: OccupiedHalf[] = [{ date: input.drop.date, half: input.drop.half }];
+  const movedHours =
+    hoursOf(landing, input.toRowId) ||
+    hoursOf([input.grab], input.fromRowId) ||
+    4;
+  const prefixHours = hoursOf(prefix, input.fromRowId);
+  const suffixHours = hoursOf(suffix, input.fromRowId);
+
+  const patchRange = (
+    halves: OccupiedHalf[],
+    hours: number,
+    employeId: string,
+  ): PhasePatch => {
+    const first = halves[0]!;
+    const last = halves[halves.length - 1]!;
+    return {
+      id: phase.id,
+      date_debut: first.date,
+      date_fin: last.date,
+      employe_id: employeId,
+      heure_debut: heureForHalf(first.half, phase.heure_debut),
+      duree_estimee_heures: hours,
+    };
+  };
+
+  const patches: PhasePatch[] = [];
+  const inserts: PhaseInsert[] = [];
+  if (prefix.length === 0 && suffix.length === 0) {
+    patches.push(patchRange(landing, movedHours, input.toRowId));
+  } else if (prefix.length > 0) {
+    patches.push(patchRange(prefix, prefixHours, input.fromRowId));
+    inserts.push(
+      insertFromPhase(
+        phase,
+        landing[0]!,
+        landing[0]!,
+        movedHours,
+        input.toRowId,
+      ),
+    );
+    if (suffix.length > 0) {
+      inserts.push(
+        insertFromPhase(
+          phase,
+          suffix[0]!,
+          suffix[suffix.length - 1]!,
+          suffixHours,
+          input.fromRowId,
+        ),
+      );
+    }
+  } else {
+    patches.push(patchRange(suffix, suffixHours, input.fromRowId));
+    inserts.push(
+      insertFromPhase(
+        phase,
+        landing[0]!,
+        landing[0]!,
+        movedHours,
+        input.toRowId,
+      ),
+    );
+  }
+
+  return {
+    delta: 1,
+    patches,
+    inserts,
+    chain: [origin],
+    preview: previewDrop,
+    blocked: false,
+  };
+}
+
 export function shiftChantierBlockByMinutes(input: {
   snapshot: PlanningSnapshot;
   fromRowId: string;
@@ -1960,6 +2105,118 @@ function runDragShiftSelfCheck() {
   ) {
     throw new Error(
       "drag-shift: une phase seule doit se caler dans un creux libre",
+    );
+  }
+
+  const longPhaseSnapshot: PlanningSnapshot = {
+    ...movedAcrossSnapshot(),
+    chantiers: [
+      {
+        id: "ch-a",
+        nom_client: "Alpha",
+        adresse: "",
+        lien_dossier_onedrive: null,
+        priorite: "normal",
+        date_creation: "2026-09-01",
+      },
+    ],
+    elements: [{ id: "el-a", chantier_id: "ch-a", nom_element: "A" }],
+    phases: [
+      {
+        id: "ph-a",
+        element_id: "el-a",
+        type_phase: "fabrication",
+        duree_estimee_heures: 22.5,
+        date_debut: "2026-09-07",
+        date_fin: "2026-09-09",
+        heure_debut: "07:30",
+        employe_id: "emp-a",
+        statut: "a_faire",
+        urgent: false,
+      },
+    ],
+  };
+  const longHalves = blockForPhaseOnRow(
+    longPhaseSnapshot,
+    "emp-a",
+    "ph-a",
+  )?.halves;
+  if (!longHalves || longHalves.length < 5) {
+    throw new Error(
+      "drag-shift: une phase de 3 jours doit occuper plusieurs créneaux",
+    );
+  }
+  const middle = longHalves[2]!;
+  const extracted = shiftSingleHalf({
+    snapshot: longPhaseSnapshot,
+    fromRowId: "emp-a",
+    toRowId: "emp-a",
+    phaseId: "ph-a",
+    grab: middle,
+    drop: { date: "2026-09-10", half: 0 },
+  });
+  const kept = extracted.patches.find((item) => item.id === "ph-a");
+  const movedInsert = extracted.inserts?.find(
+    (item) => item.date_debut === "2026-09-10",
+  );
+  const suffixInsert = extracted.inserts?.find(
+    (item) => item.date_debut === "2026-09-08" && item.heure_debut === "13:00",
+  );
+  if (
+    extracted.blocked ||
+    kept?.date_debut !== "2026-09-07" ||
+    kept?.date_fin !== "2026-09-07" ||
+    !movedInsert ||
+    !suffixInsert ||
+    suffixInsert.date_fin !== "2026-09-09"
+  ) {
+    throw new Error(
+      "drag-shift: extraire un créneau du milieu ne doit pas déplacer le reste de la phase",
+    );
+  }
+  const occupiedDrop = shiftSingleHalf({
+    snapshot: {
+      ...longPhaseSnapshot,
+      chantiers: [
+        ...longPhaseSnapshot.chantiers,
+        {
+          id: "ch-b",
+          nom_client: "Beta",
+          adresse: "",
+          lien_dossier_onedrive: null,
+          priorite: "normal",
+          date_creation: "2026-09-01",
+        },
+      ],
+      elements: [
+        ...longPhaseSnapshot.elements,
+        { id: "el-b", chantier_id: "ch-b", nom_element: "B" },
+      ],
+      phases: [
+        ...longPhaseSnapshot.phases,
+        {
+          id: "ph-b",
+          element_id: "el-b",
+          type_phase: "fabrication",
+          duree_estimee_heures: 4,
+          date_debut: "2026-09-10",
+          date_fin: "2026-09-10",
+          heure_debut: "07:30",
+          employe_id: "emp-a",
+          statut: "a_faire",
+          urgent: false,
+        },
+      ],
+    },
+    fromRowId: "emp-a",
+    toRowId: "emp-a",
+    phaseId: "ph-a",
+    grab: middle,
+    drop: { date: "2026-09-10", half: 0 },
+  });
+  if (!occupiedDrop.blocked) {
+    throw new Error(
+      "drag-shift: un créneau extrait ne doit pas écraser un autre chantier",
     );
   }
 }

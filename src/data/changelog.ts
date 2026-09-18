@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-18-decaler-creneau",
+    title: "Décaler un seul créneau",
+    items: [
+      "Sur le planning, le mode Ce créneau déplace seulement le matin ou l’après-midi glissé.",
+      "Le reste de la phase (les autres jours) reste à sa place.",
+    ],
+  },
+  {
     id: "2026-09-18-chantier-createur",
     title: "Qui a créé le chantier",
     items: [

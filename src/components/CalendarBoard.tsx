@@ -43,6 +43,7 @@ import {
   shiftChantierBlockByMinutes,
   shiftOrMoveChantierBlock,
   shiftPhaseOrJump,
+  shiftSingleHalf,
   type OccupiedHalf,
 } from "@/lib/engine/drag-shift";
 import { clampToWorkWindows } from "@/lib/engine/hour-grid";
@@ -62,7 +63,7 @@ import {
 import { fabricationAwaitingLaunch } from "@/lib/dates-estimatives";
 
 type ViewMode = "overview" | "week" | "day";
-type DragScope = "chantier" | "phase";
+type DragScope = "chantier" | "phase" | "creneau";
 
 export function CalendarBoard() {
   const { snapshot, loading, error, usingSupabase, applyPhaseEdits, reorderEmployees } =
@@ -217,6 +218,16 @@ export function CalendarBoard() {
     drop: OccupiedHalf & { rowId: string; startMin?: number },
     phaseMode: boolean,
   ) {
+    if (drag.scope === "creneau") {
+      return shiftSingleHalf({
+        snapshot,
+        fromRowId: drag.rowId,
+        toRowId: drop.rowId,
+        phaseId: drag.phaseId,
+        grab: { date: drag.grab.date, half: drag.grab.half },
+        drop: { date: drop.date, half: drop.half },
+      });
+    }
     if (view === "day" && drag.startMin != null && drop.startMin != null) {
       return shiftChantierBlockByMinutes({
         snapshot,
@@ -400,6 +411,8 @@ export function CalendarBoard() {
             Avec « Cette phase », vous déplacez seulement l’étape (pose,
             fabrication…) : elle se cale dans un creux, ou saute un autre
             chantier (météo, pose intérieure / extérieure).
+            Avec « Ce créneau », vous déplacez seulement le matin ou
+            l’après-midi glissé, sans bouger le reste de la phase.
             Un dépôt sur une absence ou un créneau hors horaire
             à 0 h (vendredi après-midi en 35 h, week-end) est annulé.
             Glissez une ligne de salarié (clic gauche maintenu sur le nom)
@@ -440,6 +453,7 @@ export function CalendarBoard() {
               [
                 ["chantier", "Chantier entier"],
                 ["phase", "Cette phase"],
+                ["creneau", "Ce créneau"],
               ] as const
             ).map(([id, label]) => (
               <button
@@ -729,7 +743,7 @@ export function CalendarBoard() {
                           slot,
                         );
                       const assignments =
-                        dragScope === "phase"
+                        dragScope === "phase" || dragScope === "creneau"
                           ? cellAssignments
                           : uniqueAssignmentsByChantier(cellAssignments);
                       const cellKey = `${row.id}|${iso}|${half}`;
@@ -957,7 +971,7 @@ function DayDetail({
           const windows = workWindowsForRow(snapshot, row.id, iso);
           const dayAssignments = assignmentsForDay(snapshot, row.id, iso);
           const assignments =
-            dragScope === "phase"
+            dragScope === "phase" || dragScope === "creneau"
               ? dayAssignments
               : uniqueAssignmentsByChantier(dayAssignments);
           const dayStart = windows[0]?.start ?? 7 * 60;
