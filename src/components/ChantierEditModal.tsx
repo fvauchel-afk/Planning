@@ -49,6 +49,7 @@ import {
   clearFormDraft,
   readFormDraft,
   setUnsavedWork,
+  useFlushFormDraft,
   writeFormDraft,
   type ChantierCascadeDraft,
 } from "@/lib/form-draft";
@@ -539,8 +540,7 @@ export function ChantierEditModal({
     if (previewRange.lastDate) setPlanEnd(previewRange.lastDate);
   }, [datesDirty, previewRange.firstDate, previewRange.lastDate]);
 
-  useEffect(() => {
-    if (!cascadeDirty.current) return;
+  const persistDraft = useCallback(() => {
     writeFormDraft({
       kind: "chantier",
       id: chantier.id,
@@ -580,6 +580,13 @@ export function ChantierEditModal({
     employeFabrication,
     employePose,
   ]);
+
+  useFlushFormDraft(persistDraft);
+
+  useEffect(() => {
+    if (!cascadeDirty.current) return;
+    persistDraft();
+  }, [persistDraft]);
 
   useEffect(
     () => () => {
