@@ -2353,6 +2353,41 @@ function runDragShiftSelfCheck() {
       "drag-shift: le jour extrait doit sauter l’autre chantier, le creux reste vide",
     );
   }
+
+  const ontoOtherEmployee = shiftPhaseDay({
+    snapshot: longPhaseSnapshot,
+    fromRowId: "emp-a",
+    toRowId: "emp-b",
+    phaseId: "ph-a",
+    grab: middle,
+    drop: { date: "2026-09-10", half: 0 },
+  });
+  const keptOnOrigin = ontoOtherEmployee.patches.find(
+    (item) => item.id === "ph-a",
+  );
+  const movedToOther = ontoOtherEmployee.inserts?.find(
+    (item) => item.employe_id === "emp-b",
+  );
+  const suffixOnOrigin = ontoOtherEmployee.inserts?.find(
+    (item) => item.employe_id === "emp-a",
+  );
+  if (
+    ontoOtherEmployee.blocked ||
+    keptOnOrigin?.employe_id !== "emp-a" ||
+    keptOnOrigin?.date_debut !== "2026-09-07" ||
+    keptOnOrigin?.date_fin !== "2026-09-07" ||
+    !movedToOther ||
+    movedToOther.date_debut !== "2026-09-10" ||
+    movedToOther.date_fin !== "2026-09-10" ||
+    !suffixOnOrigin ||
+    suffixOnOrigin.date_debut !== "2026-09-09" ||
+    suffixOnOrigin.date_fin !== "2026-09-09" ||
+    ontoOtherEmployee.inserts?.some((item) => item.date_debut === "2026-09-08")
+  ) {
+    throw new Error(
+      "drag-shift: extraire un jour vers un autre salarié libre doit laisser le creux et caler le jour à l’arrivée",
+    );
+  }
 }
 
 function movedAcrossSnapshot(): PlanningSnapshot {
