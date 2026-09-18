@@ -42,6 +42,7 @@ import {
   phaseIdsStartedToday,
   withConfirmedPhases,
 } from "@/lib/dates-estimatives";
+import { parsePhotoDataUrls } from "@/lib/photos";
 
 const STORAGE_KEY = "vauchel-planning-v1";
 
@@ -115,6 +116,7 @@ export function loadLocalSnapshot(): PlanningSnapshot {
         motif_precision: row.motif_precision ?? null,
         motif_refus: row.motif_refus ?? null,
         absence_id: row.absence_id ?? null,
+        photos: parsePhotoDataUrls(row.photos),
       })),
       sousTraitants: parsed.sousTraitants ?? [],
     };
@@ -507,6 +509,7 @@ export function localCreateDemande(
     motif_precision: input.motif_precision?.trim() || null,
     motif_refus: null,
     absence_id: null,
+    photos: parsePhotoDataUrls(input.photos),
   };
   next.demandes = [row, ...(next.demandes ?? [])];
   saveLocalSnapshot(next);

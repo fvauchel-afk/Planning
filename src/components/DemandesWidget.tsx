@@ -8,6 +8,7 @@ import {
   syntheseMessageConge,
   validateDemandeCongeInput,
 } from "@/lib/demandes";
+import { PhotoPicker } from "@/components/PhotoPicker";
 import {
   ABSENCE_LABELS,
   CATEGORIES_DEMANDE,
@@ -23,6 +24,7 @@ export function DemandesWidget() {
   const [open, setOpen] = useState(false);
   const [categorie, setCategorie] = useState<CategorieDemande>("commande");
   const [message, setMessage] = useState("");
+  const [photos, setPhotos] = useState<string[]>([]);
   const today = toISODate(new Date());
   const [dateDebut, setDateDebut] = useState(today);
   const [dateFin, setDateFin] = useState(today);
@@ -93,9 +95,12 @@ export function DemandesWidget() {
           categorie,
           message: text,
           employe_id: employeeId,
+          photos:
+            categorie === "suggestion_entreprise" ? photos : undefined,
         });
       }
       setMessage("");
+      setPhotos([]);
       setSent(true);
     } catch (err) {
       setError(
@@ -235,6 +240,17 @@ export function DemandesWidget() {
                 />
               </label>
             )}
+            {categorie === "suggestion_entreprise" ? (
+              <PhotoPicker
+                photos={photos}
+                onChange={(next) => {
+                  setPhotos(next);
+                  setSent(false);
+                }}
+                disabled={sending}
+                help="Vous pouvez prendre une photo avec le téléphone, ou en choisir une dans la galerie."
+              />
+            ) : null}
             {error && <p className="text-sm text-red-700">{error}</p>}
             {sent && (
               <p className="text-sm text-emerald-700">

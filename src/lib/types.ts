@@ -270,6 +270,7 @@ export type Demande = {
   motif_precision?: string | null;
   motif_refus?: string | null;
   absence_id?: string | null;
+  photos?: string[];
 };
 
 export type NewDemandeInput = {
@@ -280,6 +281,7 @@ export type NewDemandeInput = {
   date_fin?: string;
   type_absence?: TypeAbsence;
   motif_precision?: string | null;
+  photos?: string[];
 };
 
 export type DemandeUpdateInput = {

@@ -10,6 +10,7 @@ import {
   type LigneBonCommande,
 } from "@/lib/bon-commande/lignes";
 import type { Chantier, PhasePlanning, SousTraitant } from "@/lib/types";
+import { parsePhotoDataUrls, photoDataUrlToBytes } from "@/lib/photos";
 
 export type BonCommandePdfInput = {
   chantier: Chantier;
@@ -17,6 +18,7 @@ export type BonCommandePdfInput = {
   fabrication: PhasePlanning | null;
   sousTraitant: SousTraitant;
   dateDocument: string;
+  photos?: string[];
 };
 
 function line(text: string, max = 90) {
@@ -252,6 +254,39 @@ export async function buildBonCommandePdf(
     font,
     color: rgb(0.45, 0.4, 0.35),
   });
+
+  const attached = parsePhotoDataUrls(input.photos);
+  for (let index = 0; index < attached.length; index += 1) {
+    const decoded = photoDataUrlToBytes(attached[index]!);
+    if (!decoded) continue;
+    let image;
+    try {
+      image =
+        decoded.extension === "png"
+          ? await pdf.embedPng(decoded.bytes)
+          : await pdf.embedJpg(decoded.bytes);
+    } catch {
+      continue;
+    }
+    const photoPage = pdf.addPage([595.28, 841.89]);
+    photoPage.drawText(`Photo ${index + 1}`, {
+      x: 48,
+      y: 800,
+      size: 12,
+      font: bold,
+    });
+    const maxW = 499;
+    const maxH = 720;
+    const scale = Math.min(maxW / image.width, maxH / image.height, 1);
+    const w = image.width * scale;
+    const h = image.height * scale;
+    photoPage.drawImage(image, {
+      x: 48,
+      y: 780 - h,
+      width: w,
+      height: h,
+    });
+  }
 
   const bytes = await pdf.save();
   const safeClient = input.chantier.nom_client

@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { BonCommandeLignesEditor } from "@/components/BonCommandeLignesEditor";
+import { PhotoPicker } from "@/components/PhotoPicker";
 import { PdfPreview } from "@/components/PdfPreview";
 import {
   defaultLignesBonCommande,
@@ -50,6 +51,7 @@ export function BonCommandeModal({
     return saved?.specialite || "tout";
   });
   const [preview, setPreview] = useState<Preview | null>(null);
+  const [photos, setPhotos] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
@@ -83,6 +85,7 @@ export function BonCommandeModal({
         chantierId,
         sousTraitantId,
         lignes: pieces,
+        photos,
         confirm: false,
       });
       setPreview(data);
@@ -110,6 +113,7 @@ export function BonCommandeModal({
         chantierId,
         sousTraitantId,
         lignes: pieces,
+        photos,
         confirm: true,
       });
       await refresh();
@@ -145,9 +149,9 @@ export function BonCommandeModal({
         ) : (
           <>
             <p className="mt-1 text-sm text-stone-600">
-              Renseignez les pièces (quantité et descriptif), choisissez le
-              sous-traitant, vérifiez l’aperçu, puis confirmez l’envoi. Rien ne
-              part sans cette confirmation.
+              Renseignez les pièces (quantité et descriptif), joignez des photos
+              si besoin, choisissez le sous-traitant, vérifiez l’aperçu, puis
+              confirmez l’envoi. Rien ne part sans cette confirmation.
             </p>
             {rows.length === 0 ? (
               <p className="mt-3 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
@@ -205,6 +209,18 @@ export function BonCommandeModal({
                 disabled={busy}
                 onChange={(next) => {
                   setLignes(next);
+                  setPreview(null);
+                }}
+              />
+            </div>
+            <div className="mt-3">
+              <p className="mb-1 text-sm font-medium">Photos (optionnel)</p>
+              <PhotoPicker
+                photos={photos}
+                disabled={busy}
+                help="Joindre des photos pour le sous-traitant (appareil ou galerie)."
+                onChange={(next) => {
+                  setPhotos(next);
                   setPreview(null);
                 }}
               />
