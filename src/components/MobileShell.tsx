@@ -16,6 +16,8 @@ export function MobileShell({
   const pathname = usePathname();
   const { session } = useSession();
   const name = employeeName ?? session?.nom;
+  const isAdmin = session?.isAdmin === true;
+  const homeHref = isAdmin ? "/" : "/moi";
 
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -27,9 +29,12 @@ export function MobileShell({
     <div className="min-h-screen bg-[#f3efe6]">
       <AuthOpenBanner />
       <header className="sticky top-0 z-20 border-b border-stone-800 bg-stone-900 px-4 py-3 text-stone-100">
-        <p className="text-[10px] uppercase tracking-[0.2em] text-amber-500">
+        <Link
+          href={homeHref}
+          className="inline-block text-[10px] uppercase tracking-[0.2em] text-amber-500 hover:text-amber-400"
+        >
           Ferronnerie Vauchel
-        </p>
+        </Link>
         <div className="mt-0.5 flex items-baseline justify-between gap-3">
           <h1 className="font-serif text-xl">Mon planning</h1>
           {name && (
@@ -42,7 +47,15 @@ export function MobileShell({
             </button>
           )}
         </div>
-        <nav className="mt-3 flex gap-1">
+        <nav className="mt-3 flex flex-wrap gap-1">
+          {isAdmin ? (
+            <Link
+              href="/"
+              className="rounded-md px-3 py-1.5 text-sm text-stone-300 hover:bg-stone-800"
+            >
+              Planning
+            </Link>
+          ) : null}
           <Link
             href="/moi"
             className={`rounded-md px-3 py-1.5 text-sm ${

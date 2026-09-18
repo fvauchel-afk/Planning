@@ -84,12 +84,17 @@ export function AppShell({
       <header className="sticky top-0 z-30 border-b border-stone-800 bg-stone-900 text-stone-100">
         <div className="mx-auto flex max-w-[1600px] items-center justify-between gap-3 px-4 py-3">
           <div className="min-w-0">
-            <p className="text-[11px] uppercase tracking-[0.22em] text-amber-500">
-              Métallerie
-            </p>
-            <h1 className="font-serif text-xl leading-tight text-stone-50">
-              Ferronnerie Vauchel
-            </h1>
+            <Link
+              href={session?.isAdmin ? "/" : "/moi"}
+              className="block rounded-md outline-none hover:opacity-90 focus-visible:ring-2 focus-visible:ring-amber-500"
+            >
+              <p className="text-[11px] uppercase tracking-[0.22em] text-amber-500">
+                Métallerie
+              </p>
+              <h1 className="font-serif text-xl leading-tight text-stone-50">
+                Ferronnerie Vauchel
+              </h1>
+            </Link>
             {session?.nom && (
               <p className="truncate text-xs text-stone-400">{session.nom}</p>
             )}

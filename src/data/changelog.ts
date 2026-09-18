@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-18-moi-retour-accueil",
+    title: "Retour au planning depuis Mon planning",
+    items: [
+      "Le nom « Ferronnerie Vauchel » en haut à gauche ramène à l’accueil (planning équipe pour un admin, Mon planning pour un salarié).",
+      "Depuis Mon planning, un admin a aussi un lien Planning dans la barre, pour revenir à la vue d’équipe.",
+    ],
+  },
+  {
     id: "2026-09-18-edit-duree-phases",
     title: "Durées dans Modifier le chantier",
     items: [
