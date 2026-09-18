@@ -18,7 +18,7 @@ export async function restorePlanningBackup(itemId: string): Promise<{
     typeof payload !== "object" ||
     (payload as { app?: string }).app !== "planning-vauchel"
   ) {
-    throw new Error("Ce fichier n’est pas une sauvegarde Planning Vauchel.");
+    throw new Error("Ce fichier n’est pas une sauvegarde Planning.");
   }
 
   const supabase = createSupabaseServerClient();

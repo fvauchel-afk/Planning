@@ -10,6 +10,7 @@ import { LancementAlert } from "@/components/LancementAlert";
 import { AdministratifIdleAlert } from "@/components/AdministratifIdleAlert";
 import { lancementsEnAttente } from "@/lib/dates-estimatives";
 import { useSession } from "@/lib/auth/session-context";
+import { BrandMark } from "@/components/BrandMark";
 import { usePlanning } from "@/lib/planning-context";
 
 const ADMIN_LINKS: { href: string; label: string }[] = [
@@ -88,12 +89,7 @@ export function AppShell({
               href={session?.isAdmin ? "/" : "/moi"}
               className="block rounded-md outline-none hover:opacity-90 focus-visible:ring-2 focus-visible:ring-amber-500"
             >
-              <p className="text-[11px] uppercase tracking-[0.22em] text-amber-500">
-                Métallerie
-              </p>
-              <h1 className="font-serif text-xl leading-tight text-stone-50">
-                Ferronnerie Vauchel
-              </h1>
+              <BrandMark variant="dark" />
             </Link>
             {session?.nom && (
               <p className="truncate text-xs text-stone-400">{session.nom}</p>

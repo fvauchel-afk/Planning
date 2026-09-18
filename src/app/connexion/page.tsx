@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import { BrandMark } from "@/components/BrandMark";
 
 export default function ConnexionPage() {
   const [pin, setPin] = useState("");
@@ -56,10 +57,8 @@ export default function ConnexionPage() {
         onSubmit={onSubmit}
         className="w-full max-w-sm rounded-2xl border border-stone-300 bg-white p-6 shadow-sm"
       >
-        <p className="text-[11px] uppercase tracking-[0.22em] text-amber-700">
-          Ferronnerie Vauchel
-        </p>
-        <h1 className="mt-1 font-serif text-2xl text-stone-900">Connexion</h1>
+        <BrandMark variant="light" />
+        <h1 className="mt-4 font-serif text-2xl text-stone-900">Connexion</h1>
         <p className="mt-2 text-sm text-stone-600">
           Entrez votre code PIN à 4 chiffres.
         </p>

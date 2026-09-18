@@ -1,4 +1,5 @@
 import "server-only";
+import { COMPANY_SIGN_OFF } from "@/lib/brand";
 import { BON_COMMANDE_CC, sendResendTextEmail } from "@/lib/bon-commande/mail";
 
 export const PLAN_A_FAIRE_SUBJECT = "PLAN A FAIRE MIKA MERCI";
@@ -32,7 +33,7 @@ export function planPourPlanText(input: {
   if (input.onedriveUrl) {
     lines.push(`Dossier OneDrive : ${input.onedriveUrl}`);
   }
-  lines.push("", `Fiche chantier : ${input.ficheUrl}`, "", "— Ferronnerie Vauchel");
+  lines.push("", `Fiche chantier : ${input.ficheUrl}`, "", COMPANY_SIGN_OFF);
   return lines.join("\n");
 }
 
@@ -54,7 +55,7 @@ export function planPourPlanHtml(input: {
     `Dates estimées : ${escapeHtml(input.datesLabel || "non renseignées")}</p>`,
     onedrive,
     `<p><a href="${escapeHtml(input.ficheUrl)}">Ouvrir la fiche du chantier</a></p>`,
-    "<p>— Ferronnerie Vauchel</p>",
+    `<p>${COMPANY_SIGN_OFF}</p>`,
   ].join("");
 }
 

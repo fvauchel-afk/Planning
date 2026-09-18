@@ -1,4 +1,4 @@
-# Planning Ferronnerie Vauchel
+# Planning — La Métallerie du Sud
 
 Outil interne de planning d’équipe (administratif, fabrication, logistique, pose).
 

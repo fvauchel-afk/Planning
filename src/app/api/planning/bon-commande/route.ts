@@ -152,7 +152,7 @@ export async function POST(request: NextRequest) {
     } = prepared;
     const subject = `Bon de commande — ${chantier.nom_client} — ${sousTraitant.specialite}`;
     const text = [
-      `Bon de commande Ferronnerie Vauchel / La Métallerie du Sud.`,
+      `Bon de commande La Métallerie du Sud.`,
       `Chantier : ${chantier.nom_client}`,
       chantier.adresse ? `Adresse : ${chantier.adresse}` : "",
       chantier.couleur_ral?.trim()

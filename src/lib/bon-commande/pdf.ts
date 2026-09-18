@@ -10,6 +10,7 @@ import {
   type LigneBonCommande,
 } from "@/lib/bon-commande/lignes";
 import type { Chantier, PhasePlanning, SousTraitant } from "@/lib/types";
+import { COMPANY_NAME_ASCII } from "@/lib/brand";
 import { parsePhotoDataUrls, photoDataUrlToBytes } from "@/lib/photos";
 
 export type BonCommandePdfInput = {
@@ -75,30 +76,32 @@ export async function buildBonCommandePdf(
   let y = height - 56;
 
   try {
-    const iconPath = path.join(process.cwd(), "public", "icon-192.png");
-    const png = await readFile(iconPath);
-    const image = await pdf.embedPng(png);
-    page.drawImage(image, { x: 48, y: height - 96, width: 40, height: 40 });
+    const logoPath = path.join(
+      process.cwd(),
+      "public",
+      "logo-metallerie-du-sud.jpg",
+    );
+    const jpg = await readFile(logoPath);
+    const image = await pdf.embedJpg(jpg);
+    const logoW = 168;
+    const logoH = (image.height / image.width) * logoW;
+    page.drawImage(image, {
+      x: 48,
+      y: height - 44 - logoH,
+      width: logoW,
+      height: logoH,
+    });
+    y = height - 56 - logoH;
   } catch {
-    // logo optionnel
+    page.drawText(COMPANY_NAME_ASCII, {
+      x: 48,
+      y: height - 68,
+      size: 16,
+      font: bold,
+      color: rgb(0.16, 0.34, 0.56),
+    });
+    y = height - 110;
   }
-
-  page.drawText("Ferronnerie Vauchel", {
-    x: 100,
-    y: height - 68,
-    size: 16,
-    font: bold,
-    color: rgb(0.22, 0.16, 0.08),
-  });
-  page.drawText("La Metallerie du Sud", {
-    x: 100,
-    y: height - 86,
-    size: 11,
-    font,
-    color: rgb(0.45, 0.35, 0.2),
-  });
-
-  y = height - 130;
   page.drawText("Bon de commande sous-traitance", {
     x: 48,
     y,
@@ -186,7 +189,7 @@ export async function buildBonCommandePdf(
 
   const ensureSpace = (needed: number) => {
     if (y - needed >= footerY) return;
-    page.drawText("Ferronnerie Vauchel — Planning", {
+    page.drawText("La Metallerie du Sud — Planning", {
       x: 48,
       y: 48,
       size: 9,
@@ -247,7 +250,7 @@ export async function buildBonCommandePdf(
     font,
     color: rgb(0.25, 0.22, 0.18),
   });
-  page.drawText("Ferronnerie Vauchel — Planning", {
+  page.drawText("La Metallerie du Sud — Planning", {
     x: 48,
     y: 48,
     size: 9,
