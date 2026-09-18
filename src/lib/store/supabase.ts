@@ -69,6 +69,7 @@ import {
   parseStatutDemande,
   parseTypeAbsence,
 } from "@/lib/demandes";
+import { parsePhotoDataUrls } from "@/lib/photos";
 
 type EmployeeRow = {
   id: string;
@@ -314,6 +315,7 @@ async function fetchSupabaseSnapshotOnce(): Promise<PlanningSnapshot> {
             typeof raw.motif_refus === "string" ? raw.motif_refus : null,
           absence_id:
             typeof raw.absence_id === "string" ? raw.absence_id : null,
+          photos: parsePhotoDataUrls(raw.photos),
         };
       })
       .sort(
@@ -1295,8 +1297,16 @@ export async function supabaseCreateDemande(
     date_fin: input.date_fin?.slice(0, 10) || null,
     type_absence: input.type_absence ?? null,
     motif_precision: input.motif_precision?.trim() || null,
+    photos: parsePhotoDataUrls(input.photos),
   };
-  const { error } = await supabase.from("demandes").insert(payload);
+  let error = (await supabase.from("demandes").insert(payload)).error;
+  if (error && isMissingColumnError(error, "photos")) {
+    const withoutPhotos = { ...payload };
+    delete (withoutPhotos as { photos?: unknown }).photos;
+    const retryPhotos = await supabase.from("demandes").insert(withoutPhotos);
+    if (!retryPhotos.error) return;
+    error = retryPhotos.error;
+  }
   if (error && isMissingColumnError(error, "date_debut")) {
     const withoutDates = {
       employe_id: payload.employe_id,

@@ -11,6 +11,22 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-18-photos-bon-commande",
+    title: "Photos sur le bon de commande",
+    items: [
+      "Avant l’envoi au sous-traitant, vous pouvez joindre des photos (appareil ou galerie).",
+      "Elles partent avec l’e-mail, figurent dans le PDF, et sont copiées dans le dossier OneDrive du chantier.",
+    ],
+  },
+  {
+    id: "2026-09-18-photo-suggestion-entreprise",
+    title: "Photo sur une suggestion entreprise",
+    items: [
+      "Dans Suggestion amélioration entreprise, vous pouvez prendre une photo avec le téléphone ou en choisir une dans la galerie.",
+      "Les photos s’affichent dans l’onglet Demandes.",
+    ],
+  },
+  {
     id: "2026-09-18-retard-dernier-jour",
     title: "Signaler un retard : dernier jour seulement",
     items: [

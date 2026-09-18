@@ -49,6 +49,7 @@ export async function sendBonCommandeEmail(input: {
   text: string;
   fileName: string;
   pdfBytes: Uint8Array;
+  extraAttachments?: { fileName: string; bytes: Uint8Array; contentType: string }[];
 }): Promise<void> {
   const apiKey = process.env.RESEND_API_KEY?.trim();
   if (!apiKey) {
@@ -57,6 +58,11 @@ export async function sendBonCommandeEmail(input: {
     );
   }
   const resend = new Resend(apiKey);
+  const extras = (input.extraAttachments ?? []).map((item) => ({
+    filename: item.fileName,
+    content: Buffer.from(item.bytes).toString("base64"),
+    contentType: item.contentType,
+  }));
   const result = await resend.emails.send({
     from: resendFromAddress(),
     to: [input.to],
@@ -68,6 +74,7 @@ export async function sendBonCommandeEmail(input: {
         filename: input.fileName,
         content: Buffer.from(input.pdfBytes).toString("base64"),
       },
+      ...extras,
     ],
   });
   if (result.error) {

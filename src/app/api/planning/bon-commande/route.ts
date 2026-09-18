@@ -11,6 +11,7 @@ import {
   normalizeLignesBonCommande,
   parseLignesBonCommande,
 } from "@/lib/bon-commande/lignes";
+import { parsePhotoDataUrls, photoDataUrlToBytes } from "@/lib/photos";
 import { BON_COMMANDE_CC, sendBonCommandeEmail } from "@/lib/bon-commande/mail";
 import { buildBonCommandePdf } from "@/lib/bon-commande/pdf";
 import { FINITION_LAQUAGE_LABELS } from "@/lib/thermolaquage";
@@ -47,12 +48,14 @@ type Body = {
   sousTraitantId?: string;
   confirm?: boolean;
   lignes?: unknown;
+  photos?: unknown;
 };
 
 async function prepare(
   chantierId: string,
   sousTraitantId: string,
   lignesRaw: unknown,
+  photosRaw: unknown,
 ) {
   const snapshot = await fetchSupabaseSnapshot();
   const chantier = snapshot.chantiers.find((item) => item.id === chantierId);
@@ -84,12 +87,14 @@ async function prepare(
       "Ajoutez au moins une pièce (quantité et descriptif) avant de générer le bon.",
     );
   }
+  const photos = parsePhotoDataUrls(photosRaw);
   const pdf = await buildBonCommandePdf({
     chantier,
     lignes,
     fabrication,
     sousTraitant,
     dateDocument,
+    photos,
   });
   const delayDays = chantier.delai_sous_traitance_jours || 5;
   const sendDate = todayIso();
@@ -105,6 +110,7 @@ async function prepare(
     sousTraitant,
     pdf,
     lignes,
+    photos,
     dateDocument,
     sendDate,
     delay,
@@ -132,12 +138,14 @@ export async function POST(request: NextRequest) {
       body.chantierId,
       body.sousTraitantId,
       body.lignes,
+      body.photos,
     );
     const {
       chantier,
       sousTraitant,
       pdf,
       lignes,
+      photos,
       dateDocument,
       sendDate,
       delay,
@@ -158,6 +166,9 @@ export async function POST(request: NextRequest) {
       "",
       "Pièces :",
       formatLignesBonCommandeText(lignes),
+      photos.length
+        ? `${photos.length} photo${photos.length > 1 ? "s" : ""} jointe${photos.length > 1 ? "s" : ""}.`
+        : "",
       "",
       `Délai officiel : 5 jours ouvrés à compter de l’envoi (${formatIsoFr(sendDate)}).`,
     ]
@@ -183,12 +194,25 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    const photoFiles = photos
+      .map((dataUrl, index) => {
+        const decoded = photoDataUrlToBytes(dataUrl);
+        if (!decoded) return null;
+        return {
+          fileName: `photo-${index + 1}.${decoded.extension}`,
+          bytes: decoded.bytes,
+          contentType: decoded.contentType,
+        };
+      })
+      .filter((item): item is NonNullable<typeof item> => Boolean(item));
+
     await sendBonCommandeEmail({
       to: sousTraitant.email,
       subject,
       text,
       fileName: pdf.fileName,
       pdfBytes: pdf.bytes,
+      extraAttachments: photoFiles,
     });
 
     let onedriveWarning: string | undefined;
@@ -205,6 +229,15 @@ export async function POST(request: NextRequest) {
         contentType: "application/pdf",
         folderName: chantier.nom_client,
       });
+      for (const photo of photoFiles) {
+        await uploadBytesToShareFolder({
+          shareUrl,
+          fileName: photo.fileName,
+          bytes: photo.bytes,
+          contentType: photo.contentType,
+          folderName: chantier.nom_client,
+        });
+      }
     } catch (err) {
       onedriveWarning =
         err instanceof Error

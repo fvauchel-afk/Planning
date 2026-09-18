@@ -407,6 +407,7 @@ export async function POST(request: NextRequest) {
         date_fin: body.input.date_fin,
         type_absence: body.input.type_absence,
         motif_precision: body.input.motif_precision,
+        photos: body.input.photos,
       });
       if (body.input.categorie === "commande") {
         const snapshot = await fetchSupabaseSnapshot();

@@ -314,6 +314,22 @@ export function DemandesPage() {
                   !demande.date_debut ? (
                 <DemandeMessage text={demande.message} />
                 ) : null}
+                {demande.photos?.length ? (
+                  <ul className="mt-3 flex flex-wrap gap-2">
+                    {demande.photos.map((src, index) => (
+                      <li key={`${demande.id}-${index}`}>
+                        <a href={src} target="_blank" rel="noopener noreferrer">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={src}
+                            alt={`Photo ${index + 1}`}
+                            className="h-24 w-24 rounded border border-stone-300 object-cover"
+                          />
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
                 {demande.statut === "refusee" && demande.motif_refus ? (
                   <p className="mt-2 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-900">
                     Motif de refus : {demande.motif_refus}
