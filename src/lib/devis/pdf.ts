@@ -14,7 +14,7 @@ import {
   type DevisReglages,
   type EntrepriseReglages,
 } from "@/lib/devis/types";
-import { BRAND_BLUE } from "@/lib/brand";
+import { BRAND_BLUE, BRAND_MIST } from "@/lib/brand";
 import { applyMailVars, devisMailVars } from "@/lib/devis/vars";
 
 function hexRgb(hex: string) {
@@ -27,8 +27,8 @@ function hexRgb(hex: string) {
 }
 
 const BLEU = hexRgb(BRAND_BLUE);
-const FOND_TOTAUX = rgb(0.91, 0.93, 0.96);
-const NOIR = rgb(0.12, 0.1, 0.08);
+const FOND_TOTAUX = hexRgb(BRAND_MIST);
+const NOIR = hexRgb("#1a1a1a");
 
 async function embedLogo(pdf: PDFDocument, entreprise: EntrepriseReglages) {
   if (entreprise.logo_base64.trim()) {

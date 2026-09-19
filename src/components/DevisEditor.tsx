@@ -18,7 +18,14 @@ import {
 } from "@/lib/devis/types";
 import { useDebouncedPatch } from "@/lib/form-live";
 
-const FIELD = "w-full rounded border border-stone-300 px-3 py-2 text-sm";
+const FIELD =
+  "w-full rounded-md border border-mds-line bg-white px-3 py-2 text-sm text-mds-ink outline-none focus:border-mds-blue focus:ring-1 focus:ring-mds-blue";
+const CARD =
+  "rounded-lg border border-mds-line border-l-4 border-l-mds-blue bg-white p-4 shadow-sm";
+const BTN_PRIMARY =
+  "rounded-lg bg-mds-blue px-4 py-2 text-sm font-medium text-white hover:bg-mds-blue-dark disabled:opacity-60";
+const BTN_SECONDARY =
+  "rounded-lg border border-mds-line bg-white px-4 py-2 text-sm text-mds-ink hover:border-mds-blue disabled:opacity-60";
 
 type Preview = { fileName: string; pdfBase64: string; to: string; subject: string; text: string };
 
@@ -255,7 +262,7 @@ export function DevisEditor({ devisId }: { devisId?: string }) {
     return (
       <section className="space-y-4">
         <p className="rounded border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm">{done}</p>
-        <Link href="/devis" className="inline-block rounded-lg bg-stone-900 px-4 py-2 text-sm text-white">
+        <Link href="/devis" className="inline-block rounded-lg bg-mds-blue px-4 py-2 text-sm font-medium text-white hover:bg-mds-blue-dark">
           Retour aux devis
         </Link>
       </section>
@@ -263,7 +270,7 @@ export function DevisEditor({ devisId }: { devisId?: string }) {
   }
 
   return (
-    <section className="space-y-5">
+    <section className="space-y-5 text-mds-ink">
       <div>
         <p className="text-sm">
           <Link href="/devis" className="underline">Devis</Link>
@@ -274,7 +281,7 @@ export function DevisEditor({ devisId }: { devisId?: string }) {
             </>
           ) : null}
         </p>
-        <h2 className="mt-1 font-serif text-3xl text-stone-900">
+        <h2 className="mt-1 font-serif text-3xl text-mds-ink">
           {devis ? `Devis n° ${devis.numero}` : "Nouveau devis"}
         </h2>
         {devis ? (
@@ -289,7 +296,7 @@ export function DevisEditor({ devisId }: { devisId?: string }) {
         <p className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{error}</p>
       ) : null}
 
-      <div className="grid gap-3 rounded-lg border border-stone-200 bg-white p-4 md:grid-cols-2">
+      <div className={`grid gap-3 md:grid-cols-2 ${CARD}`}>
         <label className="block text-sm md:col-span-2">
           <span className="mb-1 block font-medium">Client</span>
           {newClient ? (
@@ -315,7 +322,7 @@ export function DevisEditor({ devisId }: { devisId?: string }) {
                   <option key={c.id} value={c.id}>{c.nom}</option>
                 ))}
               </select>
-              <button type="button" className="rounded-md border border-stone-300 px-3 py-2 text-sm" onClick={() => setNewClient(true)}>
+              <button type="button" className="rounded-md border border-mds-line px-3 py-2 text-sm hover:border-mds-blue" onClick={() => setNewClient(true)}>
                 Nouveau client
               </button>
             </div>
@@ -348,8 +355,8 @@ export function DevisEditor({ devisId }: { devisId?: string }) {
         </label>
       </div>
 
-      <div className="rounded-lg border border-stone-200 bg-white p-4">
-        <h3 className="mb-2 font-serif text-lg">Options</h3>
+      <div className={CARD}>
+        <h3 className="mb-2 font-serif text-lg text-mds-ink">Options</h3>
         <div className="grid gap-2 md:grid-cols-2">
           <label className="text-sm">
             Type de facturation
@@ -398,12 +405,12 @@ export function DevisEditor({ devisId }: { devisId?: string }) {
       </div>
 
       <div>
-        <h3 className="mb-2 font-serif text-xl">Lignes</h3>
+        <h3 className="mb-2 font-serif text-xl text-mds-ink">Lignes</h3>
         <DevisLignesEditor
           rows={lignes}
           onChange={(next) => { setLignes(next); mark("lignes", next); }}
         />
-        <p className="mt-3 text-sm">
+        <p className="mt-3 rounded-lg border border-mds-line border-l-4 border-l-mds-blue bg-mds-mist px-4 py-3 text-sm text-mds-ink">
           Total HT {formatMontantFr(totaux.htBrut)} €
           {totaux.remise > 0 ? ` · Remise ${formatMontantFr(totaux.remise)} € · Net HT ${formatMontantFr(totaux.ht)} €` : ""}
           {totaux.parTaux.map((b) => (
@@ -416,15 +423,15 @@ export function DevisEditor({ devisId }: { devisId?: string }) {
 
       <div className="flex flex-wrap gap-2">
         {!devisId ? (
-          <button type="button" disabled={busy} onClick={() => void create()} className="rounded-lg bg-amber-700 px-4 py-2 text-sm font-medium text-amber-50">
+          <button type="button" disabled={busy} onClick={() => void create()} className={BTN_PRIMARY}>
             Créer le devis
           </button>
         ) : (
-          <button type="button" disabled={busy} onClick={() => void live.flush()} className="rounded-lg border border-stone-300 bg-white px-4 py-2 text-sm">
+          <button type="button" disabled={busy} onClick={() => void live.flush()} className={BTN_SECONDARY}>
             Enregistrer
           </button>
         )}
-        <button type="button" disabled={busy || !devisId} onClick={() => void makePreview()} className="rounded-lg bg-sky-800 px-4 py-2 text-sm text-sky-50">
+        <button type="button" disabled={busy || !devisId} onClick={() => void makePreview()} className={BTN_SECONDARY}>
           Aperçu PDF
         </button>
         {devis?.statut === "brouillon" && devisId ? (
@@ -435,14 +442,14 @@ export function DevisEditor({ devisId }: { devisId?: string }) {
       </div>
 
       {preview ? (
-        <div className="space-y-3 rounded-lg border border-stone-200 bg-white p-4">
+        <div className={`space-y-3 ${CARD}`}>
           <PdfPreview pdfBase64={preview.pdfBase64} fileName={preview.fileName} title="Aperçu devis" />
           <label className="block text-sm">
             Destinataire
             <input className={`${FIELD} mt-1`} value={envoiTo} onChange={(e) => setEnvoiTo(e.target.value)} />
           </label>
           <p className="text-xs text-stone-500">Objet : {preview.subject}</p>
-          <button type="button" disabled={busy} onClick={() => void send()} className="rounded-lg bg-amber-700 px-4 py-2 text-sm font-medium text-amber-50">
+          <button type="button" disabled={busy} onClick={() => void send()} className={BTN_PRIMARY}>
             Envoyer le devis
           </button>
         </div>
