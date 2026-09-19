@@ -17,6 +17,7 @@ const ADMIN_LINKS: { href: string; label: string }[] = [
   { href: "/", label: "Planning" },
   { href: "/synthese", label: "Synthèse" },
   { href: "/chantiers", label: "Chantiers" },
+  { href: "/devis", label: "Devis" },
   { href: "/sous-traitants", label: "Sous-traitants" },
   { href: "/employes", label: "Employés" },
   { href: "/absences", label: "Absences" },
