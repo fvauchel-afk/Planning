@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-19-duree-chantier-menu",
+    title: "Durée du nouveau chantier",
+    items: [
+      "Dans Nouveau chantier, la fin ne se choisit plus au calendrier : un menu Durée va de 1 jour à 15 jours ouvrés.",
+      "Le début reste une date. La fin est calculée toute seule (les week-ends sont sautés).",
+    ],
+  },
+  {
     id: "2026-09-19-admin-idle-doublons",
     title: "Administratif : plus de création toute seule",
     items: [

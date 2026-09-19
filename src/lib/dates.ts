@@ -166,6 +166,42 @@ export function workingDaysBetween(startIso: string, endIso: string): number {
   return count;
 }
 
+export const CHANTIER_DUREE_JOURS_MAX = 15;
+
+/** Fin de chantier : N jours ouvrés à partir du début (1 jour = le jour même). */
+export function chantierEndFromDureeJours(debut: string, jours: number): string {
+  if (!debut) return "";
+  const n = Math.min(
+    CHANTIER_DUREE_JOURS_MAX,
+    Math.max(1, Math.round(Number(jours) || 1)),
+  );
+  return addWorkingDays(debut, n - 1);
+}
+
+export function dureeJoursFromChantierRange(debut: string, fin: string): number {
+  if (!debut) return 1;
+  const end = fin && fin >= debut ? fin : debut;
+  const n = 1 + workingDaysBetween(debut, end);
+  return Math.min(CHANTIER_DUREE_JOURS_MAX, Math.max(1, n));
+}
+
+function runChantierDureeSelfCheck() {
+  if (chantierEndFromDureeJours("2026-09-21", 1) !== "2026-09-21") {
+    throw new Error("dates: 1 jour = le lundi même");
+  }
+  if (chantierEndFromDureeJours("2026-09-21", 5) !== "2026-09-25") {
+    throw new Error("dates: 5 jours ouvrés dès lundi = vendredi");
+  }
+  if (chantierEndFromDureeJours("2026-09-21", 7) !== "2026-09-29") {
+    throw new Error("dates: 7 jours ouvrés dès lundi saute le week-end");
+  }
+  if (dureeJoursFromChantierRange("2026-09-21", "2026-09-25") !== 5) {
+    throw new Error("dates: lun–ven = 5 jours");
+  }
+}
+runChantierDureeSelfCheck();
+
+
 export function startOfWeekIso(iso: string): string {
   return toISODate(startOfWeekMonday(parseISODate(iso)));
 }
