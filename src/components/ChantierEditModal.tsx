@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { BonCommandeModal } from "@/components/BonCommandeModal";
+import { PlanLeoChantierLink } from "@/components/PlanLeoChantierLink";
 import { SousTraitantSelect } from "@/components/SousTraitantSelect";
 import { FournituresEditor } from "@/components/FournituresEditor";
 import { canGenerateBonCommande } from "@/lib/bon-commande/active-phase";
@@ -883,6 +884,7 @@ export function ChantierEditModal({
               className="w-full rounded border border-stone-300 px-3 py-2"
             />
           </label>
+          <PlanLeoChantierLink chantierId={chantier.id} nomClient={nomClient} />
           <label className="block text-sm">
             <span className="mb-1 block">Adresse</span>
             <input
