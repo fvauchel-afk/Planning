@@ -11,11 +11,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
-    id: "2026-09-19-duree-chantier-menu",
-    title: "Durée du chantier en jours",
+    id: "2026-09-19-duree-phase-jours",
+    title: "Durée des phases en jours",
     items: [
-      "À la création et dans Modifier, la fin ne se choisit plus au calendrier : un menu Durée (jours) va de 1 à 15 jours ouvrés.",
-      "Le début reste une date. La fin est calculée toute seule (les week-ends sont sautés). Un chantier déjà plus long que 15 jours garde son option actuelle, sans être raccourci.",
+      "Dans Nouveau chantier, les dates du chantier n’ont plus qu’un début (calage automatique si vide). Plus de durée ni de fin à cet endroit.",
+      "Dans le tableau Élément, chaque phase a un menu de 1 à 15 jours ouvrés. Plus de durée en heures, plus de colonnes Début et Fin : les dates se calculent toutes seules.",
+      "Dans Modifier, Durées estimées utilise le même menu. Dates planifiées : seulement la date de début, pour décaler le bloc.",
     ],
   },
   {
