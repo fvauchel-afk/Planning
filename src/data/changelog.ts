@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-19-admin-idle-doublons",
+    title: "Plus de doublons Administratif automatiques",
+    items: [
+      "Si plusieurs personnes ouvrent le planning en même temps, un salarié libre ne reçoit plus plusieurs fiches « Administratif » identiques.",
+      "Les doublons Ethan et Louison du 19 septembre ont été retirés ; il en reste une fiche chacun.",
+    ],
+  },
+  {
     id: "2026-09-18-metallerie-du-sud",
     title: "La Métallerie du Sud",
     items: [
