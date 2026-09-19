@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-19-devis-onedrive-creation",
+    title: "Devis : dossier OneDrive dès la création",
+    items: [
+      "Créer un devis ouvre (ou retrouve) le dossier du client sur OneDrive, y crée un sous-dossier « Devis n° », et y pose le PDF.",
+      "Si OneDrive n’est pas joignable, le devis est quand même créé ; le PDF partira à l’envoi.",
+    ],
+  },
+  {
     id: "2026-09-19-plan-leo-onedrive",
     title: "Plan LEO enregistré sur OneDrive",
     items: [

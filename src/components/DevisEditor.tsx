@@ -165,7 +165,11 @@ export function DevisEditor({ devisId }: { devisId?: string }) {
         setError("Choisissez ou créez un client.");
         return;
       }
-      const data = await devisApi<{ id: string }>("/api/devis", {
+      const data = await devisApi<{
+        id: string;
+        onedriveFolder?: string | null;
+        onedriveWarning?: string | null;
+      }>("/api/devis", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -186,7 +190,10 @@ export function DevisEditor({ devisId }: { devisId?: string }) {
           remise,
         }),
       });
-      router.replace(`/devis/${data.id}`);
+      const qs = new URLSearchParams();
+      if (data.onedriveWarning) qs.set("onedriveErreur", data.onedriveWarning);
+      else if (data.onedriveFolder) qs.set("onedriveDossier", data.onedriveFolder);
+      router.replace(`/devis/${data.id}${qs.toString() ? `?${qs.toString()}` : ""}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Création impossible.");
     } finally {
@@ -295,6 +302,16 @@ export function DevisEditor({ devisId }: { devisId?: string }) {
       </div>
       {error ? (
         <p className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{error}</p>
+      ) : null}
+      {searchParams.get("onedriveErreur") ? (
+        <p className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+          Devis créé. OneDrive : {searchParams.get("onedriveErreur")}
+        </p>
+      ) : null}
+      {searchParams.get("onedriveDossier") ? (
+        <p className="rounded border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+          PDF enregistré dans OneDrive : {searchParams.get("onedriveDossier")}
+        </p>
       ) : null}
 
       <div className={`grid gap-3 md:grid-cols-2 ${CARD}`}>

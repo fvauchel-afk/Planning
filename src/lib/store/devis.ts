@@ -301,6 +301,21 @@ export async function supabaseDeleteDevis(id: string): Promise<void> {
   if (error) throw wrapSupabaseError(error);
 }
 
+export async function supabaseSetDevisOnedriveFichier(
+  id: string,
+  fileName: string | null,
+): Promise<void> {
+  const supabase = createSupabaseServerClient();
+  const { error } = await supabase
+    .from("devis")
+    .update({
+      onedrive_fichier: fileName,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id);
+  if (error) throw wrapSupabaseError(error);
+}
+
 export async function supabaseMarkDevisEnvoye(input: {
   id: string;
   to: string;

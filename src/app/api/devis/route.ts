@@ -5,6 +5,7 @@ import {
   resolveSession,
   unauthorized,
 } from "@/lib/auth/guard";
+import { tryArchiveDevisOnOneDrive } from "@/lib/devis/onedrive-archive";
 import { parseLignesDevis } from "@/lib/devis/lignes";
 import { parseStatutDevis, parseTypeFacturation, STATUTS_DEVIS } from "@/lib/devis/types";
 import { isMissingSchemaError } from "@/lib/supabase/errors";
@@ -19,6 +20,7 @@ import {
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 const SQL_HELP =
   "Tables devis incomplètes. Exécutez supabase/migrations/041_clients_devis.sql puis 042_devis_reglages_entreprise.sql.";
@@ -103,7 +105,13 @@ export async function POST(request: NextRequest) {
       intitule_document: body.intitule_document,
       remise: body.remise,
     });
-    return NextResponse.json({ ok: true, id });
+    const archive = await tryArchiveDevisOnOneDrive(id);
+    return NextResponse.json({
+      ok: true,
+      id,
+      onedriveFolder: archive.folder ?? null,
+      onedriveWarning: archive.warning ?? null,
+    });
   } catch (err) {
     return fail(err, "Création impossible.");
   }
