@@ -56,6 +56,8 @@ import type {
 } from "@/lib/types";
 import { CATEGORIES_DEMANDE, STATUTS_DEMANDE } from "@/lib/types";
 import { canReceiveCommandes } from "@/lib/auth/commande-access";
+import { canManageAdministratifIdle } from "@/lib/auth/administratif-idle-access";
+import { applyAdministratifIdleChoice } from "@/lib/engine/administratif-idle-apply";
 import {
   sendCommandePush,
   sendEmployeePush,
@@ -127,6 +129,7 @@ type MutateBody =
   | { action: "createSignalement"; input: NewSignalementInput }
   | { action: "setSignalementStatut"; id: string; statut: StatutSignalement }
   | { action: "validateSignalement"; id: string; patches: PhasePatch[]; createChantier?: NewChantierInput | null }
+  | { action: "applyAdministratifIdle"; employeeId: string; decision: "create" | "dismiss" }
   | { action: "createReception"; input: NewReceptionInput }
   | { action: "createDemande"; input: NewDemandeInput }
   | { action: "updateDemande"; input: DemandeUpdateInput }
@@ -187,6 +190,7 @@ export async function POST(request: NextRequest) {
     "saveHoraires",
     "setSaisonForcee",
     "validateChantierPlan",
+    "applyAdministratifIdle",
   ]);
 
   if (adminOnly.has(body.action) && !session.isAdmin) {
@@ -584,6 +588,25 @@ export async function POST(request: NextRequest) {
           console.warn("[commande-push]", push.warning);
         }
       }
+    } else if (body.action === "applyAdministratifIdle") {
+      if (!canManageAdministratifIdle(session.nom)) {
+        return forbidden(
+          "Seuls Jonathan, Mika et Alexis peuvent créer un bloc Administratif.",
+        );
+      }
+      if (body.decision !== "create" && body.decision !== "dismiss") {
+        return NextResponse.json({ error: "Action inconnue." }, { status: 400 });
+      }
+      if (!body.employeeId) {
+        return NextResponse.json({ error: "Salarié inconnu." }, { status: 400 });
+      }
+      const result = await applyAdministratifIdleChoice({
+        employeeId: body.employeeId,
+        decision: body.decision,
+        createdBy: session.nom,
+      });
+      chantierId = result.chantierId;
+      skipPlanMail = true;
     } else {
       return NextResponse.json({ error: "Action inconnue." }, { status: 400 });
     }

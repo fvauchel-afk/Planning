@@ -48,6 +48,7 @@ import {
 import { fetchPlanningSnapshot, planningMutate } from "@/lib/planning/api";
 import { syntheseMessageConge } from "@/lib/demandes";
 import { shouldUseSharedDatabase } from "@/lib/supabase/client";
+import { administratifIdlePlans } from "@/lib/engine/administratif-idle";
 import { DATABASE_UNAVAILABLE_MESSAGE, formatSaveError } from "@/lib/supabase/errors";
 import { useSession } from "@/lib/auth/session-context";
 import type {
@@ -126,6 +127,10 @@ type PlanningContextValue = {
   saveHoraires: (rows: HoraireSaison[]) => Promise<void>;
   setSaisonForcee: (saison: "ete" | "hiver" | null) => Promise<void>;
   ensureChantierOnedriveFolder: (chantierId: string) => Promise<void>;
+  applyAdministratifIdle: (
+    employeeId: string,
+    decision: "create" | "dismiss",
+  ) => Promise<void>;
 };
 
 async function attachOnedriveFolder(
@@ -833,6 +838,49 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
     [snapshot.chantiers, useShared, refresh],
   );
 
+  const applyAdministratifIdle = useCallback(
+    async (employeeId: string, decision: "create" | "dismiss") => {
+      assertWritable();
+      if (useShared) {
+        await mutate({
+          action: "applyAdministratifIdle",
+          employeeId,
+          decision,
+        });
+        await refresh({ throwOnError: true });
+        return;
+      }
+      const plan = administratifIdlePlans(snapshot).find(
+        (item) => item.employeeId === employeeId,
+      );
+      if (!plan) {
+        throw new Error(
+          "Aucun bloc Administratif à proposer pour ce salarié (déjà occupé ou déjà traité aujourd’hui).",
+        );
+      }
+      if (decision === "dismiss") {
+        setSnapshot((current) =>
+          localCreateSignalement(current, {
+            employe_id: plan.employeeId,
+            phase_id: null,
+            retard_demi_journees: 1,
+            sens: "retard",
+            note: `Proposition Administratif ignorée (${plan.from}).`,
+            origine: "decalage_admin",
+            statut: "rejete",
+            proposition: plan.proposition,
+          }),
+        );
+        return;
+      }
+      setSnapshot((current) => {
+        const created = localCreateChantier(current, plan.input, createdByNom);
+        return created.snapshot;
+      });
+    },
+    [useShared, refresh, assertWritable, mutate, snapshot, createdByNom],
+  );
+
   const value = useMemo(
     () => ({
       snapshot,
@@ -871,6 +919,7 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
       saveHoraires,
       setSaisonForcee,
       ensureChantierOnedriveFolder,
+      applyAdministratifIdle,
     }),
     [
       snapshot,
@@ -909,6 +958,7 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
       saveHoraires,
       setSaisonForcee,
       ensureChantierOnedriveFolder,
+      applyAdministratifIdle,
     ],
   );
 

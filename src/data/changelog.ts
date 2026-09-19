@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-19-admin-idle-doublons",
+    title: "Administratif : plus de création toute seule",
+    items: [
+      "Ouvrir le planning ne crée plus de chantier Administratif tout seul.",
+      "Si un salarié n’a rien sur 7 jours, Jonathan, Mika ou Alexis voient un bandeau : créer le bloc, ou ne pas proposer aujourd’hui.",
+    ],
+  },
+  {
     id: "2026-09-18-metallerie-du-sud",
     title: "La Métallerie du Sud",
     items: [
