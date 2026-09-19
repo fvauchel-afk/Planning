@@ -3,6 +3,7 @@ import { getSession, resolveSession } from "@/lib/auth/guard";
 import { canRestorePlanning } from "@/lib/auth/restore-access";
 import { canReceiveCommandes } from "@/lib/auth/commande-access";
 import { canReceiveLancementAlerts } from "@/lib/auth/lancement-access";
+import { canManageAdministratifIdle } from "@/lib/auth/administratif-idle-access";
 import { isAuthTemporarilyOpen } from "@/lib/auth/temp-open-check";
 import { hasSupabaseServiceRole } from "@/lib/supabase/server";
 
@@ -23,6 +24,7 @@ export async function GET() {
       canRestore: canRestorePlanning(session.nom),
       canReceiveCommandes: canReceiveCommandes(session.nom),
       canReceiveLancementAlerts: canReceiveLancementAlerts(session.nom),
+      canManageAdministratifIdle: canManageAdministratifIdle(session.nom),
     },
     authTemporarilyOpen,
     hasServiceRole: hasSupabaseServiceRole(),

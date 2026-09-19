@@ -4,14 +4,9 @@ import {
   employeeHasChantierInWindow,
 } from "@/lib/engine/administratif-idle";
 import {
-  hasPendingSignalements,
-  isAdministratifIdleSuggestion,
-  parseProposition,
-} from "@/lib/signalements";
-import {
   fetchSupabaseSnapshot,
   supabaseCreateChantier,
-  supabaseSetSignalementStatut,
+  supabaseCreateSignalement,
 } from "@/lib/store/supabase";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
@@ -19,10 +14,7 @@ import {
   supabaseErrorInfo,
   wrapSupabaseError,
 } from "@/lib/supabase/errors";
-import type { PlanningSnapshot } from "@/lib/types";
-import { CREATED_BY_AUTOMATIQUE } from "@/lib/chantier-origine";
 
-/** true = on a le droit de créer ; false = déjà pris par une autre requête. */
 async function tryClaimAdministratifIdle(
   employeeId: string,
   windowFrom: string,
@@ -58,56 +50,43 @@ async function attachClaimChantier(
     .eq("window_from", windowFrom);
 }
 
-/** Crée les blocs Administratif (7 jours vides, pas d’urgence) sans attendre une validation. */
-export async function applyAdministratifIdleAutofill(
-  snapshot: PlanningSnapshot,
-): Promise<PlanningSnapshot> {
-  if (hasPendingSignalements(snapshot)) return snapshot;
-
-  let changed = false;
-  for (const item of snapshot.signalements ?? []) {
-    if (item.statut !== "en_attente") continue;
-    if (!isAdministratifIdleSuggestion(item)) continue;
-    const proposition = parseProposition(item.proposition);
-    const input = proposition?.createChantier;
-    if (!input) continue;
-    const windowFrom = proposition?.from;
-    if (
-      windowFrom &&
-      !(await tryClaimAdministratifIdle(item.employe_id, windowFrom))
-    ) {
-      await supabaseSetSignalementStatut(item.id, "valide");
-      continue;
-    }
-    const chantierId = await supabaseCreateChantier(
-      input,
-      CREATED_BY_AUTOMATIQUE,
+export async function applyAdministratifIdleChoice(input: {
+  employeeId: string;
+  decision: "create" | "dismiss";
+  createdBy: string;
+}): Promise<{ chantierId?: string }> {
+  const snapshot = await fetchSupabaseSnapshot();
+  const plan = administratifIdlePlans(snapshot).find(
+    (item) => item.employeeId === input.employeeId,
+  );
+  if (!plan) {
+    throw new Error(
+      "Aucun bloc Administratif à proposer pour ce salarié (déjà occupé ou déjà traité aujourd’hui).",
     );
-    if (windowFrom && chantierId) {
-      await attachClaimChantier(item.employe_id, windowFrom, chantierId);
-    }
-    await supabaseSetSignalementStatut(item.id, "valide");
-    changed = true;
   }
 
-  let current = changed ? await fetchSupabaseSnapshot() : snapshot;
-  for (const plan of administratifIdlePlans(current)) {
-    if (!(await tryClaimAdministratifIdle(plan.employeeId, plan.from))) {
-      continue;
-    }
-    current = await fetchSupabaseSnapshot();
-    if (employeeHasChantierInWindow(current, plan.employeeId, plan.from, plan.to)) {
-      continue;
-    }
-    const chantierId = await supabaseCreateChantier(
-      plan.input,
-      CREATED_BY_AUTOMATIQUE,
-    );
-    if (chantierId) {
-      await attachClaimChantier(plan.employeeId, plan.from, chantierId);
-    }
-    changed = true;
+  if (input.decision === "dismiss") {
+    await supabaseCreateSignalement({
+      employe_id: plan.employeeId,
+      phase_id: null,
+      retard_demi_journees: 1,
+      sens: "retard",
+      note: `Proposition Administratif ignorée (${plan.from}).`,
+      origine: "decalage_admin",
+      statut: "rejete",
+      proposition: plan.proposition,
+    });
+    return {};
   }
-  if (!changed) return snapshot;
-  return fetchSupabaseSnapshot();
+
+  if (!(await tryClaimAdministratifIdle(plan.employeeId, plan.from))) {
+    throw new Error("Ce bloc Administratif est déjà en cours de création.");
+  }
+  const current = await fetchSupabaseSnapshot();
+  if (employeeHasChantierInWindow(current, plan.employeeId, plan.from, plan.to)) {
+    throw new Error("Ce salarié a déjà un chantier sur les 7 prochains jours.");
+  }
+  const chantierId = await supabaseCreateChantier(plan.input, input.createdBy);
+  await attachClaimChantier(plan.employeeId, plan.from, chantierId);
+  return { chantierId };
 }

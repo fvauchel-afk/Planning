@@ -12,10 +12,10 @@ export type ChangelogEntry = {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     id: "2026-09-19-admin-idle-doublons",
-    title: "Plus de doublons Administratif automatiques",
+    title: "Administratif : plus de création toute seule",
     items: [
-      "Si plusieurs personnes ouvrent le planning en même temps, un salarié libre ne reçoit plus plusieurs fiches « Administratif » identiques.",
-      "Les doublons Ethan et Louison du 19 septembre ont été retirés ; il en reste une fiche chacun.",
+      "Ouvrir le planning ne crée plus de chantier Administratif tout seul.",
+      "Si un salarié n’a rien sur 7 jours, Jonathan, Mika ou Alexis voient un bandeau : créer le bloc, ou ne pas proposer aujourd’hui.",
     ],
   },
   {

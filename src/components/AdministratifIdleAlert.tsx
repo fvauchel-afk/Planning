@@ -1,39 +1,81 @@
 "use client";
 
-import Link from "next/link";
-import { isAdministratifIdleSuggestion } from "@/lib/signalements";
+import { useState } from "react";
+import { canManageAdministratifIdle } from "@/lib/auth/administratif-idle-access";
+import { administratifIdlePlans } from "@/lib/engine/administratif-idle";
+import { formatIsoFr } from "@/lib/dates";
 import { usePlanning } from "@/lib/planning-context";
 import { useSession } from "@/lib/auth/session-context";
 
 export function AdministratifIdleAlert() {
   const { session } = useSession();
-  const { snapshot } = usePlanning();
-  if (!session?.isAdmin) return null;
-  const rows = (snapshot.signalements ?? []).filter(
-    (item) => item.statut === "en_attente" && isAdministratifIdleSuggestion(item),
-  );
-  if (rows.length === 0) return null;
-  const names = rows
-    .slice(0, 3)
-    .map((row) => snapshot.employees.find((item) => item.id === row.employe_id)?.nom)
-    .filter(Boolean)
-    .join(", ");
-  const extra = rows.length > 3 ? ` et ${rows.length - 3} autre(s)` : "";
+  const { snapshot, applyAdministratifIdle } = usePlanning();
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  if (!canManageAdministratifIdle(session?.nom)) return null;
+  const plans = administratifIdlePlans(snapshot);
+  if (plans.length === 0) return null;
+
+  async function run(employeeId: string, decision: "create" | "dismiss") {
+    setBusyId(`${employeeId}:${decision}`);
+    setError(null);
+    try {
+      await applyAdministratifIdle(employeeId, decision);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Action impossible.");
+    } finally {
+      setBusyId(null);
+    }
+  }
 
   return (
     <div className="mb-4 rounded-lg border border-sky-300 bg-sky-50 px-4 py-3 text-sm text-sky-950">
       <p className="font-medium">
-        {rows.length === 1
-          ? `${names} n’a aucun chantier sur les 7 prochains jours.`
-          : `${rows.length} salariés sans chantier sur 7 jours : ${names}${extra}.`}
+        {plans.length === 1
+          ? `${plans[0]?.employeeNom} n’a aucun chantier sur les 7 prochains jours.`
+          : `${plans.length} salariés sans chantier sur les 7 prochains jours.`}
       </p>
       <p className="mt-1 text-xs">
-        Les jours vides sont remplis automatiquement par un bloc Administratif
-        (priorité Pas pressé), sauf si un autre signalement urgent attend.
+        Rien n’est ajouté tout seul. Créez un bloc Administratif (Pas pressé)
+        uniquement si vous le validez.
       </p>
-      <Link href="/signalements" className="mt-1 inline-block font-medium underline">
-        Ouvrir les signalements
-      </Link>
+      <ul className="mt-3 space-y-2">
+        {plans.map((plan) => (
+          <li
+            key={plan.employeeId}
+            className="rounded border border-sky-200 bg-white px-3 py-2"
+          >
+            <p className="font-medium">{plan.employeeNom}</p>
+            <p className="text-xs text-sky-800">
+              Jours libres : {plan.freeDays.map(formatIsoFr).join(", ")}
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={Boolean(busyId)}
+                className="rounded bg-stone-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-60"
+                onClick={() => void run(plan.employeeId, "create")}
+              >
+                {busyId === `${plan.employeeId}:create`
+                  ? "Création…"
+                  : `Créer un chantier Administratif pour ${plan.employeeNom}`}
+              </button>
+              <button
+                type="button"
+                disabled={Boolean(busyId)}
+                className="rounded border border-stone-300 bg-white px-3 py-1.5 text-xs disabled:opacity-60"
+                onClick={() => void run(plan.employeeId, "dismiss")}
+              >
+                {busyId === `${plan.employeeId}:dismiss`
+                  ? "…"
+                  : "Ne pas proposer aujourd’hui"}
+              </button>
+            </div>
+          </li>
+        ))}
+      </ul>
+      {error ? <p className="mt-2 text-xs text-red-700">{error}</p> : null}
     </div>
   );
 }

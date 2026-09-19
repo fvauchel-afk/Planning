@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { filterSnapshotForSession } from "@/lib/auth/scope";
 import { getSession, resolveSession, unauthorized } from "@/lib/auth/guard";
-import { applyAdministratifIdleAutofill } from "@/lib/engine/administratif-idle-apply";
 import { fetchSupabaseSnapshot } from "@/lib/store/supabase";
 import {
   hasSupabaseServiceRole,
@@ -36,17 +35,7 @@ export async function GET() {
   }
 
   try {
-    let snapshot = await fetchSupabaseSnapshot();
-    if (session.isAdmin) {
-      try {
-        snapshot = await applyAdministratifIdleAutofill(snapshot);
-      } catch (err) {
-        console.warn(
-          "[administratif-idle]",
-          err instanceof Error ? err.message : "remplissage Administratif impossible",
-        );
-      }
-    }
+    const snapshot = await fetchSupabaseSnapshot();
     return NextResponse.json({
       usingSupabase: true,
       snapshot: filterSnapshotForSession(snapshot, session),
