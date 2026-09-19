@@ -26,9 +26,11 @@ import { applyPhaseChainOnCreate, missingRequiredAssignee } from "@/lib/engine/p
 import { withExtraPoseurs } from "@/lib/engine/create-phases";
 import { moisToToleranceJours } from "@/lib/priorite";
 import {
-  CHANTIER_DUREE_JOURS_MAX,
   chantierEndFromDureeJours,
   dureeJoursFromChantierRange,
+  dureeJoursMenuValues,
+  formatDureeJoursLabel,
+  normalizeDureeJours,
 } from "@/lib/dates";
 import { EmployeePhaseSelect } from "@/components/EmployeePhaseSelect";
 import {
@@ -278,7 +280,7 @@ export function ChantierForm() {
   }
 
   function setChantierDuree(jours: number) {
-    const n = Math.min(CHANTIER_DUREE_JOURS_MAX, Math.max(1, jours));
+    const n = normalizeDureeJours(jours);
     setDureeJours(n);
     if (!dateDebut) return;
     syncLinkedPhaseDates(dateDebut, chantierEndFromDureeJours(dateDebut, n));
@@ -779,8 +781,8 @@ export function ChantierForm() {
           </legend>
           <p className="text-xs text-stone-600">
             Laissez le début vide pour un calage automatique au plus tôt. La
-            durée va de 1 à 15 jours ouvrés (week-ends sautés). Remplir ici
-            remplit aussi la fabrication, et inversement.
+            durée (jours) va de 1 à 15 jours ouvrés (week-ends sautés). Remplir
+            ici remplit aussi la fabrication, et inversement.
           </p>
           <div className="mt-2 grid gap-3 sm:grid-cols-2">
             <label className="block text-sm">
@@ -793,7 +795,7 @@ export function ChantierForm() {
               />
             </label>
             <label className="block text-sm">
-              <span className="mb-1 block font-medium">Durée</span>
+              <span className="mb-1 block font-medium">Durée (jours)</span>
               <select
                 value={dureeJours}
                 onChange={(event) =>
@@ -801,13 +803,11 @@ export function ChantierForm() {
                 }
                 className="w-full rounded border border-stone-300 bg-white px-3 py-2"
               >
-                {Array.from({ length: CHANTIER_DUREE_JOURS_MAX }, (_, i) => i + 1).map(
-                  (jours) => (
-                    <option key={jours} value={jours}>
-                      {jours === 1 ? "1 jour" : `${jours} jours`}
-                    </option>
-                  ),
-                )}
+                {dureeJoursMenuValues(dureeJours).map((jours) => (
+                  <option key={jours} value={jours}>
+                    {formatDureeJoursLabel(jours)}
+                  </option>
+                ))}
               </select>
             </label>
           </div>

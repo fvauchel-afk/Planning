@@ -12,10 +12,10 @@ export type ChangelogEntry = {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     id: "2026-09-19-duree-chantier-menu",
-    title: "Durée du nouveau chantier",
+    title: "Durée du chantier en jours",
     items: [
-      "Dans Nouveau chantier, la fin ne se choisit plus au calendrier : un menu Durée va de 1 jour à 15 jours ouvrés.",
-      "Le début reste une date. La fin est calculée toute seule (les week-ends sont sautés).",
+      "À la création et dans Modifier, la fin ne se choisit plus au calendrier : un menu Durée (jours) va de 1 à 15 jours ouvrés.",
+      "Le début reste une date. La fin est calculée toute seule (les week-ends sont sautés). Un chantier déjà plus long que 15 jours garde son option actuelle, sans être raccourci.",
     ],
   },
   {
