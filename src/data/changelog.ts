@@ -11,6 +11,13 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-19-devis-couleurs-planning",
+    title: "Devis aux couleurs du Planning",
+    items: [
+      "Sur le devis, l’en-tête du tableau et le bloc des totaux utilisent le bleu du Planning, à la place du vert de l’ancien outil.",
+    ],
+  },
+  {
     id: "2026-09-19-parametres-societe",
     title: "Paramètres : société et droits",
     items: [

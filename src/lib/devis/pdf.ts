@@ -14,10 +14,20 @@ import {
   type DevisReglages,
   type EntrepriseReglages,
 } from "@/lib/devis/types";
+import { BRAND_BLUE } from "@/lib/brand";
 import { applyMailVars, devisMailVars } from "@/lib/devis/vars";
 
-const BLEU = rgb(0.16, 0.55, 0.58);
-const VERT = rgb(0.82, 0.93, 0.84);
+function hexRgb(hex: string) {
+  const n = hex.replace("#", "");
+  return rgb(
+    parseInt(n.slice(0, 2), 16) / 255,
+    parseInt(n.slice(2, 4), 16) / 255,
+    parseInt(n.slice(4, 6), 16) / 255,
+  );
+}
+
+const BLEU = hexRgb(BRAND_BLUE);
+const FOND_TOTAUX = rgb(0.91, 0.93, 0.96);
 const NOIR = rgb(0.12, 0.1, 0.08);
 
 async function embedLogo(pdf: PDFDocument, entreprise: EntrepriseReglages) {
@@ -284,7 +294,7 @@ export async function buildDevisPdf(input: {
     y: y - boxH + 12,
     width: boxW,
     height: boxH,
-    color: VERT,
+    color: FOND_TOTAUX,
   });
   const lineTot = (label: string, value: string, bolded: boolean, yy: number) => {
     page.drawText(pdfSafe(label), { x: boxX + 8, y: yy, size: 9, font: bolded ? bold : font });

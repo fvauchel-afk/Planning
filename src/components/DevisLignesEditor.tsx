@@ -26,7 +26,7 @@ export function DevisLignesEditor({
     <div className="space-y-2">
       <div className="overflow-x-auto rounded border border-stone-300 bg-white">
         <table className="min-w-full text-sm">
-          <thead className="bg-emerald-700 text-left text-white">
+          <thead className="bg-[#2a5790] text-left text-white">
             <tr>
               <th className="px-2 py-1.5 font-medium">Désignation</th>
               <th className="w-20 px-2 py-1.5 font-medium">Quantité</th>
