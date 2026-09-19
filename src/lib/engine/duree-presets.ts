@@ -37,6 +37,18 @@ export function hoursFromDayPreset(
   return Math.round(one * days * 100) / 100;
 }
 
+/** Heures enregistrées → jours ouvrés (arrondi), min 1. */
+export function daysFromPhaseHours(
+  snapshot: PlanningSnapshot,
+  employeeId: string | null | undefined,
+  hours: number,
+): number {
+  const one = hoursForDayPreset(snapshot, employeeId);
+  const h = Number(hours);
+  if (!Number.isFinite(h) || h <= 0 || one <= 0) return 1;
+  return Math.max(1, Math.round(h / one));
+}
+
 function runDureePresetSelfCheck() {
   const empty: PlanningSnapshot = {
     employees: [],
@@ -57,6 +69,15 @@ function runDureePresetSelfCheck() {
   }
   if (hoursFromDayPreset(empty, null, 2) !== 15) {
     throw new Error("duree-presets: 2 jours = 15 h");
+  }
+  if (daysFromPhaseHours(empty, null, 7.5) !== 1) {
+    throw new Error("duree-presets: 7,5 h = 1 jour");
+  }
+  if (daysFromPhaseHours(empty, null, 15) !== 2) {
+    throw new Error("duree-presets: 15 h = 2 jours");
+  }
+  if (hoursFromDayPreset(empty, null, 5) !== 37.5) {
+    throw new Error("duree-presets: 5 jours = 37,5 h");
   }
 }
 runDureePresetSelfCheck();

@@ -5,10 +5,8 @@ import { useMemo, useState } from "react";
 import { ConflictModal } from "@/components/ConflictModal";
 import { compareEmployeesByOrdre } from "@/lib/display-order";
 import { employeeAvailableOnRange } from "@/lib/engine/hours";
-import {
-  DUREE_JOUR_PRESETS,
-  hoursFromDayPreset,
-} from "@/lib/engine/duree-presets";
+import { hoursFromDayPreset } from "@/lib/engine/duree-presets";
+import { DureeJoursSelect } from "@/components/DureeJoursSelect";
 import {
   inspectManualSlotConflict,
   mergePlanIntoInput,
@@ -25,13 +23,7 @@ import { generatePlanSolutions, propositionFromSolutions } from "@/lib/engine/pl
 import { applyPhaseChainOnCreate, missingRequiredAssignee } from "@/lib/engine/phase-chain";
 import { withExtraPoseurs } from "@/lib/engine/create-phases";
 import { moisToToleranceJours } from "@/lib/priorite";
-import {
-  chantierEndFromDureeJours,
-  dureeJoursFromChantierRange,
-  dureeJoursMenuValues,
-  formatDureeJoursLabel,
-  normalizeDureeJours,
-} from "@/lib/dates";
+import { chantierEndFromDureeJours, normalizeDureeJours } from "@/lib/dates";
 import { EmployeePhaseSelect } from "@/components/EmployeePhaseSelect";
 import {
   coerceSelectValue,
@@ -67,7 +59,7 @@ import {
 
 type PhaseForm = {
   type_phase: TypePhase;
-  duree_estimee_heures: string;
+  duree_jours: number;
   date_debut: string;
   date_fin: string;
   employe_id: string;
@@ -116,7 +108,7 @@ function coercePhasePersonValue(
 function emptyPhases(): PhaseForm[] {
   return TYPES_PHASE.map((type_phase) => ({
     type_phase,
-    duree_estimee_heures: "",
+    duree_jours: 1,
     date_debut: "",
     date_fin: "",
     employe_id: "",
@@ -136,10 +128,6 @@ export function ChantierForm() {
   const [toleranceMois, setToleranceMois] = useState(1);
   const [urgent, setUrgent] = useState(false);
   const [dateDebut, setDateDebut] = useState("");
-  const [dureeJours, setDureeJours] = useState(1);
-  const dateFin = dateDebut
-    ? chantierEndFromDureeJours(dateDebut, dureeJours)
-    : "";
   const [datesEstimatives, setDatesEstimatives] = useState(true);
   const [avecPose, setAvecPose] = useState<boolean | null>(null);
   const [avecFabrication, setAvecFabrication] = useState<boolean | null>(null);
@@ -147,7 +135,6 @@ export function ChantierForm() {
   const [avecLivraison, setAvecLivraison] = useState<boolean | null>(null);
   const [adresseLivraison, setAdresseLivraison] = useState("");
   const [telephoneLivraison, setTelephoneLivraison] = useState("");
-  const [dureeLivraison, setDureeLivraison] = useState("2");
   const [employeLivraison, setEmployeLivraison] = useState("");
   const [employeFabrication, setEmployeFabrication] = useState("");
   const [poseurIds, setPoseurIds] = useState<string[]>([]);
@@ -179,18 +166,15 @@ export function ChantierForm() {
     () => employeesForPhaseSelect(employeesByRole, "pose", employePose),
     [employeesByRole, employePose],
   );
-  const poseDateDebut =
-    dateDebut ||
-    elements
-      .flatMap((element) => element.phases)
-      .find((phase) => phase.type_phase === "pose")?.date_debut ||
-    "";
-  const poseDateFin =
-    dateFin ||
-    elements
-      .flatMap((element) => element.phases)
-      .find((phase) => phase.type_phase === "pose")?.date_fin ||
-    poseDateDebut;
+  const poseDateDebut = dateDebut;
+  const poseDateFin = dateDebut
+    ? chantierEndFromDureeJours(
+        dateDebut,
+        elements
+          .flatMap((element) => element.phases)
+          .find((phase) => phase.type_phase === "pose")?.duree_jours ?? 1,
+      )
+    : "";
   const suggestedPoseurs = useMemo(() => {
     if (!poseDateDebut) return [];
     return poseCandidates.filter((employee) =>
@@ -238,52 +222,81 @@ export function ChantierForm() {
     );
   }
 
-  function syncLinkedPhaseDates(debut: string, fin: string) {
-    const linked: TypePhase | null =
-      avecFabrication === true
-        ? "fabrication"
-        : avecFabrication === false && avecPose === true
-          ? "pose"
-          : null;
-    if (!linked) return;
-    setElements((current) =>
-      current.map((element) => ({
-        ...element,
-        phases: element.phases.map((phase) =>
-          phase.type_phase === linked
-            ? { ...phase, date_debut: debut, date_fin: fin }
-            : phase,
-        ),
-      })),
+  function linkedPhaseType(): TypePhase | null {
+    if (avecFabrication === true) return "fabrication";
+    if (avecFabrication === false && avecPose === true) return "pose";
+    return null;
+  }
+
+  function employeeIdForPhaseHours(phase: PhaseForm): string {
+    if (phase.type_phase === "fabrication") {
+      return employeFabrication || phase.employe_id;
+    }
+    if (phase.type_phase === "pose") return employePose || phase.employe_id;
+    if (phase.type_phase === "livraison") {
+      return employeLivraison || phase.employe_id;
+    }
+    return phase.employe_id;
+  }
+
+  function hoursForPhase(phase: PhaseForm): number {
+    return hoursFromDayPreset(
+      snapshot,
+      employeeIdForPhaseHours(phase),
+      phase.duree_jours,
     );
   }
 
-  function applyChantierAndLinkedPhaseDates(nextDebut: string, nextFin: string) {
-    const debut = nextDebut;
-    let fin = nextFin;
-    if (debut && fin && fin < debut) fin = debut;
-    setDateDebut(debut);
-    if (debut) {
-      const jours = dureeJoursFromChantierRange(debut, fin || debut);
-      setDureeJours(jours);
-      fin = chantierEndFromDureeJours(debut, jours);
-    }
-    syncLinkedPhaseDates(debut, fin);
+  function withInternalDates(
+    current: ElementForm[],
+    debut: string,
+  ): ElementForm[] {
+    const linked = linkedPhaseType();
+    return current.map((element) => ({
+      ...element,
+      phases: element.phases.map((phase) => {
+        if (!debut || phase.type_phase !== linked) {
+          return debut
+            ? phase
+            : { ...phase, date_debut: "", date_fin: "" };
+        }
+        return {
+          ...phase,
+          date_debut: debut,
+          date_fin: chantierEndFromDureeJours(debut, phase.duree_jours),
+        };
+      }),
+    }));
   }
 
   function setChantierDebut(nextDebut: string) {
     setDateDebut(nextDebut);
-    const fin = nextDebut
-      ? chantierEndFromDureeJours(nextDebut, dureeJours)
-      : "";
-    syncLinkedPhaseDates(nextDebut, fin);
+    setElements((current) => withInternalDates(current, nextDebut));
   }
 
-  function setChantierDuree(jours: number) {
+  function setPhaseJours(
+    elementKey: string,
+    type: TypePhase,
+    jours: number,
+  ) {
     const n = normalizeDureeJours(jours);
-    setDureeJours(n);
-    if (!dateDebut) return;
-    syncLinkedPhaseDates(dateDebut, chantierEndFromDureeJours(dateDebut, n));
+    setElements((current) =>
+      withInternalDates(
+        current.map((element) =>
+          element.key === elementKey
+            ? {
+                ...element,
+                phases: element.phases.map((phase) =>
+                  phase.type_phase === type
+                    ? { ...phase, duree_jours: n }
+                    : phase,
+                ),
+              }
+            : element,
+        ),
+        dateDebut,
+      ),
+    );
   }
 
   function buildInput(): NewChantierInput | null {
@@ -325,11 +338,6 @@ export function ChantierForm() {
         setError("Choisissez le salarié responsable de la livraison.");
         return null;
       }
-      const hours = Number(dureeLivraison);
-      if (!hours || hours <= 0) {
-        setError("Indiquez la durée de livraison en heures (ex. 2).");
-        return null;
-      }
     }
     setError(null);
     const input: NewChantierInput = {
@@ -340,7 +348,7 @@ export function ChantierForm() {
       tolerance_deplacement_jours:
         priorite === "pas_presse" ? moisToToleranceJours(toleranceMois) : null,
       date_debut: dateDebut || null,
-      date_fin: dateFin || dateDebut || null,
+      date_fin: null,
       dates_estimatives: datesEstimatives,
       avec_pose: avecPose,
       avec_fabrication: avecFabrication,
@@ -360,10 +368,7 @@ export function ChantierForm() {
         nom_element: element.nom_element.trim(),
         phases: element.phases.map((phase) => ({
           type_phase: phase.type_phase,
-          duree_estimee_heures:
-            phase.type_phase === "livraison" && avecLivraison
-              ? Number(dureeLivraison || 0)
-              : Number(phase.duree_estimee_heures || 0),
+          duree_estimee_heures: hoursForPhase(phase),
           date_debut: phase.date_debut || null,
           date_fin: phase.date_fin || phase.date_debut || null,
           employe_id:
@@ -780,9 +785,9 @@ export function ChantierForm() {
             Dates du chantier
           </legend>
           <p className="text-xs text-stone-600">
-            Laissez le début vide pour un calage automatique au plus tôt. La
-            durée (jours) va de 1 à 15 jours ouvrés (week-ends sautés). Remplir
-            ici remplit aussi la fabrication, et inversement.
+            Laissez le début vide pour un calage automatique au plus tôt.
+            Remplir ici recale la fabrication (ou la pose s’il n’y a pas de
+            fabrication). Les durées se choisissent plus bas, par phase.
           </p>
           <div className="mt-2 grid gap-3 sm:grid-cols-2">
             <label className="block text-sm">
@@ -793,22 +798,6 @@ export function ChantierForm() {
                 onChange={(event) => setChantierDebut(event.target.value)}
                 className="w-full rounded border border-stone-300 bg-white px-3 py-2"
               />
-            </label>
-            <label className="block text-sm">
-              <span className="mb-1 block font-medium">Durée (jours)</span>
-              <select
-                value={dureeJours}
-                onChange={(event) =>
-                  setChantierDuree(Number(event.target.value) || 1)
-                }
-                className="w-full rounded border border-stone-300 bg-white px-3 py-2"
-              >
-                {dureeJoursMenuValues(dureeJours).map((jours) => (
-                  <option key={jours} value={jours}>
-                    {formatDureeJoursLabel(jours)}
-                  </option>
-                ))}
-              </select>
             </label>
           </div>
           <div className="mt-3 flex flex-wrap gap-4 text-sm">
@@ -1097,18 +1086,6 @@ export function ChantierForm() {
                   className="w-full rounded border border-stone-300 bg-white px-3 py-2"
                 />
               </label>
-              <label className="block">
-                <span className="mb-1 block font-medium">Durée (heures)</span>
-                <input
-                  type="number"
-                  min={0.5}
-                  step={0.5}
-                  value={dureeLivraison}
-                  onChange={(event) => setDureeLivraison(event.target.value)}
-                  className="w-full rounded border border-stone-300 bg-white px-3 py-2"
-                />
-                <p className="mt-1 text-xs text-stone-500">Exemple : 2 pour 2 h.</p>
-              </label>
               <label className="block sm:col-span-2">
                 <span className="mb-1 block font-medium">
                   Salarié responsable de la livraison
@@ -1188,9 +1165,7 @@ export function ChantierForm() {
                 <thead>
                   <tr className="text-left text-xs uppercase tracking-wide text-stone-500">
                     <th className="py-2 pr-2">Phase</th>
-                    <th className="py-2 pr-2">Durée</th>
-                    <th className="py-2 pr-2">Début</th>
-                    <th className="py-2 pr-2">Fin</th>
+                    <th className="py-2 pr-2">Durée (jours)</th>
                     <th className="py-2 pr-2">Personne</th>
                   </tr>
                 </thead>
@@ -1221,101 +1196,12 @@ export function ChantierForm() {
                     <tr key={phase.type_phase} className="border-t border-stone-200">
                       <td className="py-2 pr-2">{PHASE_LABELS[phase.type_phase]}</td>
                       <td className="py-2 pr-2">
-                        <div className="flex flex-wrap items-center gap-1">
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.5"
-                            value={phase.duree_estimee_heures}
-                            onChange={(event) =>
-                              updatePhase(element.key, phase.type_phase, {
-                                duree_estimee_heures: event.target.value,
-                              })
-                            }
-                            className="w-16 rounded border border-stone-300 px-2 py-1"
-                            aria-label={`Durée en heures — ${PHASE_LABELS[phase.type_phase]}`}
-                          />
-                          <span className="text-xs text-stone-500">h</span>
-                          {DUREE_JOUR_PRESETS.map((preset) => (
-                            <button
-                              key={preset.id}
-                              type="button"
-                              className="rounded border border-stone-300 bg-white px-1.5 py-0.5 text-xs text-stone-700 hover:bg-stone-100"
-                              onClick={() => {
-                                const employeeId =
-                                  phase.type_phase === "fabrication"
-                                    ? employeFabrication || phase.employe_id
-                                    : phase.type_phase === "pose"
-                                      ? employePose || phase.employe_id
-                                      : phase.type_phase === "livraison"
-                                        ? employeLivraison || phase.employe_id
-                                        : phase.employe_id;
-                                updatePhase(element.key, phase.type_phase, {
-                                  duree_estimee_heures: String(
-                                    hoursFromDayPreset(
-                                      snapshot,
-                                      employeeId,
-                                      preset.days,
-                                    ),
-                                  ),
-                                });
-                              }}
-                            >
-                              {preset.label}
-                            </button>
-                          ))}
-                        </div>
-                      </td>
-                      <td className="py-2 pr-2">
-                        <input
-                          type="date"
-                          value={phase.date_debut}
-                          onChange={(event) => {
-                            const next = event.target.value;
-                            if (
-                              (avecFabrication === true &&
-                                phase.type_phase === "fabrication") ||
-                              (avecFabrication === false &&
-                                avecPose === true &&
-                                phase.type_phase === "pose")
-                            ) {
-                              applyChantierAndLinkedPhaseDates(
-                                next,
-                                phase.date_fin || dateFin,
-                              );
-                              return;
-                            }
-                            updatePhase(element.key, phase.type_phase, {
-                              date_debut: next,
-                            });
-                          }}
-                          className="rounded border border-stone-300 px-2 py-1"
-                        />
-                      </td>
-                      <td className="py-2 pr-2">
-                        <input
-                          type="date"
-                          value={phase.date_fin}
-                          onChange={(event) => {
-                            const next = event.target.value;
-                            if (
-                              (avecFabrication === true &&
-                                phase.type_phase === "fabrication") ||
-                              (avecFabrication === false &&
-                                avecPose === true &&
-                                phase.type_phase === "pose")
-                            ) {
-                              applyChantierAndLinkedPhaseDates(
-                                phase.date_debut || dateDebut,
-                                next,
-                              );
-                              return;
-                            }
-                            updatePhase(element.key, phase.type_phase, {
-                              date_fin: next,
-                            });
-                          }}
-                          className="rounded border border-stone-300 px-2 py-1"
+                        <DureeJoursSelect
+                          value={phase.duree_jours}
+                          aria-label={`Durée en jours — ${PHASE_LABELS[phase.type_phase]}`}
+                          onChange={(jours) =>
+                            setPhaseJours(element.key, phase.type_phase, jours)
+                          }
                         />
                       </td>
                       <td className="py-2 pr-2">

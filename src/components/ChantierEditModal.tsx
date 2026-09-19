@@ -18,13 +18,7 @@ import {
   chantierDateRange,
   chantierPlanningInfo,
 } from "@/lib/chantier-status";
-import {
-  chantierEndFromDureeJours,
-  dureeJoursFromChantierRange,
-  dureeJoursMenuValues,
-  formatDureeJoursLabel,
-  toISODate,
-} from "@/lib/dates";
+import { chantierEndFromDureeJours, dureeJoursFromChantierRange, toISODate } from "@/lib/dates";
 import {
   isEmptyPhaseEdits,
   mergePhaseEdits,
@@ -38,8 +32,9 @@ import {
   planChantierDurationEdits,
 } from "@/lib/engine/phase-chain";
 import { EmployeePhaseSelect } from "@/components/EmployeePhaseSelect";
+import { DureeJoursSelect } from "@/components/DureeJoursSelect";
 import {
-  DUREE_JOUR_PRESETS,
+  daysFromPhaseHours,
   hoursFromDayPreset,
 } from "@/lib/engine/duree-presets";
 import { compareEmployeesByOrdre } from "@/lib/display-order";
@@ -483,6 +478,15 @@ export function ChantierEditModal({
     if (type === "livraison") setDureeLivraison(value);
   }
 
+  function setDaysForPhase(phaseId: string, type: TypePhase, jours: number) {
+    const row = durationRows.find((item) => item.phaseId === phaseId);
+    setHoursForPhase(
+      phaseId,
+      type,
+      String(hoursFromDayPreset(snapshot, row?.employeId, jours)),
+    );
+  }
+
   const activeEmployees = useMemo(
     () =>
       snapshot.employees
@@ -623,13 +627,6 @@ export function ChantierEditModal({
     if (next) setPlanEnd(chantierEndFromDureeJours(next, jours));
   }
 
-  function onChangeDuree(jours: number) {
-    setDatesDirty(true);
-    markCascade();
-    if (!planDate) return;
-    setPlanEnd(chantierEndFromDureeJours(planDate, jours));
-  }
-
   async function abortIfStaleCascade(force = false): Promise<boolean> {
     const latest = (await refresh({ quiet: true })) ?? latestSnap.current;
     latestSnap.current = latest;
@@ -696,10 +693,6 @@ export function ChantierEditModal({
       }
       if (!employeLivraison) {
         setError("Choisissez le salarié responsable de la livraison.");
-        return;
-      }
-      if (!Number(dureeLivraison) || Number(dureeLivraison) <= 0) {
-        setError("Indiquez la durée de livraison en heures (ex. 2).");
         return;
       }
     }
@@ -1294,28 +1287,6 @@ export function ChantierEditModal({
                   />
                 </label>
                 <label className="block">
-                  <span className="mb-1 block font-medium">Durée (heures)</span>
-                  <input
-                    type="number"
-                    min={0.5}
-                    step={0.5}
-                    value={dureeLivraison}
-                    onChange={(event) => {
-                      markCascade();
-                      const value = event.target.value;
-                      setDureeLivraison(value);
-                      setPhaseHours((current) => {
-                        const next = { ...current };
-                        for (const row of durationRows) {
-                          if (row.type === "livraison") next[row.phaseId] = value;
-                        }
-                        return next;
-                      });
-                    }}
-                    className="w-full rounded border border-stone-300 bg-white px-3 py-2"
-                  />
-                </label>
-                <label className="block">
                   <span className="mb-1 block font-medium">
                     Salarié responsable
                   </span>
@@ -1349,8 +1320,8 @@ export function ChantierEditModal({
                 Durées estimées
               </legend>
               <p className="mt-1 text-xs text-stone-600">
-                Mêmes durées qu’à la création (heures, 1 j, 1,5 j, 2 j). Changer
-                une durée recale les phases suivantes.
+                Durée de chaque phase en jours ouvrés (1 à 15). Changer une
+                durée recale les phases suivantes.
               </p>
               <div className="mt-3 space-y-3">
                 {durationRows.map((row) => {
@@ -1361,46 +1332,18 @@ export function ChantierEditModal({
                   return (
                     <div key={row.phaseId}>
                       <span className="mb-1 block font-medium">{row.label}</span>
-                      <div className="flex flex-wrap items-center gap-1">
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.5"
-                          value={value}
-                          onChange={(event) =>
-                            setHoursForPhase(
-                              row.phaseId,
-                              row.type,
-                              event.target.value,
-                            )
-                          }
-                          className="w-20 rounded border border-stone-300 bg-white px-2 py-1"
-                          aria-label={`Durée en heures — ${row.label}`}
-                        />
-                        <span className="text-xs text-stone-500">h</span>
-                        {DUREE_JOUR_PRESETS.map((preset) => (
-                          <button
-                            key={preset.id}
-                            type="button"
-                            className="rounded border border-stone-300 bg-white px-1.5 py-0.5 text-xs text-stone-700 hover:bg-stone-100"
-                            onClick={() =>
-                              setHoursForPhase(
-                                row.phaseId,
-                                row.type,
-                                String(
-                                  hoursFromDayPreset(
-                                    snapshot,
-                                    row.employeId,
-                                    preset.days,
-                                  ),
-                                ),
-                              )
-                            }
-                          >
-                            {preset.label}
-                          </button>
-                        ))}
-                      </div>
+                      <DureeJoursSelect
+                        value={daysFromPhaseHours(
+                          snapshot,
+                          row.employeId,
+                          Number(value || 0),
+                        )}
+                        aria-label={`Durée en jours — ${row.label}`}
+                        className="w-full rounded border border-stone-300 bg-white px-3 py-2"
+                        onChange={(jours) =>
+                          setDaysForPhase(row.phaseId, row.type, jours)
+                        }
+                      />
                     </div>
                   );
                 })}
@@ -1432,27 +1375,6 @@ export function ChantierEditModal({
                 onChange={(event) => onChangeStart(event.target.value)}
                 className="w-full rounded border border-stone-300 bg-white px-3 py-2"
               />
-            </label>
-            <label className="mt-2 block text-sm">
-              <span className="mb-1 block">Durée (jours)</span>
-              <select
-                value={dureeJoursFromChantierRange(
-                  planDate,
-                  planEnd || planDate,
-                )}
-                onChange={(event) =>
-                  onChangeDuree(Number(event.target.value) || 1)
-                }
-                className="w-full rounded border border-stone-300 bg-white px-3 py-2"
-              >
-                {dureeJoursMenuValues(
-                  dureeJoursFromChantierRange(planDate, planEnd || planDate),
-                ).map((jours) => (
-                  <option key={jours} value={jours}>
-                    {formatDureeJoursLabel(jours)}
-                  </option>
-                ))}
-              </select>
             </label>
             <div className="mt-3 flex flex-wrap gap-4 text-sm">
               <label className="inline-flex items-center gap-2">
