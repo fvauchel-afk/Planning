@@ -287,6 +287,16 @@ function Nombre(props: {
     if (props.max !== undefined) x = Math.min(props.max, x);
     return Math.round(x);
   };
+  const [saisie, setSaisie] = useState(String(props.value));
+  useEffect(() => {
+    setSaisie(String(props.value));
+  }, [props.value]);
+  const commit = (brut: string) => {
+    const n = parseFloat(brut.replace(",", "."));
+    const v = borne(Number.isFinite(n) ? n : props.value);
+    props.onChange(v);
+    setSaisie(String(v));
+  };
   const petit =
     "h-8 w-8 shrink-0 rounded-md border border-stone-300 bg-white text-base font-semibold text-amber-700 hover:border-stone-400 disabled:opacity-40";
   return (
@@ -302,10 +312,25 @@ function Nombre(props: {
       </button>
       <input
         type="number"
+        inputMode="numeric"
+        step="any"
         className={`${CHAMP} min-w-0 flex-1 text-right tabular-nums`}
-        value={String(props.value)}
+        value={saisie}
         disabled={props.disabled}
-        onChange={(e) => props.onChange(borne(parseFloat(e.target.value) || 0))}
+        onChange={(e) => {
+          const brut = e.target.value;
+          setSaisie(brut);
+          if (brut === "" || brut === "-" || brut === "." || brut === ",") return;
+          const n = parseFloat(brut.replace(",", "."));
+          if (!Number.isFinite(n)) return;
+          if (props.min !== undefined && n < props.min) return;
+          if (props.max !== undefined && n > props.max) return;
+          props.onChange(Math.round(n));
+        }}
+        onBlur={() => commit(saisie)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+        }}
       />
       <button
         type="button"
@@ -396,6 +421,11 @@ const CSS_IMPRESSION = `
   body { background: #ffffff !important; }
   main { padding: 0 !important; margin: 0 !important; max-width: none !important; }
   .plan-feuille { border: 0 !important; padding: 0 !important; }
+  .plan-apercu {
+    position: static !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
 }
 `;
 
@@ -1246,7 +1276,7 @@ export function PlanPortailLeo() {
         <span className="rounded-md px-3 py-1.5 text-sm text-stone-400">Pergola — à venir</span>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[360px_minmax(0,1fr)]">
+      <div className="grid items-start gap-4 lg:grid-cols-[360px_minmax(0,1fr)]">
         <aside className="plan-no-print space-y-2">
           <Bloc titre="1. Projet et livrable" ouvert={ouverts.projet} onToggle={() => bascule("projet")}>
             <Ligne label="Client">
@@ -1581,7 +1611,7 @@ export function PlanPortailLeo() {
           </Bloc>
         </aside>
 
-        <div className="min-w-0 space-y-4">
+        <div className="plan-apercu min-w-0 space-y-4 lg:sticky lg:top-20 lg:max-h-[calc(100dvh-5.5rem)] lg:overflow-y-auto">
           <div className="plan-feuille overflow-hidden rounded-lg border border-stone-300 bg-white p-3">
             {dessin}
           </div>
