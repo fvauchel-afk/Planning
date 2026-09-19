@@ -1,3 +1,4 @@
+import { CHANTIER_DUREE_JOURS_MAX, dureeJoursMenuValues } from "@/lib/dates";
 import {
   dayHoursFromJour,
   defaultHorairesSaisonEmploye,
@@ -37,16 +38,37 @@ export function hoursFromDayPreset(
   return Math.round(one * days * 100) / 100;
 }
 
-/** Heures enregistrées → jours ouvrés (arrondi), min 1. */
+export function matchingDureeJoursFromHours(
+  snapshot: PlanningSnapshot,
+  employeeId: string | null | undefined,
+  hours: number,
+): number | null {
+  const h = Number(hours);
+  if (!Number.isFinite(h) || h <= 0) return null;
+  for (const days of dureeJoursMenuValues()) {
+    if (Math.abs(hoursFromDayPreset(snapshot, employeeId, days) - h) < 0.06) {
+      return days;
+    }
+  }
+  const one = hoursForDayPreset(snapshot, employeeId);
+  if (one > 0 && h / one > CHANTIER_DUREE_JOURS_MAX) {
+    return Math.round((h / one) * 10) / 10;
+  }
+  return null;
+}
+
+/** Heures → entrée du menu jours si ça colle, sinon arrondi à 0,5 près (min 0,5). */
 export function daysFromPhaseHours(
   snapshot: PlanningSnapshot,
   employeeId: string | null | undefined,
   hours: number,
 ): number {
+  const matched = matchingDureeJoursFromHours(snapshot, employeeId, hours);
+  if (matched != null) return matched;
   const one = hoursForDayPreset(snapshot, employeeId);
   const h = Number(hours);
-  if (!Number.isFinite(h) || h <= 0 || one <= 0) return 1;
-  return Math.max(1, Math.round(h / one));
+  if (!Number.isFinite(h) || h <= 0 || one <= 0) return 0.5;
+  return Math.max(0.5, Math.round((h / one) * 2) / 2);
 }
 
 function runDureePresetSelfCheck() {
@@ -78,6 +100,12 @@ function runDureePresetSelfCheck() {
   }
   if (hoursFromDayPreset(empty, null, 5) !== 37.5) {
     throw new Error("duree-presets: 5 jours = 37,5 h");
+  }
+  if (matchingDureeJoursFromHours(empty, null, 3.75) !== 0.5) {
+    throw new Error("duree-presets: 3,75 h = 0,5 jour");
+  }
+  if (matchingDureeJoursFromHours(empty, null, 2) != null) {
+    throw new Error("duree-presets: 2 h ne collent à aucun palier jours");
   }
 }
 runDureePresetSelfCheck();

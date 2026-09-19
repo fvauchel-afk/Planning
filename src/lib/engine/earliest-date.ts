@@ -63,6 +63,9 @@ export function ensureChantierDatesOnCreate(
   if (input.date_debut) {
     return { ...input, dates_estimatives: datesEstimatives };
   }
+  if (input.date_fin) {
+    return { ...input, dates_estimatives: datesEstimatives };
+  }
   if (explicit) {
     return { ...input, dates_estimatives: datesEstimatives };
   }

@@ -32,11 +32,7 @@ import {
   planChantierDurationEdits,
 } from "@/lib/engine/phase-chain";
 import { EmployeePhaseSelect } from "@/components/EmployeePhaseSelect";
-import { DureeJoursSelect } from "@/components/DureeJoursSelect";
-import {
-  daysFromPhaseHours,
-  hoursFromDayPreset,
-} from "@/lib/engine/duree-presets";
+import { PhaseDureeFields } from "@/components/DureeJoursSelect";
 import { compareEmployeesByOrdre } from "@/lib/display-order";
 import { moisToToleranceJours, toleranceJoursToMois } from "@/lib/priorite";
 import { usePlanning } from "@/lib/planning-context";
@@ -478,15 +474,6 @@ export function ChantierEditModal({
     if (type === "livraison") setDureeLivraison(value);
   }
 
-  function setDaysForPhase(phaseId: string, type: TypePhase, jours: number) {
-    const row = durationRows.find((item) => item.phaseId === phaseId);
-    setHoursForPhase(
-      phaseId,
-      type,
-      String(hoursFromDayPreset(snapshot, row?.employeId, jours)),
-    );
-  }
-
   const activeEmployees = useMemo(
     () =>
       snapshot.employees
@@ -625,6 +612,16 @@ export function ChantierEditModal({
         : 1;
     setPlanDate(next);
     if (next) setPlanEnd(chantierEndFromDureeJours(next, jours));
+  }
+
+  function onChangeEnd(next: string) {
+    setDatesDirty(true);
+    markCascade();
+    if (planDate && next && next < planDate) {
+      setPlanEnd(planDate);
+      return;
+    }
+    setPlanEnd(next);
   }
 
   async function abortIfStaleCascade(force = false): Promise<boolean> {
@@ -1320,8 +1317,8 @@ export function ChantierEditModal({
                 Durées estimées
               </legend>
               <p className="mt-1 text-xs text-stone-600">
-                Durée de chaque phase en jours ouvrés (1 à 15). Changer une
-                durée recale les phases suivantes.
+                Durée de chaque phase en heures, ou par menu en jours ouvrés
+                (0,5 à 15). Changer une durée recale les phases suivantes.
               </p>
               <div className="mt-3 space-y-3">
                 {durationRows.map((row) => {
@@ -1332,16 +1329,13 @@ export function ChantierEditModal({
                   return (
                     <div key={row.phaseId}>
                       <span className="mb-1 block font-medium">{row.label}</span>
-                      <DureeJoursSelect
-                        value={daysFromPhaseHours(
-                          snapshot,
-                          row.employeId,
-                          Number(value || 0),
-                        )}
-                        aria-label={`Durée en jours — ${row.label}`}
-                        className="w-full rounded border border-stone-300 bg-white px-3 py-2"
-                        onChange={(jours) =>
-                          setDaysForPhase(row.phaseId, row.type, jours)
+                      <PhaseDureeFields
+                        hours={value}
+                        snapshot={snapshot}
+                        employeeId={row.employeId}
+                        ariaLabel={`Durée — ${row.label}`}
+                        onHoursChange={(hours) =>
+                          setHoursForPhase(row.phaseId, row.type, hours)
                         }
                       />
                     </div>
@@ -1373,6 +1367,16 @@ export function ChantierEditModal({
                 type="date"
                 value={planDate}
                 onChange={(event) => onChangeStart(event.target.value)}
+                className="w-full rounded border border-stone-300 bg-white px-3 py-2"
+              />
+            </label>
+            <label className="mt-2 block text-sm">
+              <span className="mb-1 block">Date de fin</span>
+              <input
+                type="date"
+                value={planEnd}
+                min={planDate || undefined}
+                onChange={(event) => onChangeEnd(event.target.value)}
                 className="w-full rounded border border-stone-300 bg-white px-3 py-2"
               />
             </label>

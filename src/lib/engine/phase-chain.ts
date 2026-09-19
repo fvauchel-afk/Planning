@@ -1,5 +1,5 @@
 import { employeeCanTakePhase } from "@/lib/chantier-status";
-import { addDays, addWorkingDays, isSunday, isoWeekday, workingDaysBetween } from "@/lib/dates";
+import { addDays, addWorkingDays, isSunday, isoWeekday, shiftToReach, workingDaysBetween } from "@/lib/dates";
 import { compareEmployeesByOrdre } from "@/lib/display-order";
 import { employeeAvailableOnRange, employeeWorksOnDate, hoursForSlot, horairesFromPreset, rangeEndFromHours } from "@/lib/engine/hours";
 import {
@@ -78,6 +78,15 @@ export function firstWorkingOnOrAfter(date: string): string {
   for (let i = 0; i < 14; i += 1) {
     if (!isSunday(cursor) && isoWeekday(cursor) !== 6) return cursor;
     cursor = addDays(cursor, 1);
+  }
+  return date;
+}
+
+export function firstWorkingOnOrBefore(date: string): string {
+  let cursor = date;
+  for (let i = 0; i < 14; i += 1) {
+    if (!isSunday(cursor) && isoWeekday(cursor) !== 6) return cursor;
+    cursor = addDays(cursor, -1);
   }
   return date;
 }
@@ -192,7 +201,9 @@ export function applyPhaseChainOnCreate(
   const chainStart =
     input.date_debut || earliestAvailableWorkDate(snapshot);
 
-  return { ...input, elements: input.elements.map((element) => {
+  const chained: NewChantierInput = {
+    ...input,
+    elements: input.elements.map((element) => {
       const phases = element.phases.map((phase) => ({ ...phase }));
       let prevEnd: string | null = null;
 
@@ -292,6 +303,40 @@ export function applyPhaseChainOnCreate(
 
       return { ...element, phases };
     }),
+  };
+  return packChainAgainstDeadline(chained);
+}
+
+function packChainAgainstDeadline(input: NewChantierInput): NewChantierInput {
+  const deadline = input.date_fin?.slice(0, 10) || null;
+  if (!deadline) return input;
+  const target = firstWorkingOnOrBefore(deadline);
+  let lastEnd: string | null = null;
+  for (const element of input.elements) {
+    for (const phase of element.phases) {
+      const end = phase.date_fin?.slice(0, 10) || null;
+      if (end && (!lastEnd || end > lastEnd)) lastEnd = end;
+    }
+  }
+  if (!lastEnd) return input;
+  const shift = shiftToReach(lastEnd, target);
+  if (shift === 0) return input;
+  if (input.date_debut && lastEnd > target) return input;
+  return {
+    ...input,
+    elements: input.elements.map((element) => ({
+      ...element,
+      phases: element.phases.map((phase) => {
+        const debut = phase.date_debut?.slice(0, 10) || null;
+        const fin = phase.date_fin?.slice(0, 10) || null;
+        if (!debut && !fin) return phase;
+        return {
+          ...phase,
+          date_debut: debut ? addWorkingDays(debut, shift) : null,
+          date_fin: fin ? addWorkingDays(fin, shift) : null,
+        };
+      }),
+    })),
   };
 }
 
@@ -1210,6 +1255,49 @@ function runPhaseChainSelfCheck() {
   if (posePhase?.date_debut !== "2026-09-23") {
     throw new Error(
       `phase-chain: pose après le thermo provisoire, reçu ${posePhase?.date_debut}`,
+    );
+  }
+
+  const packed = applyPhaseChainOnCreate(snapshot, {
+    nom_client: "Deadline",
+    adresse: "",
+    lien_dossier_onedrive: null,
+    priorite: "prioritaire",
+    date_debut: "2026-09-14",
+    date_fin: "2026-09-18",
+    avec_pose: true,
+    avec_fabrication: true,
+    avec_thermolaquage: false,
+    elements: [
+      {
+        nom_element: "Portail",
+        phases: [
+          { ...basePhase, type_phase: "administratif", duree_estimee_heures: 0 },
+          { ...basePhase, type_phase: "fabrication", duree_estimee_heures: 8 },
+          { ...basePhase, type_phase: "logistique", duree_estimee_heures: 0 },
+          { ...basePhase, type_phase: "pose", duree_estimee_heures: 8 },
+        ],
+      },
+    ],
+  });
+  const packedFab = packed.elements[0]?.phases.find(
+    (item) => item.type_phase === "fabrication",
+  );
+  const packedPose = packed.elements[0]?.phases.find(
+    (item) => item.type_phase === "pose",
+  );
+  if (packedPose?.date_fin !== "2026-09-18") {
+    throw new Error(
+      `phase-chain: deadline vendredi, pose doit finir le 18, reçu ${packedPose?.date_fin}`,
+    );
+  }
+  if (
+    !packedFab?.date_debut ||
+    packedFab.date_debut > "2026-09-18" ||
+    packedFab.date_debut >= (packedPose?.date_debut ?? "")
+  ) {
+    throw new Error(
+      `phase-chain: rebours, fab avant la pose, reçu fab ${packedFab?.date_debut} pose ${packedPose?.date_debut}`,
     );
   }
 
