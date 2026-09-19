@@ -687,11 +687,30 @@ export async function uploadPngToShareFolder(input: {
   });
 }
 
+export async function uploadBytesToClientFolder(input: {
+  nomClient: string;
+  fileName: string;
+  bytes: Buffer | Uint8Array;
+  contentType: string;
+}): Promise<void> {
+  const folder = await ensureChildFolder(input.nomClient);
+  const token = await getValidAccessToken();
+  await uploadToMeDriveItem(
+    token,
+    folder.itemId,
+    input.fileName,
+    input.bytes,
+    input.contentType,
+  );
+}
+
 export async function sendGraphMail(input: {
   to: string[];
+  cc?: string[];
   subject: string;
   text: string;
   html?: string;
+  attachments?: { fileName: string; contentType: string; bytes: Uint8Array }[];
 }): Promise<void> {
   const recipients = input.to
     .map((item) => item.trim())
@@ -700,6 +719,16 @@ export async function sendGraphMail(input: {
   if (recipients.length === 0) {
     throw new Error("Aucun destinataire e-mail.");
   }
+  const cc = (input.cc ?? [])
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .map((address) => ({ emailAddress: { address } }));
+  const attachments = (input.attachments ?? []).map((file) => ({
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    name: file.fileName,
+    contentType: file.contentType,
+    contentBytes: Buffer.from(file.bytes).toString("base64"),
+  }));
   const token = await getValidAccessToken();
   await graphFetch<void>(token, "/me/sendMail", {
     method: "POST",
@@ -710,6 +739,8 @@ export async function sendGraphMail(input: {
           ? { contentType: "HTML", content: input.html }
           : { contentType: "Text", content: input.text },
         toRecipients: recipients,
+        ccRecipients: cc.length ? cc : undefined,
+        attachments: attachments.length ? attachments : undefined,
       },
       saveToSentItems: true,
     }),
