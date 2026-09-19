@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DevisLignesEditor } from "@/components/DevisLignesEditor";
 import { PdfPreview } from "@/components/PdfPreview";
+import { ClientFormFields, EMPTY_CLIENT_CREATE } from "@/components/ClientFormFields";
 import { devisApi } from "@/lib/devis/client-api";
 import { emptyLigneDevis, formatMontantFr, totauxDevis, type LigneDevis, type RemiseDevis } from "@/lib/devis/lignes";
 import { formatIsoFr } from "@/lib/dates";
@@ -36,7 +37,7 @@ export function DevisEditor({ devisId }: { devisId?: string }) {
   const [devis, setDevis] = useState<Devis | null>(null);
   const [clientId, setClientId] = useState("");
   const [newClient, setNewClient] = useState(false);
-  const [nc, setNc] = useState({ nom: "", email: "", telephone: "", adresse: "" });
+  const [nc, setNc] = useState(EMPTY_CLIENT_CREATE);
   const [objet, setObjet] = useState("");
   const [validite, setValidite] = useState(5);
   const [statut, setStatut] = useState<StatutDevis>("brouillon");
@@ -301,11 +302,10 @@ export function DevisEditor({ devisId }: { devisId?: string }) {
           <span className="mb-1 block font-medium">Client</span>
           {newClient ? (
             <div className="grid gap-2 md:grid-cols-2">
-              <input className={FIELD} placeholder="Nom" value={nc.nom} onChange={(e) => setNc({ ...nc, nom: e.target.value })} />
-              <input className={FIELD} placeholder="E-mail" value={nc.email} onChange={(e) => setNc({ ...nc, email: e.target.value })} />
-              <input className={FIELD} placeholder="Téléphone" value={nc.telephone} onChange={(e) => setNc({ ...nc, telephone: e.target.value })} />
-              <input className={FIELD} placeholder="Adresse" value={nc.adresse} onChange={(e) => setNc({ ...nc, adresse: e.target.value })} />
-              <button type="button" className="text-sm underline" onClick={() => setNewClient(false)}>Choisir une fiche existante</button>
+              <ClientFormFields value={nc} onChange={setNc} fieldClass={FIELD} />
+              <button type="button" className="text-sm underline" onClick={() => setNewClient(false)}>
+                Choisir une fiche existante
+              </button>
             </div>
           ) : (
             <div className="flex flex-wrap gap-2">

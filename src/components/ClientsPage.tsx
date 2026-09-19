@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { ClientFormFields, EMPTY_CLIENT_CREATE } from "@/components/ClientFormFields";
 import { devisApi } from "@/lib/devis/client-api";
-import type { ClientFiche } from "@/lib/devis/types";
+import { TYPE_CLIENT_LABELS, type ClientCreateInput, type ClientFiche } from "@/lib/devis/types";
 
 const FIELD = "w-full rounded border border-stone-300 px-3 py-2 text-sm";
 
@@ -13,9 +14,7 @@ export function ClientsPage() {
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState("");
   const [creating, setCreating] = useState(false);
-  const [nom, setNom] = useState("");
-  const [email, setEmail] = useState("");
-  const [telephone, setTelephone] = useState("");
+  const [draft, setDraft] = useState<ClientCreateInput>(EMPTY_CLIENT_CREATE);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
@@ -35,12 +34,13 @@ export function ClientsPage() {
   }, [load]);
 
   const visible = rows.filter((row) => {
-    const hay = `${row.nom} ${row.email ?? ""} ${row.ville ?? ""} ${row.telephone ?? ""}`.toLowerCase();
+    const hay =
+      `${row.nom} ${row.email ?? ""} ${row.ville ?? ""} ${row.telephone ?? ""} ${row.pays ?? ""}`.toLowerCase();
     return !q.trim() || hay.includes(q.trim().toLowerCase());
   });
 
   async function create() {
-    if (!nom.trim()) {
+    if (!draft.nom.trim()) {
       setError("Le nom du client est obligatoire.");
       return;
     }
@@ -50,11 +50,9 @@ export function ClientsPage() {
       const data = await devisApi<{ id: string }>("/api/clients", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nom, email, telephone }),
+        body: JSON.stringify(draft),
       });
-      setNom("");
-      setEmail("");
-      setTelephone("");
+      setDraft(EMPTY_CLIENT_CREATE);
       setCreating(false);
       await load();
       window.location.href = `/devis/clients/${data.id}`;
@@ -80,7 +78,10 @@ export function ClientsPage() {
           </Link>
           <button
             type="button"
-            onClick={() => setCreating(true)}
+            onClick={() => {
+              setDraft(EMPTY_CLIENT_CREATE);
+              setCreating(true);
+            }}
             className="rounded-lg bg-amber-700 px-3 py-2 text-sm font-medium text-amber-50"
           >
             Nouveau client
@@ -91,16 +92,9 @@ export function ClientsPage() {
         <p className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{error}</p>
       ) : null}
       {creating ? (
-        <div className="grid gap-2 rounded-lg border border-stone-200 bg-white p-4 md:grid-cols-3">
-          <input className={FIELD} placeholder="Nom" value={nom} onChange={(e) => setNom(e.target.value)} />
-          <input className={FIELD} placeholder="E-mail" value={email} onChange={(e) => setEmail(e.target.value)} />
-          <input
-            className={FIELD}
-            placeholder="Téléphone"
-            value={telephone}
-            onChange={(e) => setTelephone(e.target.value)}
-          />
-          <div className="flex gap-2 md:col-span-3">
+        <div className="grid gap-2 rounded-lg border border-stone-200 bg-white p-4 md:grid-cols-2">
+          <ClientFormFields value={draft} onChange={setDraft} fieldClass={FIELD} />
+          <div className="flex gap-2 md:col-span-2">
             <button
               type="button"
               disabled={busy}
@@ -131,6 +125,7 @@ export function ClientsPage() {
             <thead className="bg-stone-100 text-left">
               <tr>
                 <th className="px-3 py-2 font-medium">Nom</th>
+                <th className="px-3 py-2 font-medium">Type</th>
                 <th className="px-3 py-2 font-medium">E-mail</th>
                 <th className="px-3 py-2 font-medium">Téléphone</th>
                 <th className="px-3 py-2 font-medium">Ville</th>
@@ -144,6 +139,7 @@ export function ClientsPage() {
                       {row.nom}
                     </Link>
                   </td>
+                  <td className="px-3 py-2">{TYPE_CLIENT_LABELS[row.type_client]}</td>
                   <td className="px-3 py-2">{row.email || "—"}</td>
                   <td className="px-3 py-2">{row.telephone || "—"}</td>
                   <td className="px-3 py-2">{row.ville || "—"}</td>

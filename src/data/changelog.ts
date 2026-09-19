@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-19-fiche-client-champs",
+    title: "Fiche client plus complète",
+    items: [
+      "Nouveau client : adresse, code postal, pays, particulier ou professionnel, SIRET si professionnel, et commentaires internes.",
+      "Les commentaires internes sont bien visibles sur la fiche, pour l’équipe seulement : ils ne sortent jamais sur le devis ni le PDF envoyé au client.",
+    ],
+  },
+  {
     id: "2026-09-19-devis-palette-logo",
     title: "Devis : couleurs du logo",
     items: [

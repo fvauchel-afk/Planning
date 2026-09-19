@@ -6,7 +6,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { devisApi } from "@/lib/devis/client-api";
 import { formatMontantFr, totauxDevis } from "@/lib/devis/lignes";
 import { formatIsoFr } from "@/lib/dates";
-import { STATUT_DEVIS_LABELS, type ClientFiche as ClientRow, type DevisListe } from "@/lib/devis/types";
+import {
+  STATUT_DEVIS_LABELS,
+  TYPE_CLIENT_LABELS,
+  TYPES_CLIENT,
+  type ClientFiche as ClientRow,
+  type DevisListe,
+  type TypeClient,
+} from "@/lib/devis/types";
 import { useDebouncedPatch } from "@/lib/form-live";
 
 const FIELD = "w-full rounded border border-stone-300 px-3 py-2 text-sm";
@@ -97,7 +104,9 @@ export function ClientFiche({ clientId }: { clientId: string }) {
           </p>
           <h2 className="mt-1 font-serif text-3xl text-stone-900">{client.nom || "Fiche client"}</h2>
           <p className="text-sm text-stone-500">
-            Dossier OneDrive : {client.lien_dossier_onedrive || client.nom}
+            {TYPE_CLIENT_LABELS[client.type_client]}
+            {client.pays ? ` · ${client.pays}` : ""} · Dossier OneDrive :{" "}
+            {client.lien_dossier_onedrive || client.nom}
           </p>
         </div>
         <Link
@@ -110,6 +119,20 @@ export function ClientFiche({ clientId }: { clientId: string }) {
       {error ? (
         <p className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{error}</p>
       ) : null}
+
+      <div className="rounded-lg border-2 border-amber-400 bg-amber-50 p-4">
+        <p className="text-sm font-semibold text-amber-950">Commentaires internes</p>
+        <p className="mt-0.5 text-xs text-amber-900">
+          Usage interne uniquement — ce texte n’apparaît jamais sur les devis ni les PDF envoyés au client.
+        </p>
+        <textarea
+          className={`${FIELD} mt-2 border-amber-300 bg-white`}
+          rows={4}
+          placeholder="Notes pour l’équipe…"
+          value={client.notes ?? ""}
+          onChange={(e) => setField("notes", e.target.value || null)}
+        />
+      </div>
 
       <div className="grid gap-3 rounded-lg border border-stone-200 bg-white p-4 md:grid-cols-2">
         <label className="text-sm">
@@ -132,7 +155,38 @@ export function ClientFiche({ clientId }: { clientId: string }) {
             onChange={(e) => setField("telephone", e.target.value || null)}
           />
         </label>
-        <label className="text-sm">
+        <fieldset className="text-sm">
+          <legend className="mb-1">Particulier ou professionnel</legend>
+          <div className="mt-1 flex flex-wrap gap-4">
+            {TYPES_CLIENT.map((type) => (
+              <label key={type} className="inline-flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="type_client"
+                  checked={client.type_client === type}
+                  onChange={() => {
+                    dirty.current.add("type_client");
+                    setClient((cur) =>
+                      cur
+                        ? {
+                            ...cur,
+                            type_client: type,
+                            siren_siret: type === "professionnel" ? cur.siren_siret : null,
+                          }
+                        : cur,
+                    );
+                    live.schedule({
+                      type_client: type,
+                      ...(type === "particulier" ? { siren_siret: null } : {}),
+                    });
+                  }}
+                />
+                {TYPE_CLIENT_LABELS[type as TypeClient]}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+        <label className="text-sm md:col-span-2">
           Adresse
           <input
             className={`${FIELD} mt-1`}
@@ -157,6 +211,14 @@ export function ClientFiche({ clientId }: { clientId: string }) {
           />
         </label>
         <label className="text-sm">
+          Pays
+          <input
+            className={`${FIELD} mt-1`}
+            value={client.pays ?? ""}
+            onChange={(e) => setField("pays", e.target.value || null)}
+          />
+        </label>
+        <label className="text-sm">
           Adresse de livraison
           <input
             className={`${FIELD} mt-1`}
@@ -164,31 +226,26 @@ export function ClientFiche({ clientId }: { clientId: string }) {
             onChange={(e) => setField("adresse_livraison", e.target.value || null)}
           />
         </label>
-        <label className="text-sm">
-          SIREN / SIRET
-          <input
-            className={`${FIELD} mt-1`}
-            value={client.siren_siret ?? ""}
-            onChange={(e) => setField("siren_siret", e.target.value || null)}
-          />
-        </label>
-        <label className="text-sm">
-          TVA intra
-          <input
-            className={`${FIELD} mt-1`}
-            value={client.tva_intra ?? ""}
-            onChange={(e) => setField("tva_intra", e.target.value || null)}
-          />
-        </label>
-        <label className="text-sm md:col-span-2">
-          Notes
-          <textarea
-            className={`${FIELD} mt-1`}
-            rows={3}
-            value={client.notes ?? ""}
-            onChange={(e) => setField("notes", e.target.value || null)}
-          />
-        </label>
+        {client.type_client === "professionnel" ? (
+          <>
+            <label className="text-sm">
+              SIRET
+              <input
+                className={`${FIELD} mt-1`}
+                value={client.siren_siret ?? ""}
+                onChange={(e) => setField("siren_siret", e.target.value || null)}
+              />
+            </label>
+            <label className="text-sm">
+              TVA intra
+              <input
+                className={`${FIELD} mt-1`}
+                value={client.tva_intra ?? ""}
+                onChange={(e) => setField("tva_intra", e.target.value || null)}
+              />
+            </label>
+          </>
+        ) : null}
       </div>
 
       <div className="flex gap-2">

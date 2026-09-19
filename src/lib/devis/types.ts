@@ -19,6 +19,14 @@ export const TYPE_FACTURATION_LABELS: Record<TypeFacturation, string> = {
   electronique: "Format électronique",
 };
 
+export const TYPES_CLIENT = ["particulier", "professionnel"] as const;
+export type TypeClient = (typeof TYPES_CLIENT)[number];
+
+export const TYPE_CLIENT_LABELS: Record<TypeClient, string> = {
+  particulier: "Particulier",
+  professionnel: "Professionnel",
+};
+
 export type ClientFiche = {
   id: string;
   nom: string;
@@ -27,6 +35,8 @@ export type ClientFiche = {
   adresse: string | null;
   code_postal: string | null;
   ville: string | null;
+  pays: string | null;
+  type_client: TypeClient;
   siren_siret: string | null;
   tva_intra: string | null;
   adresse_livraison: string | null;
@@ -34,6 +44,32 @@ export type ClientFiche = {
   lien_dossier_onedrive: string | null;
   created_at?: string | null;
   updated_at?: string | null;
+};
+
+export type ClientCreateInput = {
+  nom: string;
+  email: string;
+  telephone: string;
+  adresse: string;
+  code_postal: string;
+  ville: string;
+  pays: string;
+  type_client: TypeClient;
+  siren_siret: string;
+  notes: string;
+};
+
+export const EMPTY_CLIENT_CREATE: ClientCreateInput = {
+  nom: "",
+  email: "",
+  telephone: "",
+  adresse: "",
+  code_postal: "",
+  ville: "",
+  pays: "France",
+  type_client: "particulier",
+  siren_siret: "",
+  notes: "",
 };
 
 export type EntrepriseReglages = {
@@ -149,6 +185,13 @@ export type DevisPatch = {
   remise?: RemiseDevis;
 };
 
+export function parseTypeClient(raw: unknown): TypeClient {
+  const value = String(raw ?? "");
+  return (TYPES_CLIENT as readonly string[]).includes(value)
+    ? (value as TypeClient)
+    : "particulier";
+}
+
 export function parseStatutDevis(raw: unknown): StatutDevis {
   const value = String(raw ?? "");
   return (STATUTS_DEVIS as readonly string[]).includes(value)
@@ -164,7 +207,7 @@ export function parseTypeFacturation(raw: unknown): TypeFacturation {
 }
 
 export function adresseClientLignes(
-  client: Pick<ClientFiche, "nom" | "adresse" | "code_postal" | "ville">,
+  client: Pick<ClientFiche, "nom" | "adresse" | "code_postal" | "ville" | "pays">,
 ): string[] {
   const lines = [client.nom.trim()].filter(Boolean);
   if (client.adresse?.trim()) lines.push(client.adresse.trim());
@@ -172,6 +215,7 @@ export function adresseClientLignes(
     .filter(Boolean)
     .join(" ");
   if (ville) lines.push(ville);
+  if (client.pays?.trim()) lines.push(client.pays.trim());
   return lines;
 }
 

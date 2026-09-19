@@ -8,6 +8,7 @@ import {
 import { normalizeLignesDevis, parseLignesDevis, type RemiseDevis } from "@/lib/devis/lignes";
 import {
   parseStatutDevis,
+  parseTypeClient,
   parseTypeFacturation,
   type ClientFiche,
   type ClientPatch,
@@ -31,6 +32,8 @@ function mapClient(row: Record<string, unknown>): ClientFiche {
     adresse: row.adresse ? String(row.adresse) : null,
     code_postal: row.code_postal ? String(row.code_postal) : null,
     ville: row.ville ? String(row.ville) : null,
+    pays: row.pays ? String(row.pays) : null,
+    type_client: parseTypeClient(row.type_client),
     siren_siret: row.siren_siret ? String(row.siren_siret) : null,
     tva_intra: row.tva_intra ? String(row.tva_intra) : null,
     adresse_livraison: row.adresse_livraison ? String(row.adresse_livraison) : null,
@@ -115,7 +118,12 @@ export async function supabaseUpsertClient(
     adresse: input.adresse?.trim() || null,
     code_postal: input.code_postal?.trim() || null,
     ville: input.ville?.trim() || null,
-    siren_siret: input.siren_siret?.trim() || null,
+    pays: input.pays?.trim() || null,
+    type_client: parseTypeClient(input.type_client),
+    siren_siret:
+      parseTypeClient(input.type_client) === "professionnel"
+        ? input.siren_siret?.trim() || null
+        : null,
     tva_intra: input.tva_intra?.trim() || null,
     adresse_livraison: input.adresse_livraison?.trim() || null,
     notes: input.notes?.trim() || null,
@@ -144,6 +152,8 @@ export async function supabasePatchClient(input: ClientPatch): Promise<void> {
   str("adresse", input.adresse);
   str("code_postal", input.code_postal);
   str("ville", input.ville);
+  str("pays", input.pays);
+  if (input.type_client !== undefined) payload.type_client = parseTypeClient(input.type_client);
   str("siren_siret", input.siren_siret);
   str("tva_intra", input.tva_intra);
   str("adresse_livraison", input.adresse_livraison);

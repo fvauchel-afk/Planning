@@ -6,6 +6,7 @@ import {
   unauthorized,
 } from "@/lib/auth/guard";
 import { isMissingSchemaError } from "@/lib/supabase/errors";
+import { parseTypeClient } from "@/lib/devis/types";
 import {
   supabaseDeleteClient,
   supabaseGetClient,
@@ -18,7 +19,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const SQL_HELP =
-  "Tables clients/devis absentes. Exécutez supabase/migrations/041_clients_devis.sql puis 042_devis_reglages_entreprise.sql.";
+  "Tables clients/devis absentes. Exécutez supabase/migrations/041_clients_devis.sql puis 042_devis_reglages_entreprise.sql et 045_clients_fiche_extra.sql.";
 
 function fail(err: unknown, fallback: string, status = 400) {
   const message = err instanceof Error ? err.message : fallback;
@@ -49,7 +50,7 @@ export async function POST(request: NextRequest) {
   const session = await resolveSession(await getSession());
   if (!session) return unauthorized();
   if (!session.isAdmin) return forbidden();
-  let body: Record<string, string | undefined>;
+  let body: Record<string, string | undefined | null>;
   try {
     body = (await request.json()) as typeof body;
   } catch {
@@ -68,6 +69,8 @@ export async function POST(request: NextRequest) {
       adresse: body.adresse?.trim() || null,
       code_postal: body.code_postal?.trim() || null,
       ville: body.ville?.trim() || null,
+      pays: body.pays?.trim() || null,
+      type_client: parseTypeClient(body.type_client),
       siren_siret: body.siren_siret?.trim() || null,
       tva_intra: body.tva_intra?.trim() || null,
       adresse_livraison: body.adresse_livraison?.trim() || null,
