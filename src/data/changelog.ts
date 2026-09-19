@@ -19,6 +19,45 @@ export const CHANGELOG: ChangelogEntry[] = [
     ],
   },
   {
+    id: "2026-09-19-fiche-client-champs",
+    title: "Fiche client plus complète",
+    items: [
+      "Nouveau client : adresse, code postal, pays, particulier ou professionnel, SIRET si professionnel, et commentaires internes.",
+      "Les commentaires internes sont bien visibles sur la fiche, pour l’équipe seulement : ils ne sortent jamais sur le devis ni le PDF envoyé au client.",
+    ],
+  },
+  {
+    id: "2026-09-19-devis-palette-logo",
+    title: "Devis : couleurs du logo",
+    items: [
+      "Nouveau devis reprend le bleu et le gris du logo (en-tête de tableau, boutons, cartes), sur fond clair, sans le vert de l’ancien outil.",
+    ],
+  },
+  {
+    id: "2026-09-19-devis-couleurs-planning",
+    title: "Devis aux couleurs du Planning",
+    items: [
+      "Sur le devis, l’en-tête du tableau et le bloc des totaux utilisent le bleu du Planning, à la place du vert de l’ancien outil.",
+    ],
+  },
+  {
+    id: "2026-09-19-parametres-societe",
+    title: "Paramètres : société et droits",
+    items: [
+      "L’onglet Paramètres regroupe la société (nom, SIRET, adresse, logo, mentions du devis) et Accès et droits (admin ou salarié).",
+      "Les textes d’e-mail des devis restent dans Devis → Paramètres Devis.",
+    ],
+  },
+  {
+    id: "2026-09-19-onglet-devis",
+    title: "Devis et fichier client",
+    items: [
+      "Nouvel onglet Devis : fiches clients, lignes simples, options (facturation, remise %, ou montant fixe), aperçu PDF, envoi depuis le Hotmail OneDrive.",
+      "Le PDF part dans le dossier OneDrive du client (même nom que le chantier). Le numéro de devis est automatique et n’est jamais réutilisé.",
+      "Identité de l’entreprise (SIRET, IBAN, logo) se remplit dans Paramètres (Société), à côté d’Accès et droits. Les textes d’e-mail restent dans Paramètres Devis.",
+    ],
+  },
+  {
     id: "2026-09-19-fin-urgent-duree-heures",
     title: "Deadline urgent et durées en heures",
     items: [
