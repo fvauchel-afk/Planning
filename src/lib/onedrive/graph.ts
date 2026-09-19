@@ -687,6 +687,23 @@ export async function uploadPngToShareFolder(input: {
   });
 }
 
+export async function uploadBytesToClientFolder(input: {
+  nomClient: string;
+  fileName: string;
+  bytes: Buffer | Uint8Array;
+  contentType: string;
+}): Promise<void> {
+  const folder = await ensureChildFolder(input.nomClient);
+  const token = await getValidAccessToken();
+  await uploadToMeDriveItem(
+    token,
+    folder.itemId,
+    input.fileName,
+    input.bytes,
+    input.contentType,
+  );
+}
+
 export async function sendGraphMail(input: {
   to: string[];
   subject: string;

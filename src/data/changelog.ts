@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-19-plan-leo-onedrive",
+    title: "Plan LEO enregistré sur OneDrive",
+    items: [
+      "Sur l’onglet Plan, Enregistrer sur OneDrive met le dessin (SVG) et les options (JSON) dans le dossier du client, même nom que le chantier.",
+      "Si un chantier a le même nom, le plan et la fiche se trouvent l’un l’autre : lien dans Modifier le chantier, et lien vers la fiche depuis le Plan.",
+    ],
+  },
+  {
     id: "2026-09-19-fin-urgent-duree-heures",
     title: "Deadline urgent et durées en heures",
     items: [

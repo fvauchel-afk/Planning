@@ -10,6 +10,11 @@
 ============================================================================= */
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { usePlanning } from "@/lib/planning-context";
+import { matchByClientNom } from "@/lib/plan-leo/match";
+import type { PlanLeo } from "@/lib/plan-leo/types";
 
 /* ----------------------------------------------------------------------------
    1. CHARTE GRAPHIQUE DU PLAN (dessin technique)
@@ -166,6 +171,23 @@ const DEFAUTS: Params = {
   cartouche: "oui",
   logoOfficiel: "non",
 };
+
+function mergeParams(raw: Record<string, string | number>): Params {
+  const next: Params = { ...DEFAUTS };
+  for (const key of Object.keys(DEFAUTS)) {
+    if (raw[key] === undefined || raw[key] === null) continue;
+    const def = DEFAUTS[key];
+    next[key] = typeof def === "number" ? Number(raw[key]) || 0 : String(raw[key]);
+  }
+  return next;
+}
+
+function svgDuPlan(): string {
+  if (typeof document === "undefined") return "";
+  const n = document.getElementById("plan-leo-svg");
+  if (!n) return "";
+  return new XMLSerializer().serializeToString(n);
+}
 
 /* ----------------------------------------------------------------------------
    4. OUTILS DE CALCUL
@@ -413,13 +435,19 @@ function Nombre(props: {
   );
 }
 
-function Texte(props: { value: string; onChange: (v: string) => void; placeholder?: string }) {
+function Texte(props: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  list?: string;
+}) {
   return (
     <input
       type="text"
       className={CHAMP}
       value={props.value}
       placeholder={props.placeholder || ""}
+      list={props.list}
       onChange={(e) => props.onChange(e.target.value)}
     />
   );
@@ -481,6 +509,8 @@ const CSS_IMPRESSION = `
 ---------------------------------------------------------------------------- */
 
 export function PlanPortailLeo() {
+  const searchParams = useSearchParams();
+  const { snapshot } = usePlanning();
   const [p, setP] = useState<Params>(DEFAUTS);
   const [ouverts, setOuverts] = useState<Record<string, boolean>>({
     projet: false,
@@ -494,10 +524,77 @@ export function PlanPortailLeo() {
     finition: false,
     affichage: false,
   });
+  const [saveBusy, setSaveBusy] = useState(false);
+  const [saveMsg, setSaveMsg] = useState<string | null>(null);
+  const [saveErr, setSaveErr] = useState<string | null>(null);
+  const [planId, setPlanId] = useState<string | null>(null);
+  const [lienChantierId, setLienChantierId] = useState<string | null>(
+    searchParams.get("chantier")?.trim() || null,
+  );
 
   useEffect(() => {
     setP((prev) => (prev.date ? prev : { ...prev, date: new Date().toLocaleDateString("fr-FR") }));
   }, []);
+
+  useEffect(() => {
+    const id = searchParams.get("id")?.trim();
+    const chantierId = searchParams.get("chantier")?.trim();
+    const clientQ = searchParams.get("client")?.trim();
+    let cancelled = false;
+
+    async function load() {
+      try {
+        if (id) {
+          const res = await fetch(`/api/plan-leo?id=${encodeURIComponent(id)}`, { cache: "no-store" });
+          const data = (await res.json()) as { plan?: PlanLeo; error?: string };
+          if (!res.ok) throw new Error(data.error || "Lecture du plan impossible.");
+          if (cancelled || !data.plan) return;
+          setPlanId(data.plan.id);
+          setLienChantierId(data.plan.chantier_id);
+          setP(mergeParams(data.plan.params));
+          setOuverts((o) => ({ ...o, projet: true }));
+          return;
+        }
+        if (chantierId) setLienChantierId(chantierId);
+        const qs = new URLSearchParams();
+        if (chantierId) qs.set("chantierId", chantierId);
+        if (clientQ) qs.set("client", clientQ);
+        if (!qs.toString()) return;
+        const res = await fetch(`/api/plan-leo?${qs.toString()}`, { cache: "no-store" });
+        const data = (await res.json()) as { rows?: PlanLeo[]; error?: string };
+        if (!res.ok) throw new Error(data.error || "Lecture du plan impossible.");
+        const plan = data.rows?.[0];
+        if (cancelled || !plan) {
+          if (clientQ) {
+            setP((prev) => (prev.client ? prev : { ...prev, client: clientQ }));
+          }
+          return;
+        }
+        setPlanId(plan.id);
+        setLienChantierId(plan.chantier_id || chantierId || null);
+        setP(mergeParams(plan.params));
+        setOuverts((o) => ({ ...o, projet: true }));
+      } catch (err) {
+        if (!cancelled) {
+          setSaveErr(err instanceof Error ? err.message : "Lecture du plan impossible.");
+        }
+      }
+    }
+
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [searchParams]);
+
+  useEffect(() => {
+    const chantierId = searchParams.get("chantier")?.trim();
+    if (!chantierId) return;
+    const chantier = snapshot.chantiers.find((c) => c.id === chantierId);
+    if (!chantier) return;
+    setLienChantierId(chantierId);
+    setP((prev) => (prev.client ? prev : { ...prev, client: chantier.nom_client }));
+  }, [searchParams, snapshot.chantiers]);
 
   const set = (k: string, v: string | number) => setP((prev) => ({ ...prev, [k]: v }));
   const S = useCallback((k: string): string => String(p[k] ?? ""), [p]);
@@ -1274,9 +1371,8 @@ export function PlanPortailLeo() {
   ========================================================================== */
   const exporterSVG = () => {
     if (typeof document === "undefined") return;
-    const n = document.getElementById("plan-leo-svg");
-    if (!n) return;
-    const s = new XMLSerializer().serializeToString(n);
+    const s = svgDuPlan();
+    if (!s) return;
     const blob = new Blob(['<?xml version="1.0" encoding="UTF-8"?>\n' + s], { type: "image/svg+xml" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -1284,6 +1380,42 @@ export function PlanPortailLeo() {
     a.download = `Plan_${S("client") || "client"}_${S("reference") || "ref"}_${S("gamme").replace(/\s/g, "")}_Indice${S("indice")}.svg`;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const chantiersLies = matchByClientNom(snapshot.chantiers, S("client"));
+  const chantierOuvert = lienChantierId
+    ? snapshot.chantiers.find((c) => c.id === lienChantierId)
+    : chantiersLies[0];
+
+  async function enregistrerOneDrive() {
+    setSaveBusy(true);
+    setSaveErr(null);
+    setSaveMsg(null);
+    try {
+      const res = await fetch("/api/plan-leo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          params: p,
+          svg: svgDuPlan(),
+          chantierId: chantierOuvert?.id ?? lienChantierId,
+        }),
+      });
+      const data = (await res.json()) as {
+        id?: string;
+        folder?: string;
+        error?: string;
+      };
+      if (!res.ok) throw new Error(data.error || "Enregistrement impossible.");
+      setPlanId(data.id ?? planId);
+      setSaveMsg(
+        `Enregistré dans le dossier OneDrive « ${data.folder} » (JSON + SVG).`,
+      );
+    } catch (err) {
+      setSaveErr(err instanceof Error ? err.message : "Enregistrement impossible.");
+    } finally {
+      setSaveBusy(false);
+    }
   };
 
   /* ==========================================================================
@@ -1314,6 +1446,14 @@ export function PlanPortailLeo() {
           <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${tonStatut}`}>
             {statutDossier}
           </span>
+          <button
+            type="button"
+            disabled={saveBusy}
+            className="rounded-md bg-amber-700 px-3 py-1.5 text-sm font-medium text-amber-50 hover:bg-amber-800 disabled:opacity-60"
+            onClick={() => void enregistrerOneDrive()}
+          >
+            {saveBusy ? "Enregistrement…" : "Enregistrer sur OneDrive"}
+          </button>
           <button type="button" className={bouton} onClick={exporterSVG}>
             Exporter SVG
           </button>
@@ -1336,11 +1476,37 @@ export function PlanPortailLeo() {
         </div>
       </div>
       <p className="plan-no-print -mt-2 max-w-3xl text-xs text-stone-500">
-        Rien n’est enregistré dans Planning : le plan reste dans cet écran tant que vous ne
-        quittez pas la page. Pour le garder : Exporter SVG ou Imprimer / PDF. Le badge décrit
-        seulement les contrôles techniques (infos manquantes ou points bloquants) — il n’y a pas
-        de bouton « Valider le dossier » pour l’instant.
+        Enregistrer sur OneDrive copie le JSON et le SVG dans le dossier du client (même nom
+        que le chantier, sans en créer un second). Le badge décrit seulement les contrôles
+        techniques.
       </p>
+      {saveErr ? (
+        <p className="plan-no-print rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+          {saveErr}
+        </p>
+      ) : null}
+      {saveMsg ? (
+        <p className="plan-no-print rounded border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+          {saveMsg}
+        </p>
+      ) : null}
+      {chantierOuvert ? (
+        <p className="plan-no-print text-sm text-stone-700">
+          Lié au chantier{" "}
+          <Link
+            href={`/chantiers?fiche=${encodeURIComponent(chantierOuvert.id)}`}
+            className="font-medium underline"
+          >
+            {chantierOuvert.nom_client}
+          </Link>
+          {chantiersLies.length > 1 ? ` · ${chantiersLies.length} homonymes` : ""}
+        </p>
+      ) : S("client").trim() ? (
+        <p className="plan-no-print text-sm text-stone-500">
+          Aucun chantier avec ce nom pour l’instant — le dossier OneDrive portera quand même ce
+          nom.
+        </p>
+      ) : null}
 
       <div className="plan-no-print flex flex-wrap gap-1">
         <span className="rounded-md bg-amber-700 px-3 py-1.5 text-sm font-medium text-amber-50">
@@ -1355,7 +1521,17 @@ export function PlanPortailLeo() {
         <aside className="plan-no-print space-y-2">
           <Bloc titre="1. Projet et livrable" ouvert={ouverts.projet} onToggle={() => bascule("projet")}>
             <Ligne label="Client">
-              <Texte value={S("client")} onChange={(v) => set("client", v)} placeholder="Nom du client" />
+              <Texte
+                value={S("client")}
+                onChange={(v) => set("client", v)}
+                placeholder="Nom du client (= nom du chantier)"
+                list="plan-leo-chantiers"
+              />
+              <datalist id="plan-leo-chantiers">
+                {snapshot.chantiers.map((c) => (
+                  <option key={c.id} value={c.nom_client} />
+                ))}
+              </datalist>
             </Ligne>
             <Ligne label="Référence projet">
               <Texte value={S("reference")} onChange={(v) => set("reference", v)} placeholder="Ex. 2026-118" />
