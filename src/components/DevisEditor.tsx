@@ -125,7 +125,10 @@ export function DevisEditor({ devisId }: { devisId?: string }) {
     if (devisId) live.schedule({ [key]: value });
   }
 
-  const remise: RemiseDevis = optRemise ? { type: remiseType, valeur: remiseVal } : null;
+  const remise: RemiseDevis = useMemo(
+    () => (optRemise ? { type: remiseType, valeur: remiseVal } : null),
+    [optRemise, remiseType, remiseVal],
+  );
   const totaux = useMemo(() => totauxDevis(lignes, remise), [lignes, remise]);
 
   async function ensureClient(): Promise<string | null> {
