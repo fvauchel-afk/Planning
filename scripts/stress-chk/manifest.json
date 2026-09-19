@@ -1,0 +1,252 @@
+{
+  "employees": 32,
+  "chantiers": 736,
+  "elements": 742,
+  "phases": 3622,
+  "absences": 46,
+  "demandes": 3,
+  "signalements": 6,
+  "overflow110": {
+    "weekStart": "2026-10-12",
+    "chantiers": 640,
+    "elements": 640,
+    "phases": 3200,
+    "note": "Plages 08:10/08:40/13:05/13:35 × 32 salariés × 5 jours, pour que la Synthèse dépasse 110 % malgré le dénominateur équipe complète."
+  },
+  "pins": [
+    {
+      "nom": "TEST-CHK Adrien Fab 01",
+      "pin": "8101",
+      "roles": [
+        "fabrication"
+      ]
+    },
+    {
+      "nom": "TEST-CHK Bastien Fab 02",
+      "pin": "8102",
+      "roles": [
+        "fabrication"
+      ]
+    },
+    {
+      "nom": "TEST-CHK Cedric Fab 03",
+      "pin": "8103",
+      "roles": [
+        "fabrication"
+      ]
+    },
+    {
+      "nom": "TEST-CHK Damien Fab 04",
+      "pin": "8104",
+      "roles": [
+        "fabrication"
+      ]
+    },
+    {
+      "nom": "TEST-CHK Emile Fab 05",
+      "pin": "8105",
+      "roles": [
+        "fabrication"
+      ]
+    },
+    {
+      "nom": "TEST-CHK Fabien Fab 06",
+      "pin": "8106",
+      "roles": [
+        "fabrication"
+      ]
+    },
+    {
+      "nom": "TEST-CHK Gael Fab 07",
+      "pin": "8107",
+      "roles": [
+        "fabrication"
+      ]
+    },
+    {
+      "nom": "TEST-CHK Hugo Fab 08",
+      "pin": "8108",
+      "roles": [
+        "fabrication"
+      ]
+    },
+    {
+      "nom": "TEST-CHK Ilan Fab 09",
+      "pin": "8109",
+      "roles": [
+        "fabrication"
+      ]
+    },
+    {
+      "nom": "TEST-CHK Jules Fab 10",
+      "pin": "8110",
+      "roles": [
+        "fabrication"
+      ]
+    },
+    {
+      "nom": "TEST-CHK Kevin Pose 11",
+      "pin": "8111",
+      "roles": [
+        "pose"
+      ]
+    },
+    {
+      "nom": "TEST-CHK Loic Pose 12",
+      "pin": "8112",
+      "roles": [
+        "pose"
+      ]
+    },
+    {
+      "nom": "TEST-CHK Marc Pose 13",
+      "pin": "8113",
+      "roles": [
+        "pose"
+      ]
+    },
+    {
+      "nom": "TEST-CHK Nolan Pose 14",
+      "pin": "8114",
+      "roles": [
+        "pose"
+      ]
+    },
+    {
+      "nom": "TEST-CHK Olivier Pose 15",
+      "pin": "8115",
+      "roles": [
+        "pose"
+      ]
+    },
+    {
+      "nom": "TEST-CHK Pierre Pose 16",
+      "pin": "8116",
+      "roles": [
+        "pose"
+      ]
+    },
+    {
+      "nom": "TEST-CHK Quentin Pose 17",
+      "pin": "8117",
+      "roles": [
+        "pose"
+      ]
+    },
+    {
+      "nom": "TEST-CHK Remi Pose 18",
+      "pin": "8118",
+      "roles": [
+        "pose"
+      ]
+    },
+    {
+      "nom": "TEST-CHK Sacha Pose 19",
+      "pin": "8119",
+      "roles": [
+        "pose"
+      ]
+    },
+    {
+      "nom": "TEST-CHK Theo Pose 20",
+      "pin": "8120",
+      "roles": [
+        "pose"
+      ]
+    },
+    {
+      "nom": "TEST-CHK Ugo Mix 21",
+      "pin": "8121",
+      "roles": [
+        "fabrication",
+        "pose"
+      ]
+    },
+    {
+      "nom": "TEST-CHK Victor Mix 22",
+      "pin": "8122",
+      "roles": [
+        "fabrication",
+        "pose"
+      ]
+    },
+    {
+      "nom": "TEST-CHK William Mix 23",
+      "pin": "8123",
+      "roles": [
+        "fabrication",
+        "pose"
+      ]
+    },
+    {
+      "nom": "TEST-CHK Xavier Mix 24",
+      "pin": "8124",
+      "roles": [
+        "fabrication",
+        "pose"
+      ]
+    },
+    {
+      "nom": "TEST-CHK Yann Mix 25",
+      "pin": "8125",
+      "roles": [
+        "fabrication",
+        "pose"
+      ]
+    },
+    {
+      "nom": "TEST-CHK Zacharie Mix 26",
+      "pin": "8126",
+      "roles": [
+        "fabrication",
+        "pose"
+      ]
+    },
+    {
+      "nom": "TEST-CHK Antoine Mix 27",
+      "pin": "8127",
+      "roles": [
+        "fabrication",
+        "pose"
+      ]
+    },
+    {
+      "nom": "TEST-CHK Bruno Mix 28",
+      "pin": "8128",
+      "roles": [
+        "fabrication",
+        "pose"
+      ]
+    },
+    {
+      "nom": "TEST-CHK Clement Mix 29",
+      "pin": "8129",
+      "roles": [
+        "fabrication",
+        "pose"
+      ]
+    },
+    {
+      "nom": "TEST-CHK Dylan Mix 30",
+      "pin": "8130",
+      "roles": [
+        "fabrication",
+        "pose"
+      ]
+    },
+    {
+      "nom": "TEST-CHK Helene Admin 31",
+      "pin": "8131",
+      "roles": [
+        "administratif"
+      ]
+    },
+    {
+      "nom": "TEST-CHK Luc Admin 32",
+      "pin": "8132",
+      "roles": [
+        "administratif"
+      ]
+    }
+  ]
+}
