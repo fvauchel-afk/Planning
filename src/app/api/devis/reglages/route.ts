@@ -5,7 +5,11 @@ import {
   resolveSession,
   unauthorized,
 } from "@/lib/auth/guard";
-import type { DevisReglages, EntrepriseReglages } from "@/lib/devis/types";
+import {
+  MAX_LOGO_BASE64,
+  type DevisReglages,
+  type EntrepriseReglages,
+} from "@/lib/devis/types";
 import { isMissingSchemaError } from "@/lib/supabase/errors";
 import {
   supabaseGetDevisReglages,
@@ -60,6 +64,20 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ ok: true });
     }
     if (body.entreprise) {
+      const logo = body.entreprise.logo_base64 ?? "";
+      if (logo.length > MAX_LOGO_BASE64) {
+        return NextResponse.json(
+          { error: "Logo trop lourd. Utilisez un JPEG ou PNG plus léger." },
+          { status: 400 },
+        );
+      }
+      const mime = (body.entreprise.logo_mime ?? "").trim();
+      if (logo && mime !== "image/jpeg" && mime !== "image/png") {
+        return NextResponse.json(
+          { error: "Le logo doit être un JPEG ou un PNG." },
+          { status: 400 },
+        );
+      }
       await supabaseSaveEntreprise(body.entreprise);
       return NextResponse.json({ ok: true });
     }

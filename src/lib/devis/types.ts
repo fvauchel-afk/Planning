@@ -51,7 +51,30 @@ export type EntrepriseReglages = {
   tva_intra: string;
   iban: string;
   bic: string;
+  logo_base64: string;
+  logo_mime: string;
 };
+
+export const EMPTY_ENTREPRISE: EntrepriseReglages = {
+  nom: "La Métallerie du Sud",
+  forme_juridique: "SASU",
+  adresse: "",
+  code_postal: "",
+  ville: "",
+  telephone: "",
+  email: "",
+  capital_social: "",
+  siret: "",
+  code_naf: "",
+  rcs: "",
+  tva_intra: "",
+  iban: "",
+  bic: "",
+  logo_base64: "",
+  logo_mime: "",
+};
+
+export const MAX_LOGO_BASE64 = 700_000;
 
 export type DevisReglages = {
   validite_jours_defaut: number;

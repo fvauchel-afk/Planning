@@ -15,10 +15,11 @@ import {
   type DevisListe,
   type DevisPatch,
   type DevisReglages,
+  EMPTY_ENTREPRISE,
   type EntrepriseReglages,
   type StatutDevis,
 } from "@/lib/devis/types";
-import { wrapSupabaseError } from "@/lib/supabase/errors";
+import { isMissingColumnError, wrapSupabaseError } from "@/lib/supabase/errors";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 function mapClient(row: Record<string, unknown>): ClientFiche {
@@ -309,22 +310,7 @@ export async function supabaseMarkDevisEnvoye(input: {
 
 export async function supabaseGetEntreprise(): Promise<EntrepriseReglages> {
   const supabase = createSupabaseServerClient();
-  const empty: EntrepriseReglages = {
-    nom: "La Métallerie du Sud",
-    forme_juridique: "SASU",
-    adresse: "",
-    code_postal: "",
-    ville: "",
-    telephone: "",
-    email: "",
-    capital_social: "",
-    siret: "",
-    code_naf: "",
-    rcs: "",
-    tva_intra: "",
-    iban: "",
-    bic: "",
-  };
+  const empty: EntrepriseReglages = { ...EMPTY_ENTREPRISE };
   const { data, error } = await supabase
     .from("entreprise_reglages")
     .select("*")
@@ -349,17 +335,43 @@ export async function supabaseGetEntreprise(): Promise<EntrepriseReglages> {
     tva_intra: s("tva_intra"),
     iban: s("iban"),
     bic: s("bic"),
+    logo_base64: s("logo_base64"),
+    logo_mime: s("logo_mime"),
   };
 }
 
 export async function supabaseSaveEntreprise(input: EntrepriseReglages): Promise<void> {
   const supabase = createSupabaseServerClient();
-  const { error } = await supabase.from("entreprise_reglages").upsert({
+  const payload: Record<string, unknown> = {
     id: "default",
-    ...input,
+    nom: input.nom,
+    forme_juridique: input.forme_juridique,
+    adresse: input.adresse,
+    code_postal: input.code_postal,
+    ville: input.ville,
+    telephone: input.telephone,
+    email: input.email,
+    capital_social: input.capital_social,
+    siret: input.siret,
+    code_naf: input.code_naf,
+    rcs: input.rcs,
+    tva_intra: input.tva_intra,
+    iban: input.iban,
+    bic: input.bic,
+    logo_base64: input.logo_base64 || null,
+    logo_mime: input.logo_mime || null,
     updated_at: new Date().toISOString(),
-  });
-  if (error) throw wrapSupabaseError(error);
+  };
+  const first = await supabase.from("entreprise_reglages").upsert(payload);
+  if (!first.error) return;
+  if (isMissingColumnError(first.error, "logo_base64") || isMissingColumnError(first.error, "logo_mime")) {
+    delete payload.logo_base64;
+    delete payload.logo_mime;
+    const retry = await supabase.from("entreprise_reglages").upsert(payload);
+    if (retry.error) throw wrapSupabaseError(retry.error);
+    return;
+  }
+  throw wrapSupabaseError(first.error);
 }
 
 export async function supabaseGetDevisReglages(): Promise<DevisReglages> {

@@ -20,6 +20,28 @@ const BLEU = rgb(0.16, 0.55, 0.58);
 const VERT = rgb(0.82, 0.93, 0.84);
 const NOIR = rgb(0.12, 0.1, 0.08);
 
+async function embedLogo(pdf: PDFDocument, entreprise: EntrepriseReglages) {
+  if (entreprise.logo_base64.trim()) {
+    try {
+      const bytes = Buffer.from(entreprise.logo_base64, "base64");
+      if (entreprise.logo_mime.includes("png")) {
+        return await pdf.embedPng(bytes);
+      }
+      return await pdf.embedJpg(bytes);
+    } catch {
+      // logo invalide : repli fichier local
+    }
+  }
+  try {
+    const jpg = await readFile(
+      path.join(process.cwd(), "public", "logo-metallerie-du-sud.jpg"),
+    );
+    return await pdf.embedJpg(jpg);
+  } catch {
+    return null;
+  }
+}
+
 function pdfSafe(text: string): string {
   return text
     .replace(/€/g, "EUR")
@@ -137,16 +159,13 @@ export async function buildDevisPdf(input: {
 
   newPage();
 
-  try {
-    const jpg = await readFile(
-      path.join(process.cwd(), "public", "logo-metallerie-du-sud.jpg"),
-    );
-    const image = await pdf.embedJpg(jpg);
+  const logo = await embedLogo(pdf, input.entreprise);
+  if (logo) {
     const logoW = 132;
-    const logoH = (image.height / image.width) * logoW;
-    page.drawImage(image, { x: left, y: 800 - logoH, width: logoW, height: logoH });
+    const logoH = (logo.height / logo.width) * logoW;
+    page.drawImage(logo, { x: left, y: 800 - logoH, width: logoW, height: logoH });
     y = 792 - logoH;
-  } catch {
+  } else {
     y = 780;
   }
 

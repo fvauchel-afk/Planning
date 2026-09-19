@@ -11,12 +11,20 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-19-parametres-societe",
+    title: "Paramètres : société et droits",
+    items: [
+      "L’onglet Paramètres regroupe la société (nom, SIRET, adresse, logo, mentions du devis) et Accès et droits (admin ou salarié).",
+      "Les textes d’e-mail des devis restent dans Devis → Paramètres Devis.",
+    ],
+  },
+  {
     id: "2026-09-19-onglet-devis",
     title: "Devis et fichier client",
     items: [
       "Nouvel onglet Devis : fiches clients, lignes simples, options (facturation, remise %, ou montant fixe), aperçu PDF, envoi depuis le Hotmail OneDrive.",
       "Le PDF part dans le dossier OneDrive du client (même nom que le chantier). Le numéro de devis est automatique et n’est jamais réutilisé.",
-      "Identité de l’entreprise (SIRET, IBAN, etc.) et textes d’e-mail / conditions se remplissent dans Entreprise et Paramètres Devis.",
+      "Identité de l’entreprise (SIRET, IBAN, logo) se remplit dans Paramètres (Société), à côté d’Accès et droits. Les textes d’e-mail restent dans Paramètres Devis.",
     ],
   },
   {

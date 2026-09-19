@@ -1,31 +1,17 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
 import { devisApi } from "@/lib/devis/client-api";
-import type { EntrepriseReglages } from "@/lib/devis/types";
+import {
+  EMPTY_ENTREPRISE,
+  MAX_LOGO_BASE64,
+  type EntrepriseReglages,
+} from "@/lib/devis/types";
 
 const FIELD = "w-full rounded border border-stone-300 px-3 py-2 text-sm";
 
-const EMPTY: EntrepriseReglages = {
-  nom: "La Métallerie du Sud",
-  forme_juridique: "SASU",
-  adresse: "",
-  code_postal: "",
-  ville: "",
-  telephone: "",
-  email: "",
-  capital_social: "",
-  siret: "",
-  code_naf: "",
-  rcs: "",
-  tva_intra: "",
-  iban: "",
-  bic: "",
-};
-
 const LABELS: { key: keyof EntrepriseReglages; label: string }[] = [
-  { key: "nom", label: "Nom commercial" },
+  { key: "nom", label: "Nom de la société" },
   { key: "forme_juridique", label: "Forme juridique" },
   { key: "adresse", label: "Adresse" },
   { key: "code_postal", label: "Code postal" },
@@ -42,18 +28,39 @@ const LABELS: { key: keyof EntrepriseReglages; label: string }[] = [
 ];
 
 export function EntrepriseSettingsPage() {
-  const [form, setForm] = useState<EntrepriseReglages>(EMPTY);
+  const [form, setForm] = useState<EntrepriseReglages>(EMPTY_ENTREPRISE);
   const [error, setError] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     void devisApi<{ entreprise: EntrepriseReglages }>("/api/devis/reglages?kind=entreprise")
-      .then((data) => setForm({ ...EMPTY, ...data.entreprise }))
+      .then((data) => setForm({ ...EMPTY_ENTREPRISE, ...data.entreprise }))
       .catch((err: unknown) => {
         setError(err instanceof Error ? err.message : "Lecture impossible.");
       });
   }, []);
+
+  function onLogo(file: File | undefined) {
+    if (!file) return;
+    if (file.type !== "image/jpeg" && file.type !== "image/png") {
+      setError("Le logo doit être un JPEG ou un PNG.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const url = String(reader.result ?? "");
+      const comma = url.indexOf(",");
+      const b64 = comma >= 0 ? url.slice(comma + 1) : url;
+      if (b64.length > MAX_LOGO_BASE64) {
+        setError("Logo trop lourd. Choisissez un fichier plus léger.");
+        return;
+      }
+      setError(null);
+      setForm((cur) => ({ ...cur, logo_base64: b64, logo_mime: file.type }));
+    };
+    reader.readAsDataURL(file);
+  }
 
   async function save() {
     setBusy(true);
@@ -73,17 +80,17 @@ export function EntrepriseSettingsPage() {
     }
   }
 
+  const preview =
+    form.logo_base64 && form.logo_mime
+      ? `data:${form.logo_mime};base64,${form.logo_base64}`
+      : "";
+
   return (
     <section className="space-y-4">
       <div>
-        <p className="text-sm">
-          <Link href="/devis" className="underline">
-            Devis
-          </Link>
-        </p>
-        <h2 className="mt-1 font-serif text-3xl text-stone-900">Entreprise</h2>
+        <h3 className="font-serif text-xl text-stone-900">Société</h3>
         <p className="mt-1 text-sm text-stone-600">
-          Identité juridique et bancaire, à remplir une fois. Rien n’est figé dans le code.
+          Identité juridique et bancaire, plus le logo du PDF. Rien n’est figé dans le code.
         </p>
       </div>
       {error ? (
@@ -103,6 +110,30 @@ export function EntrepriseSettingsPage() {
             />
           </label>
         ))}
+        <div className="text-sm md:col-span-2">
+          <p className="font-medium">Logo</p>
+          <p className="mb-2 text-xs text-stone-500">JPEG ou PNG, pour l’en-tête des devis.</p>
+          {preview ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={preview} alt="Logo" className="mb-2 h-16 w-auto rounded border border-stone-200 bg-white" />
+          ) : (
+            <p className="mb-2 text-xs text-stone-500">Aucun logo pour l’instant.</p>
+          )}
+          <input
+            type="file"
+            accept="image/jpeg,image/png"
+            onChange={(e) => onLogo(e.target.files?.[0])}
+          />
+          {form.logo_base64 ? (
+            <button
+              type="button"
+              className="ml-3 text-sm underline"
+              onClick={() => setForm({ ...form, logo_base64: "", logo_mime: "" })}
+            >
+              Retirer
+            </button>
+          ) : null}
+        </div>
       </div>
       <button
         type="button"
@@ -110,7 +141,7 @@ export function EntrepriseSettingsPage() {
         onClick={() => void save()}
         className="rounded-lg bg-amber-700 px-4 py-2 text-sm font-medium text-amber-50"
       >
-        Enregistrer
+        Enregistrer la société
       </button>
     </section>
   );

@@ -1,7 +1,7 @@
-import { EntrepriseSettingsPage } from "@/components/EntrepriseSettingsPage";
 import { requireAdminPage } from "@/lib/auth/require-admin-page";
+import { redirect } from "next/navigation";
 
-export default async function EntrepriseRoute() {
+export default async function EntrepriseRedirect() {
   await requireAdminPage();
-  return <EntrepriseSettingsPage />;
+  redirect("/parametres");
 }

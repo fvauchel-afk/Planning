@@ -58,9 +58,6 @@ export function DevisPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Link href="/parametres/entreprise" className="rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm">
-            Entreprise
-          </Link>
           <Link href="/parametres/devis" className="rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm">
             Paramètres Devis
           </Link>

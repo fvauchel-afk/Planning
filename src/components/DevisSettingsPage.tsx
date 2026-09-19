@@ -55,6 +55,10 @@ export function DevisSettingsPage() {
           <Link href="/devis" className="underline">
             Devis
           </Link>
+          {" · "}
+          <Link href="/parametres" className="underline">
+            Paramètres
+          </Link>
         </p>
         <h2 className="mt-1 font-serif text-3xl text-stone-900">Paramètres Devis</h2>
         <p className="mt-1 text-sm text-stone-600">
