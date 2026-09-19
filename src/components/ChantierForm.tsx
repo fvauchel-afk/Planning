@@ -25,6 +25,13 @@ import { generatePlanSolutions, propositionFromSolutions } from "@/lib/engine/pl
 import { applyPhaseChainOnCreate, missingRequiredAssignee } from "@/lib/engine/phase-chain";
 import { withExtraPoseurs } from "@/lib/engine/create-phases";
 import { moisToToleranceJours } from "@/lib/priorite";
+import {
+  chantierEndFromDureeJours,
+  dureeJoursFromChantierRange,
+  dureeJoursMenuValues,
+  formatDureeJoursLabel,
+  normalizeDureeJours,
+} from "@/lib/dates";
 import { EmployeePhaseSelect } from "@/components/EmployeePhaseSelect";
 import {
   coerceSelectValue,
@@ -129,7 +136,10 @@ export function ChantierForm() {
   const [toleranceMois, setToleranceMois] = useState(1);
   const [urgent, setUrgent] = useState(false);
   const [dateDebut, setDateDebut] = useState("");
-  const [dateFin, setDateFin] = useState("");
+  const [dureeJours, setDureeJours] = useState(1);
+  const dateFin = dateDebut
+    ? chantierEndFromDureeJours(dateDebut, dureeJours)
+    : "";
   const [datesEstimatives, setDatesEstimatives] = useState(true);
   const [avecPose, setAvecPose] = useState<boolean | null>(null);
   const [avecFabrication, setAvecFabrication] = useState<boolean | null>(null);
@@ -228,12 +238,7 @@ export function ChantierForm() {
     );
   }
 
-  function applyChantierAndLinkedPhaseDates(nextDebut: string, nextFin: string) {
-    const debut = nextDebut;
-    let fin = nextFin;
-    if (debut && fin && fin < debut) fin = debut;
-    setDateDebut(debut);
-    setDateFin(fin);
+  function syncLinkedPhaseDates(debut: string, fin: string) {
     const linked: TypePhase | null =
       avecFabrication === true
         ? "fabrication"
@@ -251,6 +256,34 @@ export function ChantierForm() {
         ),
       })),
     );
+  }
+
+  function applyChantierAndLinkedPhaseDates(nextDebut: string, nextFin: string) {
+    const debut = nextDebut;
+    let fin = nextFin;
+    if (debut && fin && fin < debut) fin = debut;
+    setDateDebut(debut);
+    if (debut) {
+      const jours = dureeJoursFromChantierRange(debut, fin || debut);
+      setDureeJours(jours);
+      fin = chantierEndFromDureeJours(debut, jours);
+    }
+    syncLinkedPhaseDates(debut, fin);
+  }
+
+  function setChantierDebut(nextDebut: string) {
+    setDateDebut(nextDebut);
+    const fin = nextDebut
+      ? chantierEndFromDureeJours(nextDebut, dureeJours)
+      : "";
+    syncLinkedPhaseDates(nextDebut, fin);
+  }
+
+  function setChantierDuree(jours: number) {
+    const n = normalizeDureeJours(jours);
+    setDureeJours(n);
+    if (!dateDebut) return;
+    syncLinkedPhaseDates(dateDebut, chantierEndFromDureeJours(dateDebut, n));
   }
 
   function buildInput(): NewChantierInput | null {
@@ -747,10 +780,9 @@ export function ChantierForm() {
             Dates du chantier
           </legend>
           <p className="text-xs text-stone-600">
-            Laissez vide pour un calage automatique au plus tôt. Les dates
-            estimatives restent visuellement distinctes tant qu’elles ne sont
-            pas confirmées. Remplir ici remplit aussi la fabrication, et
-            inversement.
+            Laissez le début vide pour un calage automatique au plus tôt. La
+            durée (jours) va de 1 à 15 jours ouvrés (week-ends sautés). Remplir
+            ici remplit aussi la fabrication, et inversement.
           </p>
           <div className="mt-2 grid gap-3 sm:grid-cols-2">
             <label className="block text-sm">
@@ -758,29 +790,25 @@ export function ChantierForm() {
               <input
                 type="date"
                 value={dateDebut}
-                onChange={(event) => {
-                  applyChantierAndLinkedPhaseDates(
-                    event.target.value,
-                    dateFin,
-                  );
-                }}
+                onChange={(event) => setChantierDebut(event.target.value)}
                 className="w-full rounded border border-stone-300 bg-white px-3 py-2"
               />
             </label>
             <label className="block text-sm">
-              <span className="mb-1 block font-medium">Fin (optionnel)</span>
-              <input
-                type="date"
-                value={dateFin}
-                min={dateDebut || undefined}
+              <span className="mb-1 block font-medium">Durée (jours)</span>
+              <select
+                value={dureeJours}
                 onChange={(event) =>
-                  applyChantierAndLinkedPhaseDates(
-                    dateDebut,
-                    event.target.value,
-                  )
+                  setChantierDuree(Number(event.target.value) || 1)
                 }
                 className="w-full rounded border border-stone-300 bg-white px-3 py-2"
-              />
+              >
+                {dureeJoursMenuValues(dureeJours).map((jours) => (
+                  <option key={jours} value={jours}>
+                    {formatDureeJoursLabel(jours)}
+                  </option>
+                ))}
+              </select>
             </label>
           </div>
           <div className="mt-3 flex flex-wrap gap-4 text-sm">

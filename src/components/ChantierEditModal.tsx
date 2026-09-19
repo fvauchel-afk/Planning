@@ -18,7 +18,13 @@ import {
   chantierDateRange,
   chantierPlanningInfo,
 } from "@/lib/chantier-status";
-import { addDays, calendarDaysBetween, toISODate } from "@/lib/dates";
+import {
+  chantierEndFromDureeJours,
+  dureeJoursFromChantierRange,
+  dureeJoursMenuValues,
+  formatDureeJoursLabel,
+  toISODate,
+} from "@/lib/dates";
 import {
   isEmptyPhaseEdits,
   mergePhaseEdits,
@@ -609,10 +615,19 @@ export function ChantierEditModal({
   function onChangeStart(next: string) {
     setDatesDirty(true);
     markCascade();
-    if (planDate && planEnd) {
-      setPlanEnd(addDays(planEnd, calendarDaysBetween(planDate, next)));
-    }
+    const jours =
+      planDate && planEnd
+        ? dureeJoursFromChantierRange(planDate, planEnd)
+        : 1;
     setPlanDate(next);
+    if (next) setPlanEnd(chantierEndFromDureeJours(next, jours));
+  }
+
+  function onChangeDuree(jours: number) {
+    setDatesDirty(true);
+    markCascade();
+    if (!planDate) return;
+    setPlanEnd(chantierEndFromDureeJours(planDate, jours));
   }
 
   async function abortIfStaleCascade(force = false): Promise<boolean> {
@@ -1419,18 +1434,25 @@ export function ChantierEditModal({
               />
             </label>
             <label className="mt-2 block text-sm">
-              <span className="mb-1 block">Date de fin</span>
-              <input
-                type="date"
-                value={planEnd}
-                onChange={(event) => {
-                  setDatesDirty(true);
-                  markCascade();
-                  setPlanEnd(event.target.value);
-                }}
+              <span className="mb-1 block">Durée (jours)</span>
+              <select
+                value={dureeJoursFromChantierRange(
+                  planDate,
+                  planEnd || planDate,
+                )}
+                onChange={(event) =>
+                  onChangeDuree(Number(event.target.value) || 1)
+                }
                 className="w-full rounded border border-stone-300 bg-white px-3 py-2"
-                min={planDate || undefined}
-              />
+              >
+                {dureeJoursMenuValues(
+                  dureeJoursFromChantierRange(planDate, planEnd || planDate),
+                ).map((jours) => (
+                  <option key={jours} value={jours}>
+                    {formatDureeJoursLabel(jours)}
+                  </option>
+                ))}
+              </select>
             </label>
             <div className="mt-3 flex flex-wrap gap-4 text-sm">
               <label className="inline-flex items-center gap-2">

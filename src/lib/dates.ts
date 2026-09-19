@@ -166,6 +166,66 @@ export function workingDaysBetween(startIso: string, endIso: string): number {
   return count;
 }
 
+export const CHANTIER_DUREE_JOURS_MAX = 15;
+
+export function normalizeDureeJours(jours: number): number {
+  return Math.max(1, Math.round(Number(jours) || 1));
+}
+
+/** Fin de chantier : N jours ouvrés à partir du début (1 jour = le jour même). */
+export function chantierEndFromDureeJours(debut: string, jours: number): string {
+  if (!debut) return "";
+  return addWorkingDays(debut, normalizeDureeJours(jours) - 1);
+}
+
+export function dureeJoursFromChantierRange(debut: string, fin: string): number {
+  if (!debut) return 1;
+  const end = fin && fin >= debut ? fin : debut;
+  return Math.max(1, 1 + workingDaysBetween(debut, end));
+}
+
+/** Options 1–15, plus la durée actuelle si le chantier dépasse déjà 15 jours. */
+export function dureeJoursMenuValues(current?: number): number[] {
+  const values = Array.from(
+    { length: CHANTIER_DUREE_JOURS_MAX },
+    (_, i) => i + 1,
+  );
+  const extra = current ? normalizeDureeJours(current) : 0;
+  if (extra > CHANTIER_DUREE_JOURS_MAX) values.push(extra);
+  return values;
+}
+
+export function formatDureeJoursLabel(jours: number): string {
+  return jours === 1 ? "1 jour" : `${jours} jours`;
+}
+
+function runChantierDureeSelfCheck() {
+  if (chantierEndFromDureeJours("2026-09-21", 1) !== "2026-09-21") {
+    throw new Error("dates: 1 jour = le lundi même");
+  }
+  if (chantierEndFromDureeJours("2026-09-21", 5) !== "2026-09-25") {
+    throw new Error("dates: 5 jours ouvrés dès lundi = vendredi");
+  }
+  if (chantierEndFromDureeJours("2026-09-21", 7) !== "2026-09-29") {
+    throw new Error("dates: 7 jours ouvrés dès lundi saute le week-end");
+  }
+  if (dureeJoursFromChantierRange("2026-09-21", "2026-09-25") !== 5) {
+    throw new Error("dates: lun–ven = 5 jours");
+  }
+  if (chantierEndFromDureeJours("2026-09-21", 18) !== "2026-10-14") {
+    throw new Error("dates: 18 jours ouvrés dès lundi ne sont pas coupés à 15");
+  }
+  if (dureeJoursFromChantierRange("2026-09-21", "2026-10-14") !== 18) {
+    throw new Error("dates: plage > 15 jours conservée");
+  }
+  const menu = dureeJoursMenuValues(18);
+  if (menu.length !== 16 || menu[15] !== 18) {
+    throw new Error("dates: le menu garde l’option actuelle au-delà de 15");
+  }
+}
+runChantierDureeSelfCheck();
+
+
 export function startOfWeekIso(iso: string): string {
   return toISODate(startOfWeekMonday(parseISODate(iso)));
 }
