@@ -11,6 +11,15 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-19-onglet-devis",
+    title: "Devis et fichier client",
+    items: [
+      "Nouvel onglet Devis : fiches clients, lignes simples, options (facturation, remise %, ou montant fixe), aperçu PDF, envoi depuis le Hotmail OneDrive.",
+      "Le PDF part dans le dossier OneDrive du client (même nom que le chantier). Le numéro de devis est automatique et n’est jamais réutilisé.",
+      "Identité de l’entreprise (SIRET, IBAN, etc.) et textes d’e-mail / conditions se remplissent dans Entreprise et Paramètres Devis.",
+    ],
+  },
+  {
     id: "2026-09-19-fin-urgent-duree-heures",
     title: "Deadline urgent et durées en heures",
     items: [
