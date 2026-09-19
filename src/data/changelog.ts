@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-19-onglet-devis",
+    title: "Onglet Devis",
+    items: [
+      "Un onglet Devis permet de tenir les fiches clients, rédiger un devis (lignes, TVA, totaux), générer le PDF et l’envoyer par e-mail, avec copie à Jonathan.",
+      "Le devis reste un brouillon jusqu’à l’envoi. Seuls les brouillons se suppriment. Un client ne se supprime pas s’il a encore des devis.",
+    ],
+  },
+  {
     id: "2026-09-19-fin-urgent-duree-heures",
     title: "Deadline urgent et durées en heures",
     items: [
