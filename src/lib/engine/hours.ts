@@ -665,6 +665,33 @@ export function rangeEndFromHours(
   return last;
 }
 
+export function rangeStartFromHours(
+  snapshot: PlanningSnapshot,
+  rowId: string | null,
+  end: string,
+  hours: number,
+): string {
+  const needed = Number(hours) || 0;
+  if (needed <= 0) return end;
+  if (!rowId) {
+    const days = Math.max(1, Math.ceil(needed / 8));
+    return days <= 1 ? end : addWorkingDays(end, -(days - 1));
+  }
+  let remaining = needed;
+  let date = end;
+  let first = end;
+  for (let i = 0; i < 420; i += 1) {
+    const available = hoursAvailableOnRowDate(snapshot, rowId, date);
+    if (available > 0) {
+      remaining -= available;
+      first = date;
+      if (remaining <= 0.0001) return date;
+    }
+    date = addDays(date, -1);
+  }
+  return first;
+}
+
 export function capacityHoursForWeek(
   snapshot: PlanningSnapshot,
   weekStart: string,

@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-19-fin-urgent-duree-heures",
+    title: "Deadline urgent et durées en heures",
+    items: [
+      "Si le chantier est urgent, une date de fin (deadline) apparaît à côté du début : le planning se cale à rebours, sans menu de durée en haut.",
+      "Dans le tableau Élément, chaque phase a de nouveau les heures, plus un menu jours (0,5 à 15). Administratif peut durer une demi-journée.",
+    ],
+  },
+  {
     id: "2026-09-19-duree-phase-jours",
     title: "Durée des phases en jours",
     items: [

@@ -184,19 +184,27 @@ export function dureeJoursFromChantierRange(debut: string, fin: string): number 
   return Math.max(1, 1 + workingDaysBetween(debut, end));
 }
 
-/** Options 1–15, plus la durée actuelle si le chantier dépasse déjà 15 jours. */
-export function dureeJoursMenuValues(current?: number): number[] {
-  const values = Array.from(
-    { length: CHANTIER_DUREE_JOURS_MAX },
-    (_, i) => i + 1,
-  );
-  const extra = current ? normalizeDureeJours(current) : 0;
-  if (extra > CHANTIER_DUREE_JOURS_MAX) values.push(extra);
-  return values;
+export function formatDureeJoursLabel(jours: number): string {
+  if (jours === 0.5) return "0,5 jour";
+  if (jours === 1) return "1 jour";
+  if (jours === 1.5) return "1,5 jour";
+  return `${jours} jours`;
 }
 
-export function formatDureeJoursLabel(jours: number): string {
-  return jours === 1 ? "1 jour" : `${jours} jours`;
+/** 0,5 / 1 / 1,5 / 2–15, plus la durée actuelle si elle n’est pas dans la liste. */
+export function dureeJoursMenuValues(current?: number | null): number[] {
+  const values = [0.5, 1, 1.5];
+  for (let n = 2; n <= CHANTIER_DUREE_JOURS_MAX; n += 1) values.push(n);
+  const extra = Number(current);
+  if (
+    Number.isFinite(extra) &&
+    extra > 0 &&
+    !values.some((item) => Math.abs(item - extra) < 0.001)
+  ) {
+    values.push(extra);
+    values.sort((a, b) => a - b);
+  }
+  return values;
 }
 
 function runChantierDureeSelfCheck() {
@@ -219,8 +227,8 @@ function runChantierDureeSelfCheck() {
     throw new Error("dates: plage > 15 jours conservée");
   }
   const menu = dureeJoursMenuValues(18);
-  if (menu.length !== 16 || menu[15] !== 18) {
-    throw new Error("dates: le menu garde l’option actuelle au-delà de 15");
+  if (!menu.includes(0.5) || !menu.includes(1.5) || menu[menu.length - 1] !== 18) {
+    throw new Error("dates: le menu a 0,5 / 1,5 et garde l’option au-delà de 15");
   }
 }
 runChantierDureeSelfCheck();
