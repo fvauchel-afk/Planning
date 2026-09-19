@@ -144,6 +144,7 @@ const DEFAUTS: Params = {
   poteauGuidage: "oui",
   poteauReception: "oui",
   sectionPoteau: "100x100x3",
+  hauteurPoteauMode: "auto",
   hauteurPoteau: 1800,
   profilReception: "U",
 
@@ -201,6 +202,51 @@ function repartition(largeurLibre: number, largeurElement: number, jeuMax: numbe
 
 const mm = (v: number): string => `${Math.round(v)} mm`;
 const arrondi = (v: number, d = 1): number => Math.round(v * Math.pow(10, d)) / Math.pow(10, d);
+
+/** Distance fixe de chaque bord du vantail, selon la longueur totale L. */
+function offsetRouesAuto(longueurVantail: number): number {
+  const L = Math.round(longueurVantail);
+  if (L > 6000) return 1500;
+  if (L >= 4501) return 1200;
+  return 1000;
+}
+
+function positionRouesAuto(longueurVantail: number): { d1: number; ent: number } {
+  const L = Math.max(0, Math.round(longueurVantail));
+  const off = offsetRouesAuto(L);
+  if (2 * off >= L) {
+    const d1 = Math.round(L / 2);
+    return { d1, ent: Math.max(0, L - 2 * d1) };
+  }
+  return { d1: off, ent: L - 2 * off };
+}
+
+function runRouesPoteauxSelfCheck() {
+  const a = positionRouesAuto(4000);
+  if (a.d1 !== 1000 || a.ent !== 2000) {
+    throw new Error("roues auto 4000 : 1000 de chaque bord, entraxe 2000");
+  }
+  const b = positionRouesAuto(4500);
+  if (b.d1 !== 1000 || b.ent !== 2500) {
+    throw new Error("roues auto 4500 : encore 1000 de chaque bord");
+  }
+  const c = positionRouesAuto(4501);
+  if (c.d1 !== 1200 || c.ent !== 4501 - 2400) {
+    throw new Error("roues auto 4501 : 1200 de chaque bord");
+  }
+  const d = positionRouesAuto(6000);
+  if (d.d1 !== 1200 || d.ent !== 3600) {
+    throw new Error("roues auto 6000 : 1200 de chaque bord");
+  }
+  const e = positionRouesAuto(6001);
+  if (e.d1 !== 1500 || e.ent !== 6001 - 3000) {
+    throw new Error("roues auto au-delà de 6000 : 1500 de chaque bord");
+  }
+}
+
+if (typeof process !== "undefined" && process.versions?.node) {
+  runRouesPoteauxSelfCheck();
+}
 
 /* ----------------------------------------------------------------------------
    5. PETITS COMPOSANTS D'INTERFACE (habillage Tailwind de l'application)
@@ -545,8 +591,9 @@ export function PlanPortailLeo() {
     const profGorge = Math.round(D / 10);
     const yAxeRoue = railH + (R - profGorge);
     const auto = S("positionRoues") === "auto";
-    const d1 = auto ? Math.max(250, Math.round(Q * 0.15 + 250)) : Math.max(0, N("axeRoueArriere"));
-    const ent = auto ? Math.max(800, Math.round(L * 0.45)) : Math.max(100, N("entraxeRoues"));
+    const posAuto = positionRouesAuto(L);
+    const d1 = auto ? posAuto.d1 : Math.max(0, N("axeRoueArriere"));
+    const ent = auto ? posAuto.ent : Math.max(100, N("entraxeRoues"));
     const xRoue1 = -Q + d1;
     const xRoue2 = xRoue1 + ent;
     const d2 = xAv - xRoue2; // distance axe roue avant / extrémité avant
@@ -583,8 +630,15 @@ export function PlanPortailLeo() {
     const refNecessaire = L + 100;
     const refDispo = Math.max(0, N("refoulementDispo"));
 
+    /* --- poteaux acier : hors tout + 60 mm, sauf saisie manuelle --- */
+    const hPoteauAuto = HT + 60;
+    const hPoteau =
+      S("hauteurPoteauMode") === "manuel"
+        ? Math.max(300, N("hauteurPoteau"))
+        : hPoteauAuto;
+
     return {
-      PL, H, GS, Q, REC, L, HT,
+      PL, H, GS, Q, REC, L, HT, hPoteauAuto, hPoteau,
       pb, cd, bar, pot, Hp, Sc, Lb,
       railH, yBas, yHaut,
       cfg, xArr, xAv, xTrav, cadreL, intL, nTrav, largTravee, montants,
@@ -615,6 +669,17 @@ export function PlanPortailLeo() {
       "Hauteur hors tout depuis le sol fini",
       `${mm(G.H)} (ouvrage) + ${mm(G.GS)} (garde au sol) = ${mm(G.HT)}`,
       "CALCULE"
+    );
+    add(
+      "poteaux",
+      "Cote des poteaux acier",
+      S("hauteurPoteauMode") === "manuel"
+        ? `${mm(G.hPoteau)} saisie manuelle (auto serait ${mm(G.hPoteauAuto)})`
+        : `${mm(G.HT)} hors tout + 60 mm = ${mm(G.hPoteau)}`,
+      S("hauteurPoteauMode") === "manuel" ? "A_CONFIRMER" : "CALCULE",
+      S("hauteurPoteauMode") === "manuel"
+        ? "Saisie manuelle déconseillée : la cote auto est hors tout + 60 mm."
+        : undefined
     );
 
     /* Queue */
@@ -662,8 +727,12 @@ export function PlanPortailLeo() {
       "roues",
       "Position des roues",
       `axe arrière à ${mm(G.d1)} de l'extrémité queue — entraxe ${mm(G.ent)} — axe avant à ${mm(G.d2)} de l'extrémité avant`,
-      G.ent < G.L * 0.3 ? "A_CONFIRMER" : "CALCULE",
-      G.ent < G.L * 0.3 ? "Entraxe faible : stabilité à vérifier en position ouverte." : undefined
+      S("positionRoues") === "auto" ? "CALCULE" : G.ent < G.L * 0.3 ? "A_CONFIRMER" : "CALCULE",
+      S("positionRoues") === "auto"
+        ? `Automatique : ${mm(offsetRouesAuto(G.L))} de chaque bord (vantail ${mm(G.L)}).`
+        : G.ent < G.L * 0.3
+          ? "Entraxe faible : stabilité à vérifier en position ouverte."
+          : undefined
     );
     add(
       "encast",
@@ -733,7 +802,7 @@ export function PlanPortailLeo() {
   const dessin = useMemo(() => {
     const flip = (S("refoulement") === "droite") !== (S("vue") === "interieure");
     const largSup = Math.max(40, S("support") === "piliers" ? N("largeurSupport") : G.pot.h);
-    const hPoteau = Math.max(300, N("hauteurPoteau"));
+    const hPoteau = Math.max(300, G.hPoteau);
 
     /* Étendue du modèle */
     const xModMin = Math.min(-G.Q, -G.refDispo, 0) - largSup - 200;
@@ -1266,6 +1335,12 @@ export function PlanPortailLeo() {
           </button>
         </div>
       </div>
+      <p className="plan-no-print -mt-2 max-w-3xl text-xs text-stone-500">
+        Rien n’est enregistré dans Planning : le plan reste dans cet écran tant que vous ne
+        quittez pas la page. Pour le garder : Exporter SVG ou Imprimer / PDF. Le badge décrit
+        seulement les contrôles techniques (infos manquantes ou points bloquants) — il n’y a pas
+        de bouton « Valider le dossier » pour l’instant.
+      </p>
 
       <div className="plan-no-print flex flex-wrap gap-1">
         <span className="rounded-md bg-amber-700 px-3 py-1.5 text-sm font-medium text-amber-50">
@@ -1498,7 +1573,10 @@ export function PlanPortailLeo() {
                 options={opts([["100", "Ø 100 mm"], ["120", "Ø 120 mm (standard)"], ["140", "Ø 140 mm"], ["160", "Ø 160 mm"]])}
               />
             </Ligne>
-            <Ligne label="Position des roues">
+            <Ligne
+              label="Position des roues"
+              aide="Auto : 1000 mm de chaque bord jusqu’à 4500 mm de vantail, 1200 mm jusqu’à 6000 mm, 1500 mm au-delà."
+            >
               <Deroulant value={S("positionRoues")} onChange={(v) => set("positionRoues", v)} options={opts([["auto", "Automatique"], ["manuel", "Manuelle"]])} />
             </Ligne>
             <Ligne label="Axe roue arrière" aide="depuis l'extrémité queue">
@@ -1544,9 +1622,44 @@ export function PlanPortailLeo() {
             <Ligne label="Section des poteaux">
               <Deroulant value={S("sectionPoteau")} onChange={(v) => set("sectionPoteau", v)} options={SECTIONS_POTEAU} />
             </Ligne>
-            <Ligne label="Hauteur hors sol des poteaux">
-              <Nombre value={N("hauteurPoteau")} onChange={(v) => set("hauteurPoteau", v)} min={500} max={3500} pas={50} unite="mm" presets={[1600, 1800, 2000, 2200]} />
+            <Ligne
+              label="Cote des poteaux acier"
+              aide="Automatique = hors tout (ouvrage + garde au sol) + 60 mm."
+            >
+              <Deroulant
+                value={S("hauteurPoteauMode") === "manuel" ? "manuel" : "auto"}
+                onChange={(v) => {
+                  setP((prev) => ({
+                    ...prev,
+                    hauteurPoteauMode: v,
+                    ...(v === "manuel" ? { hauteurPoteau: G.hPoteauAuto } : {}),
+                  }));
+                }}
+                options={opts([
+                  ["auto", "Automatique (hors tout + 60 mm)"],
+                  ["manuel", "Saisie manuelle (déconseillé)"],
+                ])}
+              />
             </Ligne>
+            <Ligne label="Hauteur hors sol des poteaux">
+              <Nombre
+                value={S("hauteurPoteauMode") === "manuel" ? N("hauteurPoteau") : G.hPoteau}
+                onChange={(v) => set("hauteurPoteau", v)}
+                min={500}
+                max={3500}
+                pas={50}
+                unite="mm"
+                disabled={S("hauteurPoteauMode") !== "manuel"}
+                presets={[1600, 1800, 2000, 2200]}
+              />
+            </Ligne>
+            {S("hauteurPoteauMode") === "manuel" ? (
+              <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-950">
+                Saisie manuelle déconseillée. Pour des poteaux acier, la cote auto est{" "}
+                <strong>{mm(G.hPoteauAuto)}</strong> (hors tout {mm(G.HT)} + 60 mm). Ne changez
+                cette valeur que si le site l’impose.
+              </p>
+            ) : null}
             <Ligne label="Profil de réception">
               <Deroulant
                 value={S("profilReception")}
