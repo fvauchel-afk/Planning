@@ -5,12 +5,13 @@ import {
   resolveSession,
   unauthorized,
 } from "@/lib/auth/guard";
-import { sendGraphMail, uploadBytesToClientFolder } from "@/lib/onedrive/graph";
+import { sendGraphMail } from "@/lib/onedrive/graph";
 import { loadOnedriveTokens } from "@/lib/onedrive/tokens";
 import { applyMailVars, devisMailVars } from "@/lib/devis/vars";
+import { tryArchiveDevisOnOneDrive } from "@/lib/devis/onedrive-archive";
 import { loadDevisBundle } from "@/lib/devis/prepare";
 import { isMissingSchemaError } from "@/lib/supabase/errors";
-import { supabaseMarkDevisEnvoye, supabasePatchClient } from "@/lib/store/devis";
+import { supabaseMarkDevisEnvoye } from "@/lib/store/devis";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -57,28 +58,13 @@ export async function POST(request: NextRequest) {
       ],
     });
     let onedriveWarning: string | null = null;
-    try {
-      await uploadBytesToClientFolder({
-        nomClient: bundle.client.nom,
-        fileName: bundle.fileName,
-        bytes: bundle.bytes,
-        contentType: "application/pdf",
-      });
-    } catch (err) {
-      onedriveWarning = err instanceof Error ? err.message : "Copie OneDrive impossible.";
-    }
+    const archive = await tryArchiveDevisOnOneDrive(bundle.devis.id);
+    if (archive.warning) onedriveWarning = archive.warning;
     await supabaseMarkDevisEnvoye({
       id: bundle.devis.id,
       to,
-      onedrive: onedriveWarning ? null : bundle.fileName,
+      onedrive: onedriveWarning ? null : archive.fileName ?? bundle.fileName,
     });
-    if (!bundle.client.lien_dossier_onedrive) {
-      try {
-        await supabasePatchClient({ id: bundle.client.id, lien_dossier_onedrive: bundle.client.nom });
-      } catch {
-        // lien optionnel
-      }
-    }
     return NextResponse.json({ ok: true, to, onedriveWarning });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Envoi impossible.";

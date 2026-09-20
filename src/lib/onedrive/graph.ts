@@ -460,13 +460,17 @@ export async function createClientFolder(nomClient: string): Promise<string> {
   return link;
 }
 
-export async function ensureChildFolder(name: string): Promise<{
+export async function ensureChildFolder(
+  name: string,
+  parentItemId?: string,
+): Promise<{
   itemId: string;
   driveId: string;
 }> {
   const token = await getValidAccessToken();
   const root = await getRootFolder();
-  const existing = await findNamedChildFolder(token, root.itemId, name);
+  const parentId = parentItemId?.trim() || root.itemId;
+  const existing = await findNamedChildFolder(token, parentId, name);
   if (existing?.id) {
     return {
       itemId: existing.id,
@@ -474,13 +478,13 @@ export async function ensureChildFolder(name: string): Promise<{
     };
   }
   try {
-    const created = await createNamedChildFolder(token, root.itemId, name);
+    const created = await createNamedChildFolder(token, parentId, name);
     return {
       itemId: created.id,
       driveId: created.parentReference?.driveId || root.driveId,
     };
   } catch {
-    const retry = await findNamedChildFolder(token, root.itemId, name);
+    const retry = await findNamedChildFolder(token, parentId, name);
     if (retry?.id) {
       return {
         itemId: retry.id,
@@ -692,8 +696,14 @@ export async function uploadBytesToClientFolder(input: {
   fileName: string;
   bytes: Buffer | Uint8Array;
   contentType: string;
-}): Promise<void> {
-  const folder = await ensureChildFolder(input.nomClient);
+  sousDossier?: string;
+}): Promise<{ dossierClient: string; sousDossier: string | null }> {
+  const dossierClient = input.nomClient.trim();
+  const clientFolder = await ensureChildFolder(dossierClient);
+  const sous = input.sousDossier?.trim() || "";
+  const folder = sous
+    ? await ensureChildFolder(sous, clientFolder.itemId)
+    : clientFolder;
   const token = await getValidAccessToken();
   await uploadToMeDriveItem(
     token,
@@ -702,6 +712,7 @@ export async function uploadBytesToClientFolder(input: {
     input.bytes,
     input.contentType,
   );
+  return { dossierClient, sousDossier: sous || null };
 }
 
 export async function sendGraphMail(input: {
