@@ -61,7 +61,7 @@ export async function applyAdministratifIdleChoice(input: {
   );
   if (!plan) {
     throw new Error(
-      "Aucun bloc Administratif à proposer pour ce salarié (déjà occupé ou déjà traité aujourd’hui).",
+      "Aucun bloc Administratif à proposer pour ce salarié (rôle, déjà occupé ou déjà ignoré).",
     );
   }
 
