@@ -924,11 +924,40 @@ export function PlanPortailLeo() {
     const H_CART = S("cartouche") === "oui" ? FS * 6.4 : 0;
 
     const hMax = Math.max(G.yHaut, hPoteau) + 100;
-    const W = portee + MG + MD;
-    const HH = MH + hMax + MB_COTES + H_CART;
+    const W_ELEV = portee + MG + MD;
+    const W_COUPE = FS * 17;
+    const GAP_V = FS * 2.4;
+    const H_TOP_TITLE = FS * 1.8;
+    const visLeaf = Math.max(G.pb.l, G.cd.l, FS * 1.15);
+    const visPost = Math.max(largSup, FS * 1.05);
+    const visMotor = S("motorisation") === "motorise" ? Math.max(380, FS * 3.2) : 0;
+    const topPad = FS * 1.3;
+    const pose = S("pose");
+    let dPost0 = visLeaf * 0.12;
+    let dPost1 = dPost0 + visPost;
+    if (pose === "derriere") {
+      dPost0 = visLeaf + FS * 0.35;
+      dPost1 = dPost0 + visPost;
+    } else if (pose === "applique") {
+      dPost0 = -visPost - FS * 0.35;
+      dPost1 = dPost0 + visPost;
+    }
+    const dMotor0 = Math.max(visLeaf, dPost1) + FS * 0.4;
+    const dMotor1 = dMotor0 + visMotor;
+    const dMin = Math.min(0, dPost0) - topPad;
+    const dMax = Math.max(visLeaf, dPost1, visMotor ? dMotor1 : visLeaf) + topPad;
+    const yTop0 = MH + hMax + MB_COTES + GAP_V;
+    const H_COTES_TOP = FS * 4.2;
+    const H_TOP = H_TOP_TITLE + (dMax - dMin) + H_COTES_TOP;
+    const W = W_ELEV + W_COUPE;
+    const HH = yTop0 + H_TOP + H_CART;
 
     const SX = (x: number) => MG + (MX(x) - xScrMin);
     const SY = (y: number) => MH + hMax - y;
+    const TY = (d: number) => {
+      const t = S("vue") === "interieure" ? dMax - (d - dMin) : d - dMin;
+      return yTop0 + H_TOP_TITLE + t;
+    };
 
     const TR = Math.max(4, W / 1100); // épaisseur de trait
     const TRF = TR * 1.8; // trait fort
@@ -1248,6 +1277,223 @@ export function PlanPortailLeo() {
       coteV(0, G.yHaut, xc3, `Hors tout ${mm(G.HT)}`, dirOut, xObj);
     }
 
+    /* ---------- Vue de dessus (même échelle horizontale que l’élévation) ---------- */
+    const RTop = (x1: number, d1: number, x2: number, d2: number, props: Record<string, unknown>) => {
+      const sx1 = SX(x1);
+      const sx2 = SX(x2);
+      const sy1 = TY(d1);
+      const sy2 = TY(d2);
+      els.push(
+        <rect
+          key={key()}
+          x={Math.min(sx1, sx2)}
+          y={Math.min(sy1, sy2)}
+          width={Math.abs(sx2 - sx1)}
+          height={Math.abs(sy2 - sy1)}
+          {...props}
+        />,
+      );
+    };
+
+    els.push(
+      <text
+        key={key()}
+        x={MG}
+        y={yTop0 + FS * 1.05}
+        fontSize={FS * 0.95}
+        fill={ACIER}
+        fontWeight={700}
+        fontFamily="Arial, Helvetica, sans-serif"
+      >
+        {`VUE DE DESSUS — POSITION FERMÉE — REFOULEMENT À ${S("refoulement") === "gauche" ? "GAUCHE" : "DROITE"}`}
+      </text>,
+    );
+
+    if (S("rail") !== "aucun") {
+      const xR1 = Math.min(-G.refDispo, -G.Q - 100);
+      RTop(xR1, visLeaf * 0.22, G.PL, visLeaf * 0.78, {
+        fill: "#C9CFD7",
+        stroke: trait,
+        strokeWidth: TR,
+        rx: visLeaf * 0.18,
+      });
+    }
+
+    if (S("fantome") === "oui") {
+      RTop(-G.L, 0, 0, visLeaf, {
+        fill: BLEU,
+        fillOpacity: 0.04,
+        stroke: BLEU,
+        strokeWidth: TR,
+        strokeDasharray: `${TR * 7} ${TR * 6}`,
+      });
+    }
+
+    RTop(-G.Q, 0, G.xAv, visLeaf, { ...profil, fillOpacity: 0.92 });
+
+    G.montants.forEach((xm) => {
+      RTop(xm, visLeaf * 0.08, xm + G.Sc, visLeaf * 0.92, profilLeger);
+    });
+
+    if (S("poteauGuidage") === "oui") {
+      RTop(-largSup, dPost0, 0, dPost1, S("support") === "piliers" ? { fill: "#E4E2DD", stroke: GRIS, strokeWidth: TR } : profilLeger);
+    }
+    if (S("poteauReception") === "oui") {
+      RTop(
+        G.PL,
+        dPost0,
+        G.PL + largSup,
+        dPost1,
+        S("support") === "piliers" ? { fill: "#E4E2DD", stroke: GRIS, strokeWidth: TR } : profilLeger,
+      );
+    }
+
+    if (S("motorisation") === "motorise") {
+      RTop(-G.Q - 520, dMotor0, -G.Q - 120, dMotor1, profilLeger);
+      els.push(
+        <text
+          key={key()}
+          x={(SX(-G.Q - 520) + SX(-G.Q - 120)) / 2}
+          y={(TY(dMotor0) + TY(dMotor1)) / 2 + FS * 0.28}
+          fontSize={FS * 0.62}
+          fill={ACIER}
+          textAnchor="middle"
+          fontFamily="Arial, Helvetica, sans-serif"
+          fontWeight={600}
+        >
+          MOTEUR
+        </text>,
+      );
+    }
+
+    const yExt = S("vue") === "interieure" ? TY(dMin + FS * 0.2) : TY(dMax - FS * 0.35);
+    const yInt = S("vue") === "interieure" ? TY(dMax - FS * 0.35) : TY(dMin + FS * 0.2);
+    els.push(
+      <text key={key()} x={MG} y={yExt} fontSize={FS * 0.58} fill={GRIS} fontFamily="Arial, Helvetica, sans-serif">
+        EXTÉRIEUR
+      </text>,
+      <text key={key()} x={MG} y={yInt} fontSize={FS * 0.58} fill={GRIS} fontFamily="Arial, Helvetica, sans-serif">
+        INTÉRIEUR
+      </text>,
+    );
+
+    if (S("cotes") === "oui") {
+      const yC = yTop0 + H_TOP_TITLE + (dMax - dMin) + FS * 1.05;
+      const segments: Array<[number, number, string]> = [
+        [-G.Q, 0, `Queue ${mm(G.Q)}`],
+        [0, G.PL, `Passage ${mm(G.PL)}`],
+        [-G.Q, G.xAv, `Vantail ${mm(G.L)}`],
+      ];
+      segments.forEach(([a, b, label], i) => {
+        const y = yC + i * FS * 1.15;
+        const x1 = SX(a);
+        const x2 = SX(b);
+        els.push(
+          <line key={key()} x1={x1} y1={y} x2={x2} y2={y} stroke={BLEU} strokeWidth={TR} />,
+          <text
+            key={key()}
+            x={(x1 + x2) / 2}
+            y={y - FS * 0.25}
+            fontSize={FS * 0.72}
+            fill={BLEU}
+            textAnchor="middle"
+            fontFamily="Arial, Helvetica, sans-serif"
+            fontWeight={600}
+          >
+            {label}
+          </text>,
+        );
+      });
+    }
+
+    /* ---------- Coupe transversale (à droite, mêmes hauteurs que l’élévation) ---------- */
+    const xC0 = W_ELEV + FS * 2.4;
+    const xC1 = xC0 + Math.max(visLeaf, FS * 2.4);
+    const xRail0 = xC0 - FS * 0.55;
+    const xRail1 = xC1 + FS * 0.55;
+
+    els.push(
+      <text
+        key={key()}
+        x={W_ELEV + FS * 0.8}
+        y={MH - FS * 0.8}
+        fontSize={FS * 0.95}
+        fill={ACIER}
+        fontWeight={700}
+        fontFamily="Arial, Helvetica, sans-serif"
+      >
+        COUPE TRANSVERSALE
+      </text>,
+    );
+
+    els.push(
+      <line key={key()} x1={W_ELEV} y1={SY(0)} x2={W} y2={SY(0)} stroke={ACIER} strokeWidth={TRF} />,
+    );
+    for (let x = W_ELEV; x < W; x += 120) {
+      els.push(
+        <line key={key()} x1={x} y1={SY(0)} x2={x - 70} y2={SY(0) + 70} stroke={GRIS} strokeWidth={TR * 0.8} />,
+      );
+    }
+
+    if (S("rail") !== "aucun") {
+      els.push(
+        <rect
+          key={key()}
+          x={Math.min(xRail0, xRail1)}
+          y={Math.min(SY(0), SY(G.railH))}
+          width={Math.abs(xRail1 - xRail0)}
+          height={Math.abs(SY(G.railH) - SY(0))}
+          fill="#C9CFD7"
+          stroke={trait}
+          strokeWidth={TR}
+          rx={G.railH / 2}
+        />,
+      );
+    }
+
+    const coupeRect = (xa: number, y1: number, xb: number, y2: number, props: Record<string, unknown>) => {
+      els.push(
+        <rect
+          key={key()}
+          x={Math.min(xa, xb)}
+          y={Math.min(SY(y1), SY(y2))}
+          width={Math.abs(xb - xa)}
+          height={Math.abs(SY(y2) - SY(y1))}
+          {...props}
+        />,
+      );
+    };
+
+    coupeRect(xC0, G.yBas, xC1, G.yBas + G.Hp, profil);
+    coupeRect(xC0 + visLeaf * 0.18, G.yRempBas, xC1 - visLeaf * 0.18, G.yRempHaut, {
+      fill: G.type === "verre" ? "#c5d8ea" : remp,
+      fillOpacity: G.type === "tole" || G.type === "microperfore" ? 0.95 : 0.55,
+      stroke: trait,
+      strokeWidth: TR,
+    });
+    coupeRect(xC0, G.yHaut - G.Sc, xC1, G.yHaut, profil);
+    coupeRect(xC0 + visLeaf * 0.28, G.yRempBas, xC0 + visLeaf * 0.28 + Math.max(TR * 4, G.Sc * 0.15), G.yRempHaut, profilLeger);
+
+    els.push(
+      <text
+        key={key()}
+        x={(xC0 + xC1) / 2}
+        y={SY(G.yHaut) - FS * 0.45}
+        fontSize={FS * 0.55}
+        fill={GRIS}
+        textAnchor="middle"
+        fontFamily="Arial, Helvetica, sans-serif"
+      >
+        {`Poutre ${S("poutreBasse")} · cadre ${S("cadre")}`}
+      </text>,
+    );
+
+    if (S("cotes") === "oui") {
+      const xc = xC1 + FS * 1.5;
+      coteV(0, G.GS, xc, `Garde au sol ${mm(G.GS)}`, 1, (xC0 + xC1) / 2);
+      coteV(G.yBas, G.yHaut, xc + FS * 2.2, `Hauteur ouvrage ${mm(G.H)}`, 1, (xC0 + xC1) / 2);
+    }
+
     /* ---------- Titre de vue ---------- */
     const titreVue = `VUE ${S("vue") === "exterieure" ? "EXTÉRIEURE" : "INTÉRIEURE"} — POSITION FERMÉE — REFOULEMENT À ${
       S("refoulement") === "gauche" ? "GAUCHE" : "DROITE"
@@ -1442,8 +1688,8 @@ export function PlanPortailLeo() {
         <div>
           <h2 className="font-serif text-3xl text-stone-900">Plan — Portail coulissant</h2>
           <p className="mt-1 max-w-2xl text-sm text-stone-600">
-            Gamme LEO. Renseigne les options dans le panneau, le plan se dessine en direct et les
-            contrôles techniques se mettent à jour à chaque choix.
+            Gamme LEO. L’élévation, la vue de dessus et la coupe sont sur la même feuille.
+            Les options du panneau mettent le plan à jour tout de suite.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -1560,7 +1806,7 @@ export function PlanPortailLeo() {
           </Bloc>
 
           <Bloc titre="2. Vue et implantation" ouvert={ouverts.vue} onToggle={() => bascule("vue")}>
-            <Ligne label="Vue affichée">
+            <Ligne label="Vue affichée" aide="extérieur ou intérieur — coupe et dessus restent sur la même feuille">
               <Deroulant value={S("vue")} onChange={(v) => set("vue", v)} options={opts([["exterieure", "Vue extérieure"], ["interieure", "Vue intérieure"]])} />
             </Ligne>
             <Ligne label="Sens de refoulement" aide="vu de l'extérieur">

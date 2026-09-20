@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-20-leo-coupe-dessus",
+    title: "Plan portail : vue de dessus et coupe",
+    items: [
+      "Sur le plan du portail coulissant, la vue de dessus et la coupe s’affichent en plus de l’élévation, sur la même feuille.",
+      "Même dessin à l’écran, à l’export SVG, à l’impression et sur OneDrive. Le menu Vue affichée reste seulement extérieur ou intérieur.",
+    ],
+  },
+  {
     id: "2026-09-20-admin-idle-role",
     title: "Administratif : plus de suggestion hors rôle",
     items: [
