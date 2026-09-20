@@ -11,6 +11,13 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-19-parametres-liens",
+    title: "Paramètres : raccourcis",
+    items: [
+      "Dans Paramètres, des cartes mènent vers Employés, Sous-traitants, OneDrive et Sauvegarde (les mêmes écrans qu’aujourd’hui).",
+    ],
+  },
+  {
     id: "2026-09-19-devis-onedrive-creation",
     title: "Devis : dossier OneDrive dès la création",
     items: [
