@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-19-plan-garde-pergola",
+    title: "Plan : garde-corps et pergola",
+    items: [
+      "Sur l’onglet Plan, Garde-corps et Pergola ont leur questionnaire et un dessin coté, comme le portail LEO.",
+      "Chaque type s’enregistre à part dans le dossier OneDrive du client, sans écraser le plan du portail.",
+    ],
+  },
+  {
     id: "2026-09-19-synthese-tableau-bord",
     title: "Synthèse : devis et choses à faire",
     items: [

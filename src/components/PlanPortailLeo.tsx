@@ -12,6 +12,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { PlanOuvrageTabs } from "@/components/PlanOuvrageTabs";
 import { usePlanning } from "@/lib/planning-context";
 import { matchByClientNom } from "@/lib/plan-leo/match";
 import type { PlanLeo } from "@/lib/plan-leo/types";
@@ -94,6 +95,7 @@ const SECTIONS_POTEAU = opts([
 ---------------------------------------------------------------------------- */
 const DEFAUTS: Params = {
   /* Projet */
+  ouvrage: "portail-leo",
   client: "",
   reference: "",
   devis: "",
@@ -563,7 +565,9 @@ export function PlanPortailLeo() {
         const res = await fetch(`/api/plan-leo?${qs.toString()}`, { cache: "no-store" });
         const data = (await res.json()) as { rows?: PlanLeo[]; error?: string };
         if (!res.ok) throw new Error(data.error || "Lecture du plan impossible.");
-        const plan = data.rows?.[0];
+        const plan = (data.rows ?? []).find(
+          (row) => String(row.params.ouvrage ?? "portail-leo") === "portail-leo",
+        );
         if (cancelled || !plan) {
           if (clientQ) {
             setP((prev) => (prev.client ? prev : { ...prev, client: clientQ }));
@@ -1508,14 +1512,7 @@ export function PlanPortailLeo() {
         </p>
       ) : null}
 
-      <div className="plan-no-print flex flex-wrap gap-1">
-        <span className="rounded-md bg-amber-700 px-3 py-1.5 text-sm font-medium text-amber-50">
-          Portail coulissant — Gamme LEO
-        </span>
-        <span className="rounded-md px-3 py-1.5 text-sm text-stone-400">Portillon — à venir</span>
-        <span className="rounded-md px-3 py-1.5 text-sm text-stone-400">Garde-corps — à venir</span>
-        <span className="rounded-md px-3 py-1.5 text-sm text-stone-400">Pergola — à venir</span>
-      </div>
+      <PlanOuvrageTabs current="portail-leo" />
 
       <div className="grid items-start gap-4 lg:grid-cols-[360px_minmax(0,1fr)]">
         <aside className="plan-no-print space-y-2">
