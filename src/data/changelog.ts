@@ -11,6 +11,13 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-19-synthese-tableau-bord",
+    title: "Synthèse : devis et choses à faire",
+    items: [
+      "L’onglet Synthèse montre le taux d’acceptation des devis (acceptés / devis sortis) et un compteur de ce qui reste à faire : devis sans réponse, congés, signalements, commandes, lancements, suggestions.",
+    ],
+  },
+  {
     id: "2026-09-19-parametres-liens",
     title: "Paramètres : raccourcis",
     items: [
