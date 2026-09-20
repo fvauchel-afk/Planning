@@ -1,5 +1,6 @@
 import "server-only";
 import { matchByClientNom } from "@/lib/plan-leo/match";
+import { parseOuvragePlan } from "@/lib/plan-leo/ouvrage";
 import type { PlanLeo, PlanLeoListe } from "@/lib/plan-leo/types";
 import { wrapSupabaseError } from "@/lib/supabase/errors";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -107,7 +108,10 @@ export async function supabaseUpsertPlanLeo(input: {
 }): Promise<string> {
   const supabase = createSupabaseServerClient();
   const clientNom = input.clientNom.trim();
-  const existing = (await supabaseFindPlansLeo({ clientNom }))[0];
+  const wanted = parseOuvragePlan(input.params.ouvrage);
+  const existing = (await supabaseFindPlansLeo({ clientNom })).find(
+    (row) => parseOuvragePlan(row.params.ouvrage) === wanted,
+  );
   const chantierId =
     input.chantierId?.trim() || existing?.chantier_id || (await findChantierIdByNom(clientNom));
   const payload = {

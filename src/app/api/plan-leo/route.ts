@@ -6,6 +6,7 @@ import {
   unauthorized,
 } from "@/lib/auth/guard";
 import { planLeoFileStem } from "@/lib/plan-leo/match";
+import { parseOuvragePlan, planOuvrageStem } from "@/lib/plan-leo/ouvrage";
 import { uploadBytesToClientFolder } from "@/lib/onedrive/graph";
 import { sanitizeOnedriveName } from "@/lib/onedrive/sanitize";
 import { loadOnedriveTokens } from "@/lib/onedrive/tokens";
@@ -89,14 +90,15 @@ export async function POST(request: NextRequest) {
   }
   const reference = String(params.reference ?? "");
   const indice = String(params.indice ?? "A");
+  const ouvrage = parseOuvragePlan(params.ouvrage);
   const stem = sanitizeOnedriveName(
     planLeoFileStem({
       client,
       reference,
-      gamme: String(params.gamme ?? "LEO"),
+      gamme: ouvrage === "portail-leo" ? String(params.gamme ?? "LEO") : planOuvrageStem(ouvrage),
       indice,
     }),
-    "Plan_LEO",
+    `Plan_${planOuvrageStem(ouvrage)}`,
   );
   const svgName = `${stem}.svg`;
   const jsonName = `${stem}.json`;
