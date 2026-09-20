@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-20-admin-idle-role",
+    title: "Administratif : plus de suggestion hors rôle",
+    items: [
+      "Le bandeau du planning ne propose plus de caler Romain, Louison, Ethan (ni les autres poseurs / fabricants) en chantier Administratif : ce n’est pas leur rôle.",
+      "« Ne pas proposer aujourd’hui » reste silencieux jusqu’à la fin des 7 jours concernés, pas seulement jusqu’à minuit.",
+    ],
+  },
+  {
     id: "2026-09-19-plan-garde-pergola",
     title: "Plan : garde-corps et pergola",
     items: [

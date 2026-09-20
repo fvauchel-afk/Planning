@@ -37,8 +37,8 @@ export function AdministratifIdleAlert() {
           : `${plans.length} salariés sans chantier sur les 7 prochains jours.`}
       </p>
       <p className="mt-1 text-xs">
-        Rien n’est ajouté tout seul. Créez un bloc Administratif (Pas pressé)
-        uniquement si vous le validez.
+        Uniquement pour un salarié qui a le rôle Administratif. Rien n’est
+        ajouté tout seul : validez seulement si c’est pertinent.
       </p>
       <ul className="mt-3 space-y-2">
         {plans.map((plan) => (

@@ -22,11 +22,17 @@ export type AdministratifIdlePlan = {
   proposition: SignalementProposition;
 };
 
-function isShopEmployee(employee: Employee): boolean {
+/**
+ * Un creux atelier ne se comble pas en Administratif si ce n’est pas le rôle
+ * du salarié. Jonathan / Mika (administratif seul) n’ont souvent aucune phase
+ * chantier : ce n’est pas un oubli à remplir.
+ */
+export function canProposeAdministratifIdle(employee: Employee): boolean {
   if (!employee.actif) return false;
   if (employee.id === LOGISTIQUE_ROW_ID || employee.id === TRANSPORT_ROW_ID) {
     return false;
   }
+  if (!employee.roles.includes("administratif")) return false;
   return employee.roles.includes("fabrication") || employee.roles.includes("pose");
 }
 
@@ -149,8 +155,13 @@ export function alreadySuggestedAdministratif(
     if (item.employe_id !== employeeId) return false;
     const proposition = parseProposition(item.proposition);
     if (proposition?.kind !== ADMINISTRATIF_IDLE_KIND) return false;
-    if (proposition.from !== from) return false;
-    return item.statut === "en_attente" || item.statut === "rejete";
+    if (item.statut !== "en_attente" && item.statut !== "rejete") return false;
+    if (proposition.from === from) return true;
+    return (
+      item.statut === "rejete" &&
+      typeof proposition.to === "string" &&
+      proposition.to >= from
+    );
   });
 }
 
@@ -162,7 +173,7 @@ export function administratifIdlePlans(
   const to = addDays(today, ADMINISTRATIF_IDLE_DAYS - 1);
   const plans: AdministratifIdlePlan[] = [];
   for (const employee of snapshot.employees) {
-    if (!isShopEmployee(employee)) continue;
+    if (!canProposeAdministratifIdle(employee)) continue;
     if (employeeHasChantierInWindow(snapshot, employee.id, from, to)) continue;
     const freeDays = freeWorkingDaysInWindow(snapshot, employee, from, to);
     if (freeDays.length === 0) continue;
@@ -191,28 +202,49 @@ export function administratifIdlePlans(
   return plans;
 }
 
-function runAdministratifIdleSelfCheck() {
-  const employee = {
-    id: "emp-romain",
-    nom: "Romain",
-    roles: ["fabrication", "pose"] as const,
-    actif: true,
-  };
-  const snapshot = {
-    employees: [employee],
+function emptySnapshot(employees: Employee[], signalements: unknown[] = []) {
+  return {
+    employees,
     chantiers: [],
     elements: [],
     phases: [],
     absences: [],
-    signalements: [],
+    signalements,
     receptions: [],
     demandes: [],
     horaires: [],
   } as unknown as PlanningSnapshot;
+}
+
+function runAdministratifIdleSelfCheck() {
+  const atelier: Employee = {
+    id: "emp-romain",
+    nom: "Romain",
+    roles: ["fabrication", "pose"],
+    actif: true,
+  };
+  const bureau: Employee = {
+    id: "emp-jonathan",
+    nom: "Jonathan",
+    roles: ["administratif"],
+    actif: true,
+  };
+  const mixte: Employee = {
+    id: "emp-mixte",
+    nom: "Mixte",
+    roles: ["fabrication", "pose", "administratif"],
+    actif: true,
+  };
   const today = "2026-09-21";
-  const plans = administratifIdlePlans(snapshot, today);
+  if (administratifIdlePlans(emptySnapshot([atelier]), today).length !== 0) {
+    throw new Error("administratif-idle: un poseur/fabricant ne doit pas être calé en Administratif");
+  }
+  if (administratifIdlePlans(emptySnapshot([bureau]), today).length !== 0) {
+    throw new Error("administratif-idle: un salarié uniquement administratif n’est pas un creux atelier");
+  }
+  const plans = administratifIdlePlans(emptySnapshot([mixte]), today);
   if (plans.length !== 1) {
-    throw new Error("administratif-idle: salarié sans chantier doit proposer un bloc");
+    throw new Error("administratif-idle: un salarié atelier + administratif sans chantier doit proposer");
   }
   if (plans[0]?.proposition.kind !== ADMINISTRATIF_IDLE_KIND) {
     throw new Error("administratif-idle: kind de proposition");
@@ -221,7 +253,7 @@ function runAdministratifIdleSelfCheck() {
     throw new Error("administratif-idle: chantier Administratif manquant");
   }
   const busy = {
-    ...snapshot,
+    ...emptySnapshot([mixte]),
     phases: [
       {
         id: "ph-1",
@@ -230,7 +262,7 @@ function runAdministratifIdleSelfCheck() {
         duree_estimee_heures: 8,
         date_debut: "2026-09-22",
         date_fin: "2026-09-22",
-        employe_id: "emp-romain",
+        employe_id: "emp-mixte",
         statut: "a_faire",
         urgent: false,
       },
@@ -238,6 +270,23 @@ function runAdministratifIdleSelfCheck() {
   } as unknown as PlanningSnapshot;
   if (administratifIdlePlans(busy, today).length !== 0) {
     throw new Error("administratif-idle: un chantier dans la fenêtre ne doit pas proposer");
+  }
+  const dismissed = emptySnapshot([mixte], [
+    {
+      employe_id: "emp-mixte",
+      statut: "rejete",
+      proposition: {
+        kind: ADMINISTRATIF_IDLE_KIND,
+        from: "2026-09-20",
+        to: "2026-09-26",
+        message: "",
+        patches: [],
+        repercussions: [],
+      },
+    },
+  ]);
+  if (administratifIdlePlans(dismissed, today).length !== 0) {
+    throw new Error("administratif-idle: un refus doit tenir jusqu’à la fin des 7 jours");
   }
 }
 
