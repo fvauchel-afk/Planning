@@ -32,8 +32,9 @@ import {
   planChantierOptionEdits,
   planChantierDurationEdits,
 } from "@/lib/engine/phase-chain";
-import { EmployeePhaseSelect } from "@/components/EmployeePhaseSelect";
+import { EmployeePhaseSelect, PoseursCheckboxes } from "@/components/EmployeePhaseSelect";
 import { PhaseDureeFields } from "@/components/DureeJoursSelect";
+import { hoursKeepingDayCount } from "@/lib/engine/duree-presets";
 import { compareEmployeesByOrdre } from "@/lib/display-order";
 import { moisToToleranceJours, toleranceJoursToMois } from "@/lib/priorite";
 import { usePlanning } from "@/lib/planning-context";
@@ -102,6 +103,42 @@ function hoursByPhaseIdFromSnapshot(
   return hours;
 }
 
+function poseurIdsByElementFromSnapshot(
+  snapshot: PlanningSnapshot,
+  chantierId: string,
+): Record<string, string[]> {
+  const map: Record<string, string[]> = {};
+  for (const element of snapshot.elements) {
+    if (element.chantier_id !== chantierId) continue;
+    map[element.id] = snapshot.phases
+      .filter(
+        (phase) =>
+          phase.element_id === element.id &&
+          phase.type_phase === "pose" &&
+          phase.employe_id,
+      )
+      .map((phase) => phase.employe_id as string);
+  }
+  return map;
+}
+
+function assigneesByPhaseFromSnapshot(
+  snapshot: PlanningSnapshot,
+  chantierId: string,
+): Record<string, string | null> {
+  const elementIds = new Set(
+    snapshot.elements
+      .filter((element) => element.chantier_id === chantierId)
+      .map((element) => element.id),
+  );
+  const map: Record<string, string | null> = {};
+  for (const phase of snapshot.phases) {
+    if (!elementIds.has(phase.element_id)) continue;
+    map[phase.id] = phase.employe_id;
+  }
+  return map;
+}
+
 function durationRowsForChantier(
   snapshot: PlanningSnapshot,
   chantierId: string,
@@ -115,6 +152,7 @@ function durationRowsForChantier(
   label: string;
   type: TypePhase;
   employeId: string | null;
+  fromDate: string | null;
 }> {
   const elements = snapshot.elements.filter(
     (element) => element.chantier_id === chantierId,
@@ -124,6 +162,7 @@ function durationRowsForChantier(
     label: string;
     type: TypePhase;
     employeId: string | null;
+    fromDate: string | null;
   }> = [];
   for (const element of elements) {
     const phases = snapshot.phases.filter(
@@ -147,6 +186,7 @@ function durationRowsForChantier(
           label: `${PHASE_LABELS[type]}${who}${which}`,
           type,
           employeId: phase.employe_id,
+          fromDate: phase.date_debut,
         });
       }
     }
@@ -242,6 +282,12 @@ export function ChantierEditModal({
   const [employeLivraison, setEmployeLivraison] = useState("");
   const [employeFabrication, setEmployeFabrication] = useState("");
   const [employePose, setEmployePose] = useState("");
+  const [assigneesByPhaseId, setAssigneesByPhaseId] = useState<
+    Record<string, string | null>
+  >(() => assigneesByPhaseFromSnapshot(snapshot, chantier.id));
+  const [poseurIdsByElementId, setPoseurIdsByElementId] = useState<
+    Record<string, string[]>
+  >(() => poseurIdsByElementFromSnapshot(snapshot, chantier.id));
   const [staleCascade, setStaleCascade] = useState(false);
   const dirtySimple = useRef(new Set<string>());
   const cascadeDirty = useRef(false);
@@ -319,6 +365,8 @@ export function ChantierEditModal({
     });
     setEmployeFabrication(fab?.employe_id ?? "");
     setEmployePose(pose?.employe_id ?? "");
+    setAssigneesByPhaseId(assigneesByPhaseFromSnapshot(source, chantier.id));
+    setPoseurIdsByElementId(poseurIdsByElementFromSnapshot(source, chantier.id));
     setDatesDirty(false);
     cascadeDirty.current = false;
     cascadeBaseline.current = chantierCascadeFingerprint(source, chantier.id);
@@ -454,8 +502,8 @@ export function ChantierEditModal({
       avecLivraison,
       dureeLivraisonHeures: Number(dureeLivraison || 2),
       employeLivraisonId: employeLivraison || null,
-      employeFabricationId: employeFabrication || null,
-      employePoseId: employePose || null,
+      assigneesByPhaseId,
+      poseurIdsByElementId,
       delayDays: Number(delaiLaquage || 5),
       datesEstimatives,
     });
@@ -473,6 +521,52 @@ export function ChantierEditModal({
     markCascade();
     setPhaseHours((current) => ({ ...current, [phaseId]: value }));
     if (type === "livraison") setDureeLivraison(value);
+  }
+
+  const chantierElements = useMemo(
+    () => snapshot.elements.filter((element) => element.chantier_id === chantier.id),
+    [snapshot.elements, chantier.id],
+  );
+
+  function setFabricantForElement(phaseId: string, nextId: string) {
+    markCascade();
+    const previous = assigneesByPhaseId[phaseId] ?? null;
+    setAssigneesByPhaseId((current) => ({ ...current, [phaseId]: nextId || null }));
+    setEmployeFabrication(nextId);
+    const phase = snapshot.phases.find((item) => item.id === phaseId);
+    const hours = hoursKeepingDayCount(
+      snapshot,
+      previous,
+      nextId || null,
+      Number(phaseHours[phaseId] || phase?.duree_estimee_heures || 0),
+      phase?.date_debut || planDate,
+    );
+    setPhaseHours((current) => ({ ...current, [phaseId]: hours }));
+  }
+
+  function setPoseursForElement(elementId: string, ids: string[]) {
+    markCascade();
+    setPoseurIdsByElementId((current) => ({ ...current, [elementId]: ids }));
+    setEmployePose(ids[0] ?? "");
+    const posePhases = snapshot.phases.filter(
+      (phase) => phase.element_id === elementId && phase.type_phase === "pose",
+    );
+    const template = posePhases[0];
+    const from = template?.date_debut || planDate;
+    setPhaseHours((current) => {
+      const next = { ...current };
+      for (const phase of posePhases) {
+        const previous = assigneesByPhaseId[phase.id] ?? phase.employe_id;
+        next[phase.id] = hoursKeepingDayCount(
+          snapshot,
+          previous,
+          ids[0] ?? null,
+          Number(current[phase.id] || phase.duree_estimee_heures || 0),
+          from,
+        );
+      }
+      return next;
+    });
   }
 
   const activeEmployees = useMemo(
@@ -525,8 +619,8 @@ export function ChantierEditModal({
     avecLivraison,
     dureeLivraison,
     employeLivraison,
-    employeFabrication,
-    employePose,
+    assigneesByPhaseId,
+    poseurIdsByElementId,
     delaiLaquage,
     datesEstimatives,
     phaseHours,
@@ -1056,22 +1150,10 @@ export function ChantierEditModal({
               </label>
             </div>
             {avecPose ? (
-              <label className="mt-3 block">
-                <span className="mb-1 block font-medium">
-                  Salarié responsable de la pose
-                </span>
-                <EmployeePhaseSelect
-                  employees={activeEmployees}
-                  type="pose"
-                  value={employePose}
-                  onChange={(id) => {
-                    markCascade();
-                    setEmployePose(id);
-                  }}
-                  emptyLabel="Auto (premier disponible)"
-                  className="w-full rounded border border-stone-300 bg-white px-3 py-2"
-                />
-              </label>
+            <p className="mt-3 text-xs text-stone-600">
+              Les poseurs se choisissent par élément, plus bas (plusieurs
+              possibles). S’ils ne sont pas libres, une solution sera proposée.
+            </p>
             ) : null}
           </fieldset>
           <fieldset className="rounded-lg border border-stone-300 bg-stone-50/60 p-3 text-sm">
@@ -1103,22 +1185,10 @@ export function ChantierEditModal({
               </label>
             </div>
             {avecFabrication ? (
-              <label className="mt-3 block">
-                <span className="mb-1 block font-medium">
-                  Salarié responsable de la fabrication
-                </span>
-                <EmployeePhaseSelect
-                  employees={activeEmployees}
-                  type="fabrication"
-                  value={employeFabrication}
-                  onChange={(id) => {
-                    markCascade();
-                    setEmployeFabrication(id);
-                  }}
-                  emptyLabel="Auto (premier disponible)"
-                  className="w-full rounded border border-stone-300 bg-white px-3 py-2"
-                />
-              </label>
+            <p className="mt-3 text-xs text-stone-600">
+              Le fabricant se choisit par élément, plus bas (un producteur
+              différent possible sur chaque élément).
+            </p>
             ) : null}
           </fieldset>
           <fieldset className="rounded-lg border border-stone-300 bg-stone-50/60 p-3 text-sm">
@@ -1313,6 +1383,70 @@ export function ChantierEditModal({
             ) : null}
           </fieldset>
 
+          {chantierElements.length > 0 && (avecFabrication || avecPose) ? (
+            <fieldset className="rounded-lg border border-stone-300 bg-stone-50/60 p-3 text-sm">
+              <legend className="px-1 font-medium text-stone-800">
+                Équipe par élément
+              </legend>
+              <div className="mt-3 space-y-4">
+                {chantierElements.map((element) => {
+                  const fab = snapshot.phases.find(
+                    (phase) =>
+                      phase.element_id === element.id &&
+                      phase.type_phase === "fabrication",
+                  );
+                  const pose = snapshot.phases.find(
+                    (phase) =>
+                      phase.element_id === element.id &&
+                      phase.type_phase === "pose",
+                  );
+                  return (
+                    <div
+                      key={element.id}
+                      className="space-y-2 rounded border border-stone-200 bg-white p-3"
+                    >
+                      <div className="font-medium">{element.nom_element}</div>
+                      {avecFabrication && fab ? (
+                        <label className="block">
+                          <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-stone-500">
+                            Fabrication
+                          </span>
+                          <EmployeePhaseSelect
+                            employees={activeEmployees}
+                            type="fabrication"
+                            value={assigneesByPhaseId[fab.id] ?? fab.employe_id ?? ""}
+                            emptyLabel="Auto (premier disponible)"
+                            className="w-full rounded border border-stone-300 bg-white px-3 py-2"
+                            onChange={(id) => setFabricantForElement(fab.id, id)}
+                          />
+                        </label>
+                      ) : null}
+                      {avecPose ? (
+                        <div>
+                          <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-stone-500">
+                            Poseurs
+                          </span>
+                          <PoseursCheckboxes
+                            employees={activeEmployees}
+                            selectedIds={
+                              poseurIdsByElementId[element.id] ?? []
+                            }
+                            snapshot={snapshot}
+                            from={pose?.date_debut || planDate}
+                            to={pose?.date_fin || planEnd || planDate}
+                            onChange={(ids) =>
+                              setPoseursForElement(element.id, ids)
+                            }
+                          />
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
+            </fieldset>
+          ) : null}
+
           {durationRows.length > 0 ? (
             <fieldset className="rounded-lg border border-stone-300 bg-stone-50/60 p-3 text-sm">
               <legend className="px-1 font-medium text-stone-800">
@@ -1334,7 +1468,10 @@ export function ChantierEditModal({
                       <PhaseDureeFields
                         hours={value}
                         snapshot={snapshot}
-                        employeeId={row.employeId}
+                        employeeId={
+                          assigneesByPhaseId[row.phaseId] ?? row.employeId
+                        }
+                        fromDate={row.fromDate || planDate}
                         ariaLabel={`Durée — ${row.label}`}
                         onHoursChange={(hours) =>
                           setHoursForPhase(row.phaseId, row.type, hours)

@@ -1,7 +1,9 @@
-import { CHANTIER_DUREE_JOURS_MAX, dureeJoursMenuValues } from "@/lib/dates";
+import { addDays, CHANTIER_DUREE_JOURS_MAX, dureeJoursMenuValues, toISODate } from "@/lib/dates";
 import {
   dayHoursFromJour,
   defaultHorairesSaisonEmploye,
+  hoursAvailableOnRowDate,
+  hoursForSlot,
 } from "@/lib/engine/hours";
 import type { Employee, PlanningSnapshot } from "@/lib/types";
 
@@ -19,6 +21,13 @@ function typicalWeekdayHours(employee?: Employee | null): number {
   return hours > 0 ? hours : 7.5;
 }
 
+function startDateForDuree(fromDate?: string | null): string {
+  const raw = (fromDate ?? "").slice(0, 10);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  return toISODate(new Date());
+}
+
+/** Heures d’un « jour type » (lundi été) — uniquement sans salarié ni date. */
 export function hoursForDayPreset(
   snapshot: PlanningSnapshot,
   employeeId: string | null | undefined,
@@ -29,24 +38,60 @@ export function hoursForDayPreset(
   return typicalWeekdayHours(employee);
 }
 
+/**
+ * Convertit un nombre de jours en heures : jour par jour, sur le contrat réel
+ * de ce salarié à ces dates (pas un forfait « lundi type »).
+ */
 export function hoursFromDayPreset(
   snapshot: PlanningSnapshot,
   employeeId: string | null | undefined,
   days: number,
+  fromDate?: string | null,
 ): number {
-  const one = hoursForDayPreset(snapshot, employeeId);
-  return Math.round(one * days * 100) / 100;
+  const wanted = Number(days);
+  if (!Number.isFinite(wanted) || wanted <= 0) return 0;
+  if (!employeeId) {
+    const one = hoursForDayPreset(snapshot, employeeId);
+    return Math.round(one * wanted * 100) / 100;
+  }
+  const fullDays = Math.floor(wanted + 1e-9);
+  const half = wanted - fullDays >= 0.45;
+  let remainingFull = fullDays;
+  let remainingHalf = half;
+  let total = 0;
+  let date = startDateForDuree(fromDate);
+  for (let i = 0; i < 420 && (remainingFull > 0 || remainingHalf); i += 1) {
+    const dayHours = hoursAvailableOnRowDate(snapshot, employeeId, date);
+    if (dayHours <= 0) {
+      date = addDays(date, 1);
+      continue;
+    }
+    if (remainingFull > 0) {
+      total += dayHours;
+      remainingFull -= 1;
+    } else {
+      const morning = hoursForSlot(snapshot, employeeId, date, 0);
+      total += morning > 0 ? morning : Math.round(dayHours * 50) / 100;
+      remainingHalf = false;
+    }
+    date = addDays(date, 1);
+  }
+  return Math.round(total * 100) / 100;
 }
 
 export function matchingDureeJoursFromHours(
   snapshot: PlanningSnapshot,
   employeeId: string | null | undefined,
   hours: number,
+  fromDate?: string | null,
 ): number | null {
   const h = Number(hours);
   if (!Number.isFinite(h) || h <= 0) return null;
   for (const days of dureeJoursMenuValues()) {
-    if (Math.abs(hoursFromDayPreset(snapshot, employeeId, days) - h) < 0.06) {
+    if (
+      Math.abs(hoursFromDayPreset(snapshot, employeeId, days, fromDate) - h) <
+      0.06
+    ) {
       return days;
     }
   }
@@ -62,8 +107,14 @@ export function daysFromPhaseHours(
   snapshot: PlanningSnapshot,
   employeeId: string | null | undefined,
   hours: number,
+  fromDate?: string | null,
 ): number {
-  const matched = matchingDureeJoursFromHours(snapshot, employeeId, hours);
+  const matched = matchingDureeJoursFromHours(
+    snapshot,
+    employeeId,
+    hours,
+    fromDate,
+  );
   if (matched != null) return matched;
   const one = hoursForDayPreset(snapshot, employeeId);
   const h = Number(hours);
@@ -71,8 +122,25 @@ export function daysFromPhaseHours(
   return Math.max(0.5, Math.round((h / one) * 2) / 2);
 }
 
-function runDureePresetSelfCheck() {
-  const empty: PlanningSnapshot = {
+/** Garde le nombre de jours, recalcule les heures pour le nouveau salarié. */
+export function hoursKeepingDayCount(
+  snapshot: PlanningSnapshot,
+  previousEmployeeId: string | null | undefined,
+  nextEmployeeId: string | null | undefined,
+  hours: number,
+  fromDate?: string | null,
+): string {
+  const days = daysFromPhaseHours(
+    snapshot,
+    previousEmployeeId,
+    hours,
+    fromDate,
+  );
+  return String(hoursFromDayPreset(snapshot, nextEmployeeId, days, fromDate));
+}
+
+function emptySnapshot(): PlanningSnapshot {
+  return {
     employees: [],
     chantiers: [],
     elements: [],
@@ -83,6 +151,10 @@ function runDureePresetSelfCheck() {
     demandes: [],
     horaires: [],
   };
+}
+
+function runDureePresetSelfCheck() {
+  const empty = emptySnapshot();
   if (hoursFromDayPreset(empty, null, 1) !== 7.5) {
     throw new Error("duree-presets: 1 jour atelier (35 h été) = 7,5 h");
   }
@@ -106,6 +178,42 @@ function runDureePresetSelfCheck() {
   }
   if (matchingDureeJoursFromHours(empty, null, 2) != null) {
     throw new Error("duree-presets: 2 h ne collent à aucun palier jours");
+  }
+
+  const emp35 = {
+    id: "emp-35",
+    nom: "Léo",
+    roles: ["fabrication" as const],
+    actif: true,
+    horaires: {
+      ete: defaultHorairesSaisonEmploye("ete"),
+      hiver: defaultHorairesSaisonEmploye("hiver"),
+    },
+  };
+  const withEmp: PlanningSnapshot = { ...empty, employees: [emp35] };
+  const friday = hoursFromDayPreset(withEmp, "emp-35", 1, "2026-09-25");
+  if (friday !== 5) {
+    throw new Error(
+      `duree-presets: 1 vendredi 35 h = 5 h (contrat du jour), reçu ${friday}`,
+    );
+  }
+  const wedFri = hoursFromDayPreset(withEmp, "emp-35", 3, "2026-09-23");
+  if (wedFri !== 20) {
+    throw new Error(
+      `duree-presets: mer–ven 35 h = 7,5+7,5+5 = 20 h, reçu ${wedFri}`,
+    );
+  }
+  const kept = hoursKeepingDayCount(
+    withEmp,
+    null,
+    "emp-35",
+    22.5,
+    "2026-09-23",
+  );
+  if (kept !== "20") {
+    throw new Error(
+      `duree-presets: 3 jours gardés, heures recalculées mer–ven = 20, reçu ${kept}`,
+    );
   }
 }
 runDureePresetSelfCheck();

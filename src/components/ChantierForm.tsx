@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { ConflictModal } from "@/components/ConflictModal";
 import { compareEmployeesByOrdre } from "@/lib/display-order";
 import { employeeAvailableOnRange, rangeEndFromHours } from "@/lib/engine/hours";
+import { hoursKeepingDayCount } from "@/lib/engine/duree-presets";
 import { PhaseDureeFields } from "@/components/DureeJoursSelect";
 import {
   inspectManualSlotConflict,
@@ -20,9 +21,9 @@ import {
 } from "@/lib/engine/earliest-date";
 import { generatePlanSolutions, propositionFromSolutions } from "@/lib/engine/plan-solutions";
 import { applyPhaseChainOnCreate, firstWorkingOnOrBefore, missingRequiredAssignee } from "@/lib/engine/phase-chain";
-import { withExtraPoseurs } from "@/lib/engine/create-phases";
+import { withPoseursPerElement } from "@/lib/engine/create-phases";
 import { moisToToleranceJours } from "@/lib/priorite";
-import { EmployeePhaseSelect } from "@/components/EmployeePhaseSelect";
+import { EmployeePhaseSelect, PoseursCheckboxes } from "@/components/EmployeePhaseSelect";
 import {
   coerceSelectValue,
   employeesForPhaseSelect,
@@ -69,6 +70,7 @@ type ElementForm = {
   key: string;
   nom_element: string;
   phases: PhaseForm[];
+  poseurIds: string[];
 };
 
 function employeesForPhaseRow(
@@ -135,17 +137,15 @@ export function ChantierForm() {
   const [adresseLivraison, setAdresseLivraison] = useState("");
   const [telephoneLivraison, setTelephoneLivraison] = useState("");
   const [employeLivraison, setEmployeLivraison] = useState("");
-  const [employeFabrication, setEmployeFabrication] = useState("");
-  const [poseurIds, setPoseurIds] = useState<string[]>([]);
+  const [elements, setElements] = useState<ElementForm[]>([
+    { key: "el-1", nom_element: "", phases: emptyPhases(), poseurIds: [] },
+  ]);
   const [delaiLaquage, setDelaiLaquage] = useState("5");
   const [dateLaquageDebut, setDateLaquageDebut] = useState("");
   const [dateLaquageFin, setDateLaquageFin] = useState("");
   const [sousTraitantId, setSousTraitantId] = useState("");
   const [couleurRal, setCouleurRal] = useState("");
   const [finition, setFinition] = useState<FinitionLaquage | "">("");
-  const [elements, setElements] = useState<ElementForm[]>([
-    { key: "el-1", nom_element: "", phases: emptyPhases() },
-  ]);
   const [saving, setSaving] = useState(false);
   const [placing, setPlacing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -159,42 +159,6 @@ export function ChantierForm() {
       .filter((employee) => employee.actif)
       .sort(compareEmployeesByOrdre);
   }, [snapshot.employees]);
-
-  const employePose = poseurIds[0] ?? "";
-  const poseCandidates = useMemo(
-    () => employeesForPhaseSelect(employeesByRole, "pose", employePose),
-    [employeesByRole, employePose],
-  );
-  const poseDateDebut = dateDebut;
-  const poseHours = Number(
-    elements
-      .flatMap((element) => element.phases)
-      .find((phase) => phase.type_phase === "pose")?.duree_estimee_heures || 0,
-  );
-  const poseDateFin = dateDebut
-    ? poseHours > 0
-      ? rangeEndFromHours(snapshot, employePose || null, dateDebut, poseHours)
-      : dateDebut
-    : "";
-  const suggestedPoseurs = useMemo(() => {
-    if (!poseDateDebut) return [];
-    return poseCandidates.filter((employee) =>
-      employeeAvailableOnRange(
-        snapshot,
-        employee,
-        poseDateDebut,
-        poseDateFin || poseDateDebut,
-      ),
-    );
-  }, [poseCandidates, poseDateDebut, poseDateFin, snapshot]);
-
-  function togglePoseur(id: string) {
-    setPoseurIds((current) =>
-      current.includes(id)
-        ? current.filter((item) => item !== id)
-        : [...current, id],
-    );
-  }
 
   function updateElement(key: string, patch: Partial<ElementForm>) {
     setElements((current) =>
@@ -218,7 +182,59 @@ export function ChantierForm() {
                 phase.type_phase === type ? { ...phase, ...patch } : phase,
               ),
             }
-          : element,
+            : element,
+      ),
+    );
+  }
+
+  function assignPhaseEmployee(
+    element: ElementForm,
+    phase: PhaseForm,
+    nextId: string,
+  ) {
+    const from = phase.date_debut || dateDebut;
+    const hours = hoursKeepingDayCount(
+      snapshot,
+      employeeIdForPhaseHours(phase, element),
+      nextId,
+      Number(phase.duree_estimee_heures || 0),
+      from,
+    );
+    updatePhase(element.key, phase.type_phase, {
+      employe_id: nextId,
+      duree_estimee_heures: phase.duree_estimee_heures ? hours : "",
+    });
+  }
+
+  function setElementPoseurs(element: ElementForm, ids: string[]) {
+    const pose = element.phases.find((phase) => phase.type_phase === "pose");
+    const from = pose?.date_debut || dateDebut;
+    const hours = hoursKeepingDayCount(
+      snapshot,
+      element.poseurIds[0] || pose?.employe_id,
+      ids[0] || null,
+      Number(pose?.duree_estimee_heures || 0),
+      from,
+    );
+    setElements((current) =>
+      current.map((item) =>
+        item.key !== element.key
+          ? item
+          : {
+              ...item,
+              poseurIds: ids,
+              phases: item.phases.map((phase) =>
+                phase.type_phase === "pose"
+                  ? {
+                      ...phase,
+                      employe_id: ids[0] ?? "",
+                      duree_estimee_heures: pose?.duree_estimee_heures
+                        ? hours
+                        : phase.duree_estimee_heures,
+                    }
+                  : phase,
+              ),
+            },
       ),
     );
   }
@@ -229,13 +245,12 @@ export function ChantierForm() {
     return null;
   }
 
-  function employeeIdForPhaseHours(phase: PhaseForm): string {
-    if (phase.type_phase === "fabrication") {
-      return employeFabrication || phase.employe_id;
-    }
-    if (phase.type_phase === "pose") return employePose || phase.employe_id;
+  function employeeIdForPhaseHours(phase: PhaseForm, element?: ElementForm): string {
     if (phase.type_phase === "livraison") {
       return employeLivraison || phase.employe_id;
+    }
+    if (phase.type_phase === "pose") {
+      return element?.poseurIds[0] || phase.employe_id;
     }
     return phase.employe_id;
   }
@@ -262,7 +277,7 @@ export function ChantierForm() {
           hours > 0
             ? rangeEndFromHours(
                 snapshot,
-                employeeIdForPhaseHours(phase) || null,
+                employeeIdForPhaseHours(phase, element) || null,
                 debut,
                 hours,
               )
@@ -386,29 +401,28 @@ export function ChantierForm() {
               ? null
               : phase.type_phase === "livraison" && avecLivraison
                 ? employeLivraison
-                : phase.type_phase === "fabrication" &&
-                    avecFabrication &&
-                    employeFabrication
-                  ? employeFabrication
-                  : phase.type_phase === "pose" && avecPose && employePose
-                    ? employePose
-                    : phase.employe_id || null,
+                : phase.type_phase === "pose" && avecPose
+                  ? element.poseurIds[0] || phase.employe_id || null
+                  : phase.employe_id || null,
           urgent: urgent || phase.urgent,
           heures_supplementaires_par_jour:
             phase.heures_supplementaires_par_jour || 0,
         })),
       })),
     };
-    const prepared = withExtraPoseurs(
-      applyPhaseChainOnCreate(
-        snapshot,
-        ensureChantierDatesOnCreate(snapshot, input),
-      ),
-      poseurIds.slice(1),
+    const prepared = withPoseursPerElement(
+      snapshot,
+      input,
+      namedElements.map((element) => element.poseurIds),
+      dateDebut || null,
+    );
+    const chained = applyPhaseChainOnCreate(
+      snapshot,
+      ensureChantierDatesOnCreate(snapshot, prepared),
     );
     if (urgent && dateFin && dateDebut) {
       let lastEnd = "";
-      for (const element of prepared.elements) {
+      for (const element of chained.elements) {
         for (const phase of element.phases) {
           const end = phase.date_fin || "";
           if (end > lastEnd) lastEnd = end;
@@ -422,7 +436,7 @@ export function ChantierForm() {
         return null;
       }
     }
-    return prepared;
+    return chained;
   }
 
   async function saveInput(input: NewChantierInput) {
@@ -433,12 +447,16 @@ export function ChantierForm() {
     const clash = inspectManualSlotConflict(snapshot, input);
     if (clash) {
       setSlotConflict(clash);
-      setError(
-        formatSaveError(
-          new Error(clash.message),
-          "le chantier n’a pas été enregistré",
-        ),
-      );
+      const result = planChantier(snapshot, input, { urgent });
+      if (result.status === "conflict" || result.status === "placed" || result.status === "partial") {
+        setPendingInput(input);
+        if (result.status === "conflict") {
+          setConflict(result);
+        }
+        setInfo(clash.message);
+      } else {
+        setInfo(clash.message);
+      }
       return;
     }
     setSlotConflict(null);
@@ -899,50 +917,10 @@ export function ChantierForm() {
             </label>
           </div>
           {avecPose ? (
-            <div className="mt-3 space-y-2">
-              <span className="mb-1 block font-medium">Poseurs</span>
-              <p className="text-xs text-stone-600">
-                Cochez un ou plusieurs poseurs. Si vous n’en choisissez aucun,
-                le premier disponible est pris tout seul.
-              </p>
-              <div className="flex flex-col gap-1">
-                {poseCandidates.map((employee) => {
-                  const suggested = suggestedPoseurs.some(
-                    (item) => item.id === employee.id,
-                  );
-                  return (
-                    <label
-                      key={employee.id}
-                      className="inline-flex items-center gap-2 text-sm"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={poseurIds.includes(employee.id)}
-                        onChange={() => togglePoseur(employee.id)}
-                      />
-                      <span>{employee.nom}</span>
-                      {poseDateDebut ? (
-                        <span
-                          className={
-                            suggested
-                              ? "text-xs text-emerald-700"
-                              : "text-xs text-stone-400"
-                          }
-                        >
-                          {suggested ? "libre sur les dates de pose" : "pas dispo ce jour-là"}
-                        </span>
-                      ) : null}
-                    </label>
-                  );
-                })}
-              </div>
-              {poseDateDebut && suggestedPoseurs.length === 0 ? (
-                <p className="text-xs text-amber-800">
-                  Aucun poseur n’est libre sur ces dates. Vous pouvez quand
-                  même en cocher un.
-                </p>
-              ) : null}
-            </div>
+            <p className="mt-3 text-xs text-stone-600">
+              Choisissez les poseurs dans le tableau de chaque élément (plusieurs
+              possibles). S’ils ne sont pas libres, une solution sera proposée.
+            </p>
           ) : null}
         </fieldset>
         <fieldset className="rounded-lg border border-stone-300 bg-stone-50/60 p-3 text-sm md:col-span-2">
@@ -972,19 +950,10 @@ export function ChantierForm() {
             </label>
           </div>
           {avecFabrication ? (
-            <label className="mt-3 block">
-              <span className="mb-1 block font-medium">
-                Salarié responsable de la fabrication
-              </span>
-              <EmployeePhaseSelect
-                employees={employeesByRole}
-                type="fabrication"
-                value={employeFabrication}
-                onChange={setEmployeFabrication}
-                emptyLabel="Auto (premier disponible)"
-                className="w-full rounded border border-stone-300 bg-white px-3 py-2"
-              />
-            </label>
+            <p className="mt-3 text-xs text-stone-600">
+              Le fabricant se choisit dans le tableau de chaque élément (un
+              producteur différent possible par élément).
+            </p>
           ) : null}
         </fieldset>
         <fieldset className="rounded-lg border border-stone-300 bg-stone-50/60 p-3 text-sm md:col-span-2">
@@ -1250,7 +1219,8 @@ export function ChantierForm() {
                         <PhaseDureeFields
                           hours={phase.duree_estimee_heures}
                           snapshot={snapshot}
-                          employeeId={employeeIdForPhaseHours(phase)}
+                          employeeId={employeeIdForPhaseHours(phase, element)}
+                          fromDate={phase.date_debut || dateDebut}
                           ariaLabel={`Durée — ${PHASE_LABELS[phase.type_phase]}`}
                           onHoursChange={(hours) =>
                             setPhaseHoursValue(
@@ -1261,9 +1231,29 @@ export function ChantierForm() {
                           }
                         />
                       </td>
-                      <td className="py-2 pr-2">
+                      <td className="py-2 pr-2 align-top">
                         {phase.type_phase === "logistique" ? (
                           <span className="text-stone-500">Thermolaquage</span>
+                        ) : phase.type_phase === "pose" ? (
+                          <PoseursCheckboxes
+                            employees={employeesByRole}
+                            selectedIds={element.poseurIds}
+                            snapshot={snapshot}
+                            from={phase.date_debut || dateDebut || null}
+                            to={phase.date_fin || dateFin || dateDebut || null}
+                            onChange={(ids) => setElementPoseurs(element, ids)}
+                          />
+                        ) : phase.type_phase === "fabrication" ? (
+                          <EmployeePhaseSelect
+                            employees={employeesByRole}
+                            type="fabrication"
+                            value={phase.employe_id}
+                            emptyLabel="Auto (premier disponible)"
+                            className="rounded border border-stone-300 px-2 py-1"
+                            onChange={(id) =>
+                              assignPhaseEmployee(element, phase, id)
+                            }
+                          />
                         ) : (
                           <select
                             autoComplete="off"
@@ -1273,9 +1263,11 @@ export function ChantierForm() {
                               phase,
                             )}
                             onChange={(event) =>
-                              updatePhase(element.key, phase.type_phase, {
-                                employe_id: event.target.value,
-                              })
+                              assignPhaseEmployee(
+                                element,
+                                phase,
+                                event.target.value,
+                              )
                             }
                             className="rounded border border-stone-300 px-2 py-1"
                           >
@@ -1308,6 +1300,7 @@ export function ChantierForm() {
                 key: `el-${current.length + 1}-${Date.now()}`,
                 nom_element: "",
                 phases: emptyPhases(),
+                poseurIds: [],
               },
             ])
           }

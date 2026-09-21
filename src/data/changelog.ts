@@ -11,6 +11,15 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-21-element-producteur-pose",
+    title: "Élément : fabricant, poseurs et heures du contrat",
+    items: [
+      "Le menu « Salarié responsable de la fabrication » et le bloc Poseurs du haut disparaissent : on choisit dans le tableau de chaque élément. Un fabricant différent par élément, et plusieurs poseurs sur le même élément.",
+      "Si les poseurs choisis ne sont pas libres, le planning propose un créneau (comme d’habitude) au lieu de simplement bloquer.",
+      "Changer de salarié garde le nombre de jours (ex. 3 jours) et recalcule les heures selon le contrat réel, jour par jour (un vendredi de 5 h n’est plus compté comme un lundi de 7,5 h).",
+    ],
+  },
+  {
     id: "2026-09-21-saisons-jj-mm",
     title: "Saisons : jour et mois seulement",
     items: [

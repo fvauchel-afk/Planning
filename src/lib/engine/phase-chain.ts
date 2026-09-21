@@ -1,6 +1,10 @@
 import { employeeCanTakePhase } from "@/lib/chantier-status";
 import { addDays, addWorkingDays, isSunday, isoWeekday, shiftToReach, workingDaysBetween } from "@/lib/dates";
 import { compareEmployeesByOrdre } from "@/lib/display-order";
+import {
+  daysFromPhaseHours,
+  hoursFromDayPreset,
+} from "@/lib/engine/duree-presets";
 import { employeeAvailableOnRange, employeeWorksOnDate, hoursForSlot, horairesFromPreset, rangeEndFromHours } from "@/lib/engine/hours";
 import {
   SEARCH_DAYS,
@@ -115,9 +119,13 @@ export function pickEmployeeForPhase(
   debut: string | null,
   fin: string | null,
   preferredId?: string | null,
+  keepPreferred = false,
 ): string | null {
   if (type === "logistique") return null;
   const preferred = snapshot.employees.find((item) => item.id === preferredId);
+  if (preferred && employeeCanTakePhase(preferred, type) && keepPreferred) {
+    return preferred.id;
+  }
   if (
     preferred &&
     employeeCanTakePhase(preferred, type) &&
@@ -276,6 +284,7 @@ export function applyPhaseChainOnCreate(
             start,
             start,
             current.employe_id,
+            Boolean(current.employe_id),
           );
           const hoursForRange =
             type === "livraison" && plannedHours <= 0 ? 2 : plannedHours;
@@ -297,6 +306,33 @@ export function applyPhaseChainOnCreate(
           (type === "logistique" || type === "livraison" || type === "pose")
         ) {
           current.dates_estimatives = true;
+        }
+        if (type === "pose") {
+          for (const extra of phases) {
+            if (extra.type_phase !== "pose" || extra === current) continue;
+            extra.date_debut = current.date_debut;
+            extra.employe_id = pickEmployeeForPhase(
+              snapshot,
+              "pose",
+              extra.date_debut,
+              extra.date_debut,
+              extra.employe_id,
+              Boolean(extra.employe_id),
+            );
+            const extraEnd = rangeEndFromHours(
+              snapshot,
+              extra.employe_id,
+              extra.date_debut || start,
+              Number(extra.duree_estimee_heures) || 0,
+            );
+            extra.date_fin = extraEnd < (extra.date_debut || start)
+              ? extra.date_debut || start
+              : extraEnd;
+            extra.dates_estimatives = current.dates_estimatives;
+            if (extra.date_fin && extra.date_fin > (current.date_fin || "")) {
+              current.date_fin = extra.date_fin;
+            }
+          }
         }
         prevEnd = current.date_fin;
       }
@@ -533,6 +569,8 @@ type OptionEditOptions = {
   employeLivraisonId?: string | null;
   employeFabricationId?: string | null;
   employePoseId?: string | null;
+  assigneesByPhaseId?: Record<string, string | null>;
+  poseurIdsByElementId?: Record<string, string[]>;
   delayDays?: number | null;
   datesEstimatives?: boolean;
 };
@@ -540,7 +578,11 @@ type OptionEditOptions = {
 function preferredAssigneeForType(
   type: TypePhase,
   options: OptionEditOptions,
+  phaseId?: string,
 ): string | null | undefined {
+  if (phaseId && options.assigneesByPhaseId && phaseId in options.assigneesByPhaseId) {
+    return options.assigneesByPhaseId[phaseId];
+  }
   if (type === "fabrication") return options.employeFabricationId;
   if (type === "pose") return options.employePoseId;
   if (type === "livraison") return options.employeLivraisonId;
@@ -703,7 +745,7 @@ function cascadeAfterAssigneeChanges(
         (item) => item.element_id === element.id && item.type_phase === type,
       );
       const originalId = phase?.employe_id ?? insert?.employe_id ?? null;
-      const preferred = preferredAssigneeForType(type, options);
+      const preferred = preferredAssigneeForType(type, options, phase?.id);
       const changed = Boolean(preferred) && preferred !== originalId;
       const newlyDated =
         Boolean(phase) &&
@@ -727,6 +769,105 @@ function cascadeAfterAssigneeChanges(
         inserts,
         deleteIds,
       );
+    }
+  }
+}
+
+function uniqueIds(ids: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const id of ids) {
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
+}
+
+function syncPoseursForElements(
+  snapshot: PlanningSnapshot,
+  chantierId: string,
+  options: OptionEditOptions,
+  patches: PhasePatch[],
+  inserts: PhaseInsert[],
+  deleteIds: string[],
+) {
+  if (!options.avecPose || !options.poseurIdsByElementId) return;
+  const deleted = new Set(deleteIds);
+  const elements = snapshot.elements.filter(
+    (element) => element.chantier_id === chantierId,
+  );
+  for (const element of elements) {
+    if (!(element.id in options.poseurIdsByElementId)) continue;
+    const wanted = uniqueIds(options.poseurIdsByElementId[element.id] ?? []);
+    if (wanted.length === 0) continue;
+    const poses = snapshot.phases.filter(
+      (phase) =>
+        phase.element_id === element.id &&
+        phase.type_phase === "pose" &&
+        !deleted.has(phase.id),
+    );
+    const template = poses[0];
+    const fromDate = template?.date_debut ?? null;
+    const days = daysFromPhaseHours(
+      snapshot,
+      template?.employe_id ?? wanted[0] ?? null,
+      Number(template?.duree_estimee_heures) || 8,
+      fromDate,
+    );
+    const used = new Set<string>();
+    const leftover: typeof poses = [];
+    for (const phase of poses) {
+      const current =
+        patches.find((item) => item.id === phase.id)?.employe_id ??
+        phase.employe_id;
+      if (current && wanted.includes(current) && !used.has(current)) {
+        used.add(current);
+        continue;
+      }
+      leftover.push(phase);
+    }
+    for (const id of wanted) {
+      if (used.has(id)) continue;
+      const hours = hoursFromDayPreset(snapshot, id, days, fromDate);
+      const reuse = leftover.shift();
+      if (reuse) {
+        used.add(id);
+        mergePhasePatch(patches, reuse, {
+          employe_id: id,
+          duree_estimee_heures: hours,
+        });
+        continue;
+      }
+      inserts.push({
+        element_id: element.id,
+        type_phase: "pose",
+        duree_estimee_heures: hours,
+        date_debut: template?.date_debut ?? null,
+        date_fin: template?.date_fin ?? null,
+        heure_debut: template?.heure_debut ?? "07:30",
+        employe_id: id,
+        statut: "a_faire",
+        urgent: Boolean(template?.urgent),
+        heures_supplementaires_par_jour:
+          template?.heures_supplementaires_par_jour ?? 0,
+        dates_estimatives: template?.dates_estimatives,
+      });
+    }
+    for (const extra of leftover) {
+      deleteIds.push(extra.id);
+      deleted.add(extra.id);
+    }
+    for (const phase of poses) {
+      if (deleted.has(phase.id)) continue;
+      const id =
+        patches.find((item) => item.id === phase.id)?.employe_id ??
+        phase.employe_id;
+      if (!id) continue;
+      mergePhasePatch(patches, phase, {
+        employe_id: id,
+        duree_estimee_heures: hoursFromDayPreset(snapshot, id, days, fromDate),
+      });
     }
   }
 }
@@ -768,8 +909,8 @@ function applyAssigneeEdits(
       preferred: string | null | undefined,
       dateIfMissing: boolean,
     ) => {
-      const phase = siblings.find((item) => item.type_phase === type);
-      if (!phase) return;
+      const phasesOfType = siblings.filter((item) => item.type_phase === type);
+      for (const phase of phasesOfType) {
       const patched = patches.find((item) => item.id === phase.id);
       let debut = patched?.date_debut ?? phase.date_debut;
       let fin = patched?.date_fin ?? phase.date_fin ?? debut;
@@ -784,22 +925,27 @@ function applyAssigneeEdits(
         extra.duree_estimee_heures = hours;
         extra.heure_debut = phase.heure_debut ?? "07:30";
       }
-      if (!debut) return;
+      if (!debut) continue;
       const currentId = patched?.employe_id ?? phase.employe_id;
+      const phasePreferred =
+        preferredAssigneeForType(type, options, phase.id) ?? preferred;
+      const keep = Boolean(phasePreferred);
       const employeId = pickEmployeeForPhase(
         snapshot,
         type,
         debut,
         fin || debut,
-        preferred ?? currentId,
+        phasePreferred ?? currentId,
+        keep,
       );
       if (
         extra.date_debut ||
         (employeId && employeId !== currentId) ||
-        (preferred && preferred !== currentId)
+        (phasePreferred && phasePreferred !== currentId)
       ) {
-        extra.employe_id = employeId ?? preferred ?? currentId;
+        extra.employe_id = employeId ?? phasePreferred ?? currentId;
         mergePhasePatch(patches, { ...phase, ...patched }, extra);
+      }
       }
     };
 
@@ -816,6 +962,15 @@ function applyAssigneeEdits(
     }
   }
 
+  syncPoseursForElements(
+    snapshot,
+    chantierId,
+    options,
+    patches,
+    inserts,
+    deleteIds,
+  );
+
   for (const insert of inserts) {
     if (!ASSIGN_REQUIRED.includes(insert.type_phase)) continue;
     const preferred =
@@ -830,6 +985,7 @@ function applyAssigneeEdits(
       insert.date_debut,
       insert.date_fin,
       preferred ?? insert.employe_id,
+      Boolean(preferred ?? insert.employe_id),
     );
   }
 
@@ -860,6 +1016,8 @@ export function planChantierOptionEdits(
     employeLivraisonId?: string | null;
     employeFabricationId?: string | null;
     employePoseId?: string | null;
+    assigneesByPhaseId?: Record<string, string | null>;
+    poseurIdsByElementId?: Record<string, string[]>;
     delayDays?: number | null;
     datesEstimatives?: boolean;
   },
