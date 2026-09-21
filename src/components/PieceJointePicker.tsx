@@ -77,14 +77,14 @@ export function PieceJointePicker({
   }
 
   const bouton =
-    "cursor-pointer rounded border border-stone-300 bg-white px-3 py-2 text-xs font-medium text-stone-800";
+    "flex w-full cursor-pointer items-center justify-center rounded-lg border border-stone-300 bg-white px-3 py-2.5 text-sm font-medium text-stone-800";
 
   return (
     <div className="space-y-2">
       <p className="text-xs text-stone-500">
         Photo ou fichier (PDF, image…). {MAX_PIECES_JOINTES} max.
       </p>
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-col gap-2">
         <label className={`${bouton} ${lock ? "opacity-50" : "hover:bg-stone-50"}`}>
           Prendre une photo
           <input
