@@ -2,22 +2,22 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  activeSaisonStatus,
   defaultHoraires,
   defaultHorairesEmploye,
   dayHoursFromJour,
   formatHoursLabel,
-  formatMmddInput,
+  composeMmdd,
+  daysInMonthMmdd,
   horairesFromPreset,
   HORAIRE_PRESETS,
   horairesOf,
-  mmddFromInput,
   normalizeHorairesEmploye,
 } from "@/lib/engine/hours";
 import { compareEmployeesByOrdre } from "@/lib/display-order";
 import { usePlanning } from "@/lib/planning-context";
 import { useDebouncedPatch } from "@/lib/form-live";
 import { formatSaveError } from "@/lib/supabase/errors";
+import { SaisonActiveBadge, saisonActiveCopy } from "@/components/SaisonActiveBadge";
 import {
   JOURS_OUVRES,
   JOUR_OUVRE_LABELS,
@@ -36,6 +36,72 @@ const HEURE_FIELDS: { key: keyof HorairesJour; label: string }[] = [
   { key: "pause_reprise", label: "Reprise" },
   { key: "debouche", label: "Débauche" },
 ];
+
+const MOIS_OPTIONS = [
+  "01",
+  "02",
+  "03",
+  "04",
+  "05",
+  "06",
+  "07",
+  "08",
+  "09",
+  "10",
+  "11",
+  "12",
+] as const;
+
+function MmddField({
+  value,
+  onChange,
+  ariaLabel,
+}: {
+  value: string;
+  onChange: (mmdd: string) => void;
+  ariaLabel: string;
+}) {
+  const month = /^\d{2}-\d{2}$/.test(value) ? value.slice(0, 2) : "";
+  const day = /^\d{2}-\d{2}$/.test(value) ? value.slice(3, 5) : "";
+  const maxDay = daysInMonthMmdd(month || "01");
+  const selectClass =
+    "rounded border border-stone-300 bg-white px-2 py-2 text-sm";
+
+  return (
+    <div className="flex items-center gap-1" role="group" aria-label={ariaLabel}>
+      <select
+        aria-label={`${ariaLabel} — jour`}
+        value={day}
+        onChange={(event) => onChange(composeMmdd(month || "01", event.target.value))}
+        className={selectClass}
+      >
+        {Array.from({ length: maxDay }, (_, index) => {
+          const item = String(index + 1).padStart(2, "0");
+          return (
+            <option key={item} value={item}>
+              {item}
+            </option>
+          );
+        })}
+      </select>
+      <span className="text-stone-500" aria-hidden="true">
+        /
+      </span>
+      <select
+        aria-label={`${ariaLabel} — mois`}
+        value={month}
+        onChange={(event) => onChange(composeMmdd(event.target.value, day || "01"))}
+        className={selectClass}
+      >
+        {MOIS_OPTIONS.map((item) => (
+          <option key={item} value={item}>
+            {item}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
 
 function resumeHoraires(horaires: HorairesEmploye | null | undefined): string {
   const lundi =
@@ -337,8 +403,8 @@ export function EmployeesPage() {
       >
         <h2 className="font-serif text-xl text-stone-900">Saisons été / hiver</h2>
         <p className="text-sm text-stone-600">
-          Seul réglage global : les dates se répètent chaque année. Les horaires
-          se renseignent sur chaque fiche salarié.
+          Seul réglage global : les dates se répètent chaque année (jour et mois
+          seulement). Les horaires se renseignent sur chaque fiche salarié.
         </p>
         {loading && <p className="text-sm text-stone-500">Chargement…</p>}
         {saisonError && <p className="text-sm text-red-700">{saisonError}</p>}
@@ -349,42 +415,30 @@ export function EmployeesPage() {
               <p className="sm:col-span-2 font-medium">{row.nom || "Saison"}</p>
               <label className="block text-sm">
                 <span className="mb-1 block">Début</span>
-                <input
-                  type="date"
-                  value={formatMmddInput(row.debut_mmdd)}
-                  onChange={(event) =>
+                <MmddField
+                  ariaLabel={`Début ${row.nom || "saison"}`}
+                  value={row.debut_mmdd}
+                  onChange={(debut_mmdd) =>
                     setSaisons((current) =>
                       current.map((item) =>
-                        item.id === row.id
-                          ? {
-                              ...item,
-                              debut_mmdd: mmddFromInput(event.target.value),
-                            }
-                          : item,
+                        item.id === row.id ? { ...item, debut_mmdd } : item,
                       ),
                     )
                   }
-                  className="w-full rounded border border-stone-300 px-3 py-2"
                 />
               </label>
               <label className="block text-sm">
                 <span className="mb-1 block">Fin</span>
-                <input
-                  type="date"
-                  value={formatMmddInput(row.fin_mmdd)}
-                  onChange={(event) =>
+                <MmddField
+                  ariaLabel={`Fin ${row.nom || "saison"}`}
+                  value={row.fin_mmdd}
+                  onChange={(fin_mmdd) =>
                     setSaisons((current) =>
                       current.map((item) =>
-                        item.id === row.id
-                          ? {
-                              ...item,
-                              fin_mmdd: mmddFromInput(event.target.value),
-                            }
-                          : item,
+                        item.id === row.id ? { ...item, fin_mmdd } : item,
                       ),
                     )
                   }
-                  className="w-full rounded border border-stone-300 px-3 py-2"
                 />
               </label>
             </div>
@@ -407,17 +461,10 @@ export function EmployeesPage() {
           </button>
         </div>
         {(() => {
-          const status = activeSaisonStatus(snapshot);
-          const nom = status.kind === "ete" ? "Été" : "Hiver";
-          const source =
-            status.source === "auto"
-              ? "calcul automatique"
-              : "forcée manuellement";
+          const { source } = saisonActiveCopy(snapshot);
           return (
             <div className="space-y-2 border-t border-stone-200 pt-3">
-              <p className="text-sm font-medium text-stone-900">
-                Saison active : {nom} ({source})
-              </p>
+              <SaisonActiveBadge detail />
               <p className="text-xs text-stone-600">
                 Les dates ci-dessus restent le calcul par défaut. Une bascule
                 manuelle s’applique partout (planning, heures) jusqu’à nouvel
@@ -442,7 +489,7 @@ export function EmployeesPage() {
                 </button>
                 <button
                   type="button"
-                  disabled={savingSaisonForcee || status.source === "auto"}
+                  disabled={savingSaisonForcee || source === "auto"}
                   className="rounded border border-stone-300 px-3 py-2 text-sm disabled:opacity-60"
                   onClick={() => void onForceSaison(null)}
                 >

@@ -759,6 +759,34 @@ export function mmddFromInput(value: string): string {
   return "";
 }
 
+export function daysInMonthMmdd(month: string): number {
+  const m = Number(month);
+  if (!Number.isInteger(m) || m < 1 || m > 12) return 31;
+  return new Date(2000, m, 0).getDate();
+}
+
+export function composeMmdd(month: string, day: string): string {
+  if (!/^\d{2}$/.test(month) || !/^\d{2}$/.test(day)) return "";
+  const max = daysInMonthMmdd(month);
+  const n = Number(day);
+  if (!Number.isInteger(n) || n < 1) return "";
+  const clamped = String(Math.min(n, max)).padStart(2, "0");
+  return `${month}-${clamped}`;
+}
+
+function runMmddFieldSelfCheck() {
+  if (daysInMonthMmdd("02") !== 29) {
+    throw new Error("saisons: février accepte le 29 (date annuelle)");
+  }
+  if (composeMmdd("06", "01") !== "06-01") {
+    throw new Error("saisons: 1er juin = 06-01");
+  }
+  if (composeMmdd("02", "31") !== "02-29") {
+    throw new Error("saisons: 31 février recalé au 29");
+  }
+}
+runMmddFieldSelfCheck();
+
 function runFridayHoursRangeSelfCheck() {
   const snapshot: PlanningSnapshot = {
     employees: [

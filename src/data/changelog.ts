@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-21-saisons-jj-mm",
+    title: "Saisons : jour et mois seulement",
+    items: [
+      "Les dates Été / Hiver (début et fin) n’affichent plus d’année : uniquement le jour et le mois, puisqu’elles se répètent chaque année.",
+      "La saison en cours (Été ou Hiver) s’affiche en badge sur le planning équipe, dans Paramètres, et sur l’écran Saisons (Saison active, calcul automatique ou forcée).",
+    ],
+  },
+  {
     id: "2026-09-21-horaires-35-39",
     title: "Horaires 35 h et 39 h : été et hiver",
     items: [
