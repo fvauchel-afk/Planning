@@ -1257,6 +1257,7 @@ export async function supabaseApplyPhasePatches(
     if (patch.duree_estimee_heures !== undefined) {
       payload.duree_estimee_heures = patch.duree_estimee_heures;
     }
+    if (patch.statut !== undefined) payload.statut = patch.statut;
     const { error } = await supabase
       .from("phases_planning")
       .update(payload)

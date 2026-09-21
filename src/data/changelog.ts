@@ -11,6 +11,15 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-21-phase-jai-fini",
+    title: "Fiche phase : bouton « J’ai fini »",
+    items: [
+      "Sur la fiche d’une phase, Jonathan (et les autres admins) ainsi que le salarié assigné peuvent cliquer « J’ai fini », même si la phase est encore « À faire » ou datée aujourd’hui / plus tard.",
+      "La phase se termine le jour du clic : sa fin est coupée à aujourd’hui (si elle n’avait pas encore commencé, elle tient sur aujourd’hui).",
+      "Les phases suivantes du même élément sont recalées juste après. « J’ai fini » sur Fabrication recale toutes les Poses de l’élément ; terminer une ligne Pose ne clôt que celle-là.",
+    ],
+  },
+  {
     id: "2026-09-21-saisons-jj-mm",
     title: "Saisons : jour et mois seulement",
     items: [

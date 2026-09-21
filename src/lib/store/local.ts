@@ -413,6 +413,7 @@ export function localApplyPhaseEdits(
           patch.heure_debut !== undefined ? patch.heure_debut : phase.heure_debut,
         duree_estimee_heures:
           patch.duree_estimee_heures ?? phase.duree_estimee_heures,
+        statut: patch.statut ?? phase.statut,
       };
     });
   }
