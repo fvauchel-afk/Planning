@@ -1,36 +1,20 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AuthOpenBanner } from "@/components/AuthOpenBanner";
 import { OnedriveBanner } from "@/components/OnedriveBanner";
 import { CommandeAlert } from "@/components/CommandeAlert";
 import { LancementAlert } from "@/components/LancementAlert";
 import { AdministratifIdleAlert } from "@/components/AdministratifIdleAlert";
+import { AdminDesktopNav, AdminMobileNav, AdminSectionTabs } from "@/components/AdminNav";
 import { lancementsEnAttente } from "@/lib/dates-estimatives";
 import { demandeEstOuverte, isReunionDirectionDemande } from "@/lib/demandes";
+import { adminNavForSession } from "@/lib/nav/admin-nav";
 import { useSession } from "@/lib/auth/session-context";
 import { BrandMark } from "@/components/BrandMark";
 import { usePlanning } from "@/lib/planning-context";
-
-const ADMIN_LINKS: { href: string; label: string }[] = [
-  { href: "/", label: "Planning" },
-  { href: "/synthese", label: "Synthèse" },
-  { href: "/chantiers", label: "Chantiers" },
-  { href: "/plan", label: "Plan" },
-  { href: "/devis", label: "Devis" },
-  { href: "/sous-traitants", label: "Sous-traitants" },
-  { href: "/employes", label: "Employés" },
-  { href: "/absences", label: "Absences" },
-  { href: "/signalements", label: "Signalements" },
-  { href: "/demandes", label: "Demandes" },
-  { href: "/reunion", label: "Réunion" },
-  { href: "/admin/onedrive", label: "OneDrive" },
-  { href: "/parametres", label: "Paramètres" },
-  { href: "/sauvegarde", label: "Sauvegarde" },
-  { href: "/moi", label: "Mon planning" },
-];
 
 const SALARIE_LINKS: { href: string; label: string }[] = [
   { href: "/moi", label: "Mon planning" },
@@ -76,6 +60,11 @@ export function AppShell({
         ).length
       : 0;
 
+  const adminItems = useMemo(
+    () => adminNavForSession(Boolean(session?.canManageReunionDirection)),
+    [session?.canManageReunionDirection],
+  );
+
   useEffect(() => {
     setMenuOpen(false);
   }, [currentPath]);
@@ -87,15 +76,8 @@ export function AppShell({
     router.refresh();
   }
 
-  const links =
-    !ready || !session
-      ? []
-      : session.isAdmin
-        ? ADMIN_LINKS.filter(
-            (link) =>
-              link.href !== "/reunion" || Boolean(session.canManageReunionDirection),
-          )
-        : SALARIE_LINKS;
+  const salarieLinks = !ready || !session || session.isAdmin ? [] : SALARIE_LINKS;
+  const showAdminNav = Boolean(ready && session?.isAdmin);
 
   return (
     <div className="min-h-screen">
@@ -114,47 +96,52 @@ export function AppShell({
             )}
           </div>
 
-          <nav className="hidden flex-wrap items-center justify-end gap-1 md:flex">
-            {links.map((link) => {
-              const active = linkActive(link.href, currentPath);
-              return (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  prefetch={link.href === "/admin/onedrive" ? false : undefined}
-                  className={`rounded-md px-3 py-1.5 text-sm ${
-                    active
-                      ? "bg-amber-700 text-amber-50"
-                      : "text-stone-300 hover:bg-stone-800 hover:text-white"
-                  }`}
+          {showAdminNav ? (
+            <div className="hidden items-center gap-1 md:flex">
+              <AdminDesktopNav
+                items={adminItems}
+                currentPath={currentPath}
+                pendingCommandes={pendingCommandes}
+                pendingReunion={pendingReunion}
+                pendingLancements={pendingLancements}
+              />
+              <button
+                type="button"
+                onClick={() => void logout()}
+                className="rounded-md px-3 py-1.5 text-sm text-stone-400 hover:bg-stone-800 hover:text-white"
+              >
+                Déconnexion
+              </button>
+            </div>
+          ) : (
+            <nav className="hidden flex-wrap items-center justify-end gap-1 md:flex">
+              {salarieLinks.map((link) => {
+                const active = linkActive(link.href, currentPath);
+                return (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    className={`rounded-md px-3 py-1.5 text-sm ${
+                      active
+                        ? "bg-amber-700 text-amber-50"
+                        : "text-stone-300 hover:bg-stone-800 hover:text-white"
+                    }`}
+                  >
+                    {link.label}
+                  </Link>
+                );
+              })}
+              {ready && session ? (
+                <button
+                  type="button"
+                  onClick={() => void logout()}
+                  className="rounded-md px-3 py-1.5 text-sm text-stone-400 hover:bg-stone-800 hover:text-white"
                 >
-                  {link.label}
-                  {link.href === "/demandes" && pendingCommandes > 0 ? (
-                    <span className="ml-1 rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-semibold text-stone-900">
-                      {pendingCommandes}
-                    </span>
-                  ) : null}
-                  {link.href === "/reunion" && pendingReunion > 0 ? (
-                    <span className="ml-1 rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-semibold text-stone-900">
-                      {pendingReunion}
-                    </span>
-                  ) : null}
-                  {link.href === "/" && pendingLancements > 0 ? (
-                    <span className="ml-1 rounded-full bg-orange-500 px-1.5 py-0.5 text-[10px] font-semibold text-stone-900">
-                      {pendingLancements}
-                    </span>
-                  ) : null}
-                </Link>
-              );
-            })}
-            <button
-              type="button"
-              onClick={() => void logout()}
-              className="rounded-md px-3 py-1.5 text-sm text-stone-400 hover:bg-stone-800 hover:text-white"
-            >
-              Déconnexion
-            </button>
-          </nav>
+                  Déconnexion
+                </button>
+              ) : null}
+            </nav>
+          )}
 
           <div className="flex shrink-0 items-center gap-2 md:hidden">
             <button
@@ -177,52 +164,68 @@ export function AppShell({
           </div>
         </div>
 
+        {showAdminNav ? (
+          <AdminSectionTabs
+            items={adminItems}
+            currentPath={currentPath}
+            pendingCommandes={pendingCommandes}
+            pendingReunion={pendingReunion}
+            pendingLancements={pendingLancements}
+          />
+        ) : null}
+
         {menuOpen && (
           <div
             id="app-mobile-menu"
             className="border-t border-stone-800 bg-stone-900 md:hidden"
           >
-            <nav className="mx-auto flex max-w-[1600px] flex-col gap-1 px-3 py-3">
-              {links.map((link) => {
-                const active = linkActive(link.href, currentPath);
-                return (
-                  <Link
-                    key={link.href}
-                    href={link.href}
-                    prefetch={link.href === "/admin/onedrive" ? false : undefined}
-                    className={`rounded-md px-3 py-3 text-base ${
-                      active
-                        ? "bg-amber-700 text-amber-50"
-                        : "text-stone-200 hover:bg-stone-800"
-                    }`}
+            {showAdminNav ? (
+              <>
+                <AdminMobileNav
+                  items={adminItems}
+                  currentPath={currentPath}
+                  pendingCommandes={pendingCommandes}
+                  pendingReunion={pendingReunion}
+                  pendingLancements={pendingLancements}
+                  onNavigate={() => setMenuOpen(false)}
+                />
+                <div className="px-3 pb-3">
+                  <button
+                    type="button"
+                    onClick={() => void logout()}
+                    className="w-full rounded-md px-3 py-3 text-left text-base text-stone-400 hover:bg-stone-800"
                   >
-                    {link.label}
-                    {link.href === "/demandes" && pendingCommandes > 0 ? (
-                      <span className="ml-2 rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-semibold text-stone-900">
-                        {pendingCommandes}
-                      </span>
-                    ) : null}
-                    {link.href === "/reunion" && pendingReunion > 0 ? (
-                      <span className="ml-2 rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-semibold text-stone-900">
-                        {pendingReunion}
-                      </span>
-                    ) : null}
-                    {link.href === "/" && pendingLancements > 0 ? (
-                      <span className="ml-2 rounded-full bg-orange-500 px-1.5 py-0.5 text-[10px] font-semibold text-stone-900">
-                        {pendingLancements}
-                      </span>
-                    ) : null}
-                  </Link>
-                );
-              })}
-              <button
-                type="button"
-                onClick={() => void logout()}
-                className="rounded-md px-3 py-3 text-left text-base text-stone-400 hover:bg-stone-800"
-              >
-                Déconnexion
-              </button>
-            </nav>
+                    Déconnexion
+                  </button>
+                </div>
+              </>
+            ) : (
+              <nav className="mx-auto flex max-w-[1600px] flex-col gap-1 px-3 py-3">
+                {salarieLinks.map((link) => {
+                  const active = linkActive(link.href, currentPath);
+                  return (
+                    <Link
+                      key={link.href}
+                      href={link.href}
+                      className={`rounded-md px-3 py-3 text-base ${
+                        active
+                          ? "bg-amber-700 text-amber-50"
+                          : "text-stone-200 hover:bg-stone-800"
+                      }`}
+                    >
+                      {link.label}
+                    </Link>
+                  );
+                })}
+                <button
+                  type="button"
+                  onClick={() => void logout()}
+                  className="rounded-md px-3 py-3 text-left text-base text-stone-400 hover:bg-stone-800"
+                >
+                  Déconnexion
+                </button>
+              </nav>
+            )}
           </div>
         )}
       </header>
