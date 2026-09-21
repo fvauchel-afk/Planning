@@ -13,6 +13,8 @@ import {
   type PlanResult,
   type SlotConflict,
 } from "@/lib/engine/planner";
+import { planSplitInsert } from "@/lib/engine/split-insert";
+import { previewPhaseEdits } from "@/lib/engine/resize-chantier";
 import { PlacementConflictPanel } from "@/components/PlacementConflictPanel";
 import {
   ensureChantierDatesOnCreate,
@@ -117,7 +119,8 @@ function emptyPhases(): PhaseForm[] {
 
 export function ChantierForm() {
   const router = useRouter();
-  const { snapshot, loading, createChantier, createSignalement } = usePlanning();
+  const { snapshot, loading, createChantier, createSignalement, createChantierWithPatches } =
+    usePlanning();
   const { session } = useSession();
   const [nomClient, setNomClient] = useState("");
   const [adresse, setAdresse] = useState("");
@@ -601,6 +604,49 @@ export function ChantierForm() {
     updatePhase(key, type, patch);
   }
 
+  async function splitInsertHere() {
+    const input = buildInput();
+    if (!input || !slotConflict) return;
+    const plan = planSplitInsert(snapshot, slotConflict);
+    if (!plan) {
+      setError("Impossible de couper le chantier en deux sur ce créneau.");
+      return;
+    }
+    if (plan.prioritaire || plan.inProgress) {
+      const who = plan.names.join(", ");
+      const ok = window.confirm(
+        plan.inProgress && plan.prioritaire
+          ? `« ${who} » est prioritaire et déjà en cours. Le couper en deux met ce chantier en pause. Continuer ?`
+          : plan.prioritaire
+            ? `« ${who} » est prioritaire. Le couper en deux quand même ?`
+            : `« ${who} » est déjà en cours. Le couper en deux le met en pause. Continuer ?`,
+      );
+      if (!ok) return;
+    }
+    const still = inspectManualSlotConflict(
+      previewPhaseEdits(snapshot, plan.edits),
+      input,
+    );
+    if (still) {
+      setError(still.message);
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      await createChantierWithPatches(
+        ensureChantierDatesOnCreate(snapshot, input),
+        plan.edits.patches ?? [],
+        plan.edits,
+      );
+      router.push("/");
+    } catch (err) {
+      setError(formatSaveError(err, "le chantier n’a pas été enregistré"));
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function markUrgentAndPlace() {
     setUrgent(true);
     setSlotConflict(null);
@@ -741,6 +787,7 @@ export function ChantierForm() {
             );
           }}
           onMarkUrgent={() => void markUrgentAndPlace()}
+          onSplitInsert={() => void splitInsertHere()}
         />
       )}
 
