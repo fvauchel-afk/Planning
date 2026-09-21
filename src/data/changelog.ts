@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-21-conflit-frise",
+    title: "Conflit : une frise avant / après",
+    items: [
+      "Quand un décalage est proposé, une petite frise montre où était le chantier et où il irait, à côté du nouveau / urgent.",
+      "Les listes de dates restent en dessous. On ne glisse pas encore les barres : Valider ou Ajuster, comme avant.",
+    ],
+  },
+  {
     id: "2026-09-21-blocs-choisis",
     title: "Planning : déplacer des blocs choisis sur du libre",
     items: [
