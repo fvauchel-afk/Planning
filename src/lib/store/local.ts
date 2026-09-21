@@ -37,7 +37,7 @@ import type {
 } from "@/lib/types";
 import { TYPES_PHASE } from "@/lib/types";
 import { normalizeFournitures, parseFournitures } from "@/lib/fournitures";
-import { parseStatutCommande } from "@/lib/commandes";
+import { parseStatutCommande, chantiersSansCommande } from "@/lib/commandes";
 import {
   phaseIdsStartedToday,
   withConfirmedPhases,
@@ -129,18 +129,45 @@ export function loadLocalSnapshot(): PlanningSnapshot {
       })),
       sousTraitants: parsed.sousTraitants ?? [],
     };
-    const started = phaseIdsStartedToday(loaded);
+    const filled = backfillLocalCommandes(loaded);
+    const started = phaseIdsStartedToday(filled);
     if (started.length) {
-      const confirmed = withConfirmedPhases(loaded, started);
+      const confirmed = withConfirmedPhases(filled, started);
       saveLocalSnapshot(confirmed);
       return confirmed;
     }
-    return loaded;
+    if (filled !== loaded) saveLocalSnapshot(filled);
+    return filled;
   } catch {
     const seed = createSeedSnapshot();
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(seed));
     return seed;
   }
+}
+
+function backfillLocalCommandes(snapshot: PlanningSnapshot): PlanningSnapshot {
+  const current = snapshot.commandes ?? [];
+  const missingIds = chantiersSansCommande(snapshot.chantiers, current);
+  if (missingIds.length === 0) return snapshot;
+  const byId = new Map(snapshot.chantiers.map((row) => [row.id, row]));
+  const extra: Commande[] = [];
+  for (const id of missingIds) {
+    const chantier = byId.get(id);
+    if (!chantier) continue;
+    extra.push({
+      id: newId(),
+      chantier_id: chantier.id,
+      created_by: null,
+      date_creation: new Date().toISOString(),
+      statut: "a_faire",
+      fournisseur: null,
+      fournitures: normalizeFournitures(chantier.fournitures ?? []),
+      onedrive_lien: chantier.lien_dossier_onedrive,
+      nom_client: chantier.nom_client,
+    });
+  }
+  if (extra.length === 0) return snapshot;
+  return { ...snapshot, commandes: [...extra, ...current] };
 }
 
 function saveLocalSnapshot(snapshot: PlanningSnapshot) {

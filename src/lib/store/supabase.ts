@@ -60,7 +60,7 @@ import type {
   SousTraitant,
 } from "@/lib/types";
 import { formatFournituresMessage, normalizeFournitures, parseFournitures } from "@/lib/fournitures";
-import { parseStatutCommande } from "@/lib/commandes";
+import { parseStatutCommande, chantiersSansCommande } from "@/lib/commandes";
 import {
   normalizeLignesBonCommande,
   parseLignesBonCommande,
@@ -365,6 +365,7 @@ async function fetchSupabaseSnapshotOnce(): Promise<PlanningSnapshot> {
       return parseSaisonForcee(row?.saison_forcee);
     })(),
   };
+  snapshot.commandes = await supabaseBackfillCommandes(snapshot);
   const started = phaseIdsStartedToday(snapshot);
   if (started.length) {
     try {
@@ -385,6 +386,37 @@ function optionalTable<T>(result: {
   if (!result.error) return result.data ?? [];
   if (isMissingSchemaError(result.error)) return [];
   throw wrapSupabaseError(result.error);
+}
+
+async function supabaseBackfillCommandes(
+  snapshot: PlanningSnapshot,
+): Promise<Commande[]> {
+  const current = snapshot.commandes ?? [];
+  const missingIds = chantiersSansCommande(snapshot.chantiers, current);
+  if (missingIds.length === 0) return current;
+  const byId = new Map(snapshot.chantiers.map((row) => [row.id, row]));
+  const rows = missingIds
+    .map((id) => byId.get(id))
+    .filter((row): row is Chantier => Boolean(row))
+    .map((chantier) => ({
+      chantier_id: chantier.id,
+      created_by: null,
+      statut: "a_faire" as const,
+      fournisseur: null,
+      fournitures: normalizeFournitures(chantier.fournitures ?? []),
+      onedrive_lien: chantier.lien_dossier_onedrive,
+      nom_client: chantier.nom_client,
+    }));
+  if (rows.length === 0) return current;
+  const supabase = createSupabaseServerClient();
+  const { data, error } = await supabase.from("commandes").insert(rows).select("*");
+  if (error) {
+    if (isMissingSchemaError(error)) return current;
+    logSupabaseError("commandes backfill", error);
+    return current;
+  }
+  const created = (data ?? []).map((row) => mapCommandeRow(row as Record<string, unknown>));
+  return [...created, ...current];
 }
 
 function mapCommandeRow(row: Record<string, unknown>): Commande {
