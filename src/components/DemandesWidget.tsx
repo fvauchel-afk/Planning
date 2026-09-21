@@ -10,7 +10,8 @@ import {
   syntheseMessageConge,
   validateDemandeCongeInput,
 } from "@/lib/demandes";
-import { PhotoPicker } from "@/components/PhotoPicker";
+import { PieceJointePicker } from "@/components/PieceJointePicker";
+import type { PieceJointe } from "@/lib/pieces-jointes";
 import {
   ABSENCE_LABELS,
   CATEGORIE_DEMANDE_LABELS,
@@ -25,7 +26,7 @@ export function DemandesWidget() {
   const [open, setOpen] = useState(false);
   const [categorie, setCategorie] = useState<CategorieDemande>("commande");
   const [message, setMessage] = useState("");
-  const [photos, setPhotos] = useState<string[]>([]);
+  const [pieces, setPieces] = useState<PieceJointe[]>([]);
   const today = toISODate(new Date());
   const [dateDebut, setDateDebut] = useState(today);
   const [dateFin, setDateFin] = useState(today);
@@ -94,6 +95,7 @@ export function DemandesWidget() {
             date_fin: dateFin,
             motif_precision: message.trim() || null,
           }),
+          photos: pieces,
         });
       } else {
         const text = message.trim();
@@ -105,12 +107,11 @@ export function DemandesWidget() {
           categorie,
           message: text,
           employe_id: employeeId,
-          photos:
-            categorie === "suggestion_entreprise" ? photos : undefined,
+          photos: pieces,
         });
       }
       setMessage("");
-      setPhotos([]);
+      setPieces([]);
       setSent(true);
     } catch (err) {
       setError(
@@ -252,17 +253,15 @@ export function DemandesWidget() {
                 />
               </label>
             )}
-            {categorie === "suggestion_entreprise" ? (
-              <PhotoPicker
-                photos={photos}
-                onChange={(next) => {
-                  setPhotos(next);
-                  setSent(false);
-                }}
-                disabled={sending}
-                help="Vous pouvez prendre une photo avec le téléphone, ou en choisir une dans la galerie."
-              />
-            ) : null}
+            <PieceJointePicker
+              pieces={pieces}
+              onChange={(next) => {
+                setPieces(next);
+                setSent(false);
+              }}
+              disabled={sending}
+              onError={setError}
+            />
             {error && <p className="text-sm text-red-700">{error}</p>}
             {sent && (
               <p className="text-sm text-emerald-700">

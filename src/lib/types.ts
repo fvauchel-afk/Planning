@@ -1,6 +1,7 @@
 import type { LigneFourniture } from "@/lib/fournitures";
 import type { LigneBonCommande } from "@/lib/bon-commande/lignes";
 import type { FinitionLaquage } from "@/lib/thermolaquage";
+import type { PieceJointe } from "@/lib/pieces-jointes";
 
 export const ROLES = [
   "administratif",
@@ -276,7 +277,7 @@ export type Demande = {
   motif_precision?: string | null;
   motif_refus?: string | null;
   absence_id?: string | null;
-  photos?: string[];
+  photos?: PieceJointe[];
 };
 
 export type NewDemandeInput = {
@@ -287,7 +288,7 @@ export type NewDemandeInput = {
   date_fin?: string;
   type_absence?: TypeAbsence;
   motif_precision?: string | null;
-  photos?: string[];
+  photos?: PieceJointe[];
 };
 
 export type DemandeUpdateInput = {
