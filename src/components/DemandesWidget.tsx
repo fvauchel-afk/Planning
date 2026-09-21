@@ -1,17 +1,18 @@
 "use client";
 
 import { FormEvent, useEffect, useRef, useState } from "react";
+import { canManageReunionDirection } from "@/lib/auth/reunion-access";
 import { useSession } from "@/lib/auth/session-context";
 import { usePlanning } from "@/lib/planning-context";
 import { toISODate } from "@/lib/dates";
 import {
+  categoriesDemandeHorsReunion,
   syntheseMessageConge,
   validateDemandeCongeInput,
 } from "@/lib/demandes";
 import { PhotoPicker } from "@/components/PhotoPicker";
 import {
   ABSENCE_LABELS,
-  CATEGORIES_DEMANDE,
   CATEGORIE_DEMANDE_LABELS,
   TYPES_ABSENCE,
   type CategorieDemande,
@@ -49,6 +50,11 @@ export function DemandesWidget() {
 
   if (!session) return null;
   const employeeId = session.employeeId;
+  const canReunion = Boolean(session.canManageReunionDirection) ||
+    canManageReunionDirection(session.nom);
+  const categories = canReunion
+    ? (["commande", "suggestion_site", "suggestion_entreprise", "reunion_direction", "conge"] as const)
+    : categoriesDemandeHorsReunion();
   const isConge = categorie === "conge";
   const canSend = isConge
     ? Boolean(dateDebut && dateFin && typeAbsence) &&
@@ -61,6 +67,10 @@ export function DemandesWidget() {
     setError(null);
     setSent(false);
     try {
+      if (categorie === "reunion_direction" && !canReunion) {
+        setError("Cette catégorie est réservée à la direction.");
+        return;
+      }
       if (categorie === "conge") {
         const input = {
           categorie: "conge" as const,
@@ -133,7 +143,7 @@ export function DemandesWidget() {
             </button>
           </div>
           <div className="flex flex-col gap-1 border-b border-stone-200 p-2">
-            {CATEGORIES_DEMANDE.map((id) => (
+            {categories.map((id) => (
               <button
                 key={id}
                 type="button"
@@ -234,7 +244,9 @@ export function DemandesWidget() {
                       ? "Matériel, outillage… (reçu par Alexis et Mika)"
                       : categorie === "suggestion_entreprise"
                         ? "Organisation, matériel, process atelier…"
-                        : "Une idée pour améliorer le site…"
+                        : categorie === "reunion_direction"
+                          ? "Sujet à traiter en réunion de direction…"
+                          : "Une idée pour améliorer le site…"
                   }
                   className="w-full resize-y rounded-lg border border-stone-300 px-3 py-2 text-sm"
                 />
@@ -256,7 +268,9 @@ export function DemandesWidget() {
               <p className="text-sm text-emerald-700">
                 {isConge
                   ? "Demande de congé envoyée. Suivi dans Mes congés."
-                  : "Message envoyé. Merci."}
+                  : categorie === "reunion_direction"
+                    ? "Sujet ajouté. Il apparaît dans l’onglet Réunion."
+                    : "Message envoyé. Merci."}
               </p>
             )}
             <button

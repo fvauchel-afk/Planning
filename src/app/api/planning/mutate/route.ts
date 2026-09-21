@@ -57,6 +57,7 @@ import type {
 import { CATEGORIES_DEMANDE, STATUTS_DEMANDE } from "@/lib/types";
 import { canReceiveCommandes } from "@/lib/auth/commande-access";
 import { canManageAdministratifIdle } from "@/lib/auth/administratif-idle-access";
+import { canManageReunionDirection } from "@/lib/auth/reunion-access";
 import { applyAdministratifIdleChoice } from "@/lib/engine/administratif-idle-apply";
 import {
   sendCommandePush,
@@ -65,6 +66,7 @@ import {
 } from "@/lib/push/send";
 import {
   demandePeutEtreSupprimee,
+  isReunionDirectionDemande,
   syntheseMessageConge,
   validateDemandeCongeInput,
 } from "@/lib/demandes";
@@ -376,6 +378,14 @@ export async function POST(request: NextRequest) {
           { status: 400 },
         );
       }
+      if (
+        body.input.categorie === "reunion_direction" &&
+        !canManageReunionDirection(session.nom)
+      ) {
+        return forbidden(
+          "Seuls Jonathan et Mika déposent un sujet de réunion de direction.",
+        );
+      }
       let message = body.input.message?.trim() ?? "";
       if (body.input.categorie === "conge") {
         const invalid = validateDemandeCongeInput(body.input);
@@ -446,6 +456,13 @@ export async function POST(request: NextRequest) {
       const current = await fetchSupabaseSnapshot();
       const demande = current.demandes.find((row) => row.id === body.input.id);
       if (
+        demande &&
+        isReunionDirectionDemande(demande) &&
+        !canManageReunionDirection(session.nom)
+      ) {
+        return forbidden("Seuls Jonathan et Mika gèrent les sujets de réunion.");
+      }
+      if (
         demande?.categorie === "commande" &&
         !canReceiveCommandes(session.nom)
       ) {
@@ -498,6 +515,13 @@ export async function POST(request: NextRequest) {
       const demande = current.demandes.find((row) => row.id === body.id);
       if (!demande) {
         return NextResponse.json({ error: "Demande introuvable." }, { status: 404 });
+      }
+      if (
+        demande &&
+        isReunionDirectionDemande(demande) &&
+        !canManageReunionDirection(session.nom)
+      ) {
+        return forbidden("Seuls Jonathan et Mika gèrent les sujets de réunion.");
       }
       if (!demandePeutEtreSupprimee(demande)) {
         return NextResponse.json(

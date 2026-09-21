@@ -6,9 +6,8 @@ import { useSession } from "@/lib/auth/session-context";
 import { markCommandesSeen } from "@/components/CommandeAlert";
 import { DemandeCongeAdmin, DemandeCongeDetails } from "@/components/DemandeCongeAdmin";
 import { COMMANDE_MAIL_TEMPLATE_CHOICES } from "@/lib/mail/commande-templates";
-import { demandeEstOuverte, demandePeutEtreSupprimee } from "@/lib/demandes";
+import { demandeEstOuverte, demandePeutEtreSupprimee, categoriesDemandeHorsReunion, isReunionDirectionDemande } from "@/lib/demandes";
 import {
-  CATEGORIES_DEMANDE,
   CATEGORIE_DEMANDE_LABELS,
   STATUT_DEMANDE_LABELS,
   type CategorieDemande,
@@ -84,17 +83,18 @@ export function DemandesPage() {
   );
 
   const categoryTabs = useMemo(() => {
-    if (!canMail) return [...CATEGORIES_DEMANDE];
+    const base = categoriesDemandeHorsReunion();
+    if (!canMail) return base;
     return [
       "commande" as const,
-      ...CATEGORIES_DEMANDE.filter((id) => id !== "commande"),
+      ...base.filter((id) => id !== "commande"),
     ];
   }, [canMail]);
 
   const rows = useMemo(() => {
-    const list = [...(snapshot.demandes ?? [])].filter((row) =>
-      archives ? row.archivee : !row.archivee,
-    );
+    const list = [...(snapshot.demandes ?? [])]
+      .filter((row) => !isReunionDirectionDemande(row))
+      .filter((row) => (archives ? row.archivee : !row.archivee));
     list.sort((left, right) => {
       if (canMail && activeFiltre === "tout") {
         const leftNew =

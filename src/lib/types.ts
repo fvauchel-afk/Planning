@@ -235,6 +235,7 @@ export const CATEGORIES_DEMANDE = [
   "conge",
   "suggestion_site",
   "suggestion_entreprise",
+  "reunion_direction",
 ] as const;
 export type CategorieDemande = (typeof CATEGORIES_DEMANDE)[number];
 
@@ -243,6 +244,7 @@ export const CATEGORIE_DEMANDE_LABELS: Record<CategorieDemande, string> = {
   conge: "Demande de congé",
   suggestion_site: "Suggestion amélioration site",
   suggestion_entreprise: "Suggestion amélioration entreprise",
+  reunion_direction: "Sujet Réunion Direction",
 };
 
 export const STATUTS_DEMANDE = [
