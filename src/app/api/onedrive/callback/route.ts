@@ -8,6 +8,7 @@ import {
   requestIsHttps,
   verifyOauthState,
 } from "@/lib/onedrive/oauth-state";
+import { scheduleOnedriveCatchUp } from "@/lib/onedrive/catch-up";
 import { exchangeAuthorizationCode } from "@/lib/onedrive/tokens";
 
 const ADMIN = "/admin/onedrive";
@@ -61,6 +62,7 @@ export async function GET(request: NextRequest) {
     } catch {
       // Compte connecté même si /me échoue.
     }
+    scheduleOnedriveCatchUp();
     const response = NextResponse.redirect(adminUrl(returnOrigin, "?connected=1"));
     clearOauthStateCookie(response, secure);
     return response;

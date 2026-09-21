@@ -11,13 +11,26 @@ type Status = {
   rootCached?: boolean;
 };
 
+type CatchUp = {
+  folders: number;
+  devis: number;
+  remainingFolders: number;
+  remainingDevis: number;
+  errors: string[];
+  skipped?: boolean;
+};
+
 export function OnedriveAdminPage() {
   const [status, setStatus] = useState<Status | null>(null);
   const [queryError, setQueryError] = useState<string | null>(null);
+  const [justConnected, setJustConnected] = useState(false);
+  const [catchUp, setCatchUp] = useState<CatchUp | null>(null);
+  const [catchUpBusy, setCatchUpBusy] = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     setQueryError(params.get("error"));
+    setJustConnected(params.get("connected") === "1");
     fetch("/api/onedrive/status", { cache: "no-store", redirect: "manual" })
       .then((res) => res.json())
       .then((json: Status) => setStatus(json))
@@ -29,6 +42,67 @@ export function OnedriveAdminPage() {
         }),
       );
   }, []);
+
+  useEffect(() => {
+    if (!justConnected || !status?.connected) return;
+    let cancelled = false;
+    setCatchUpBusy(true);
+    const totals: CatchUp = {
+      folders: 0,
+      devis: 0,
+      remainingFolders: 0,
+      remainingDevis: 0,
+      errors: [],
+    };
+    void (async () => {
+      for (let step = 0; step < 8; step += 1) {
+        const res = await fetch("/api/onedrive/catch-up", {
+          method: "POST",
+          cache: "no-store",
+          redirect: "manual",
+        });
+        const json = (await res.json().catch(() => ({}))) as CatchUp;
+        totals.folders += Number(json.folders) || 0;
+        totals.devis += Number(json.devis) || 0;
+        totals.remainingFolders = Number(json.remainingFolders) || 0;
+        totals.remainingDevis = Number(json.remainingDevis) || 0;
+        totals.skipped = json.skipped;
+        for (const message of json.errors ?? []) {
+          if (!totals.errors.includes(message)) totals.errors.push(message);
+        }
+        if (cancelled) return;
+        setCatchUp({ ...totals, errors: totals.errors.slice(0, 8) });
+        if (json.skipped) break;
+        if (
+          (Number(json.folders) || 0) === 0 &&
+          (Number(json.devis) || 0) === 0
+        ) {
+          break;
+        }
+        if (
+          totals.remainingFolders === 0 &&
+          totals.remainingDevis === 0
+        ) {
+          break;
+        }
+      }
+      if (!cancelled) setCatchUpBusy(false);
+    })().catch(() => {
+      if (!cancelled) {
+        setCatchUpBusy(false);
+        setCatchUp({
+          folders: 0,
+          devis: 0,
+          remainingFolders: 0,
+          remainingDevis: 0,
+          errors: ["Rattrapage OneDrive impossible."],
+        });
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [justConnected, status?.connected]);
 
   const connected = Boolean(status?.connected);
   const expired = Boolean(status?.expired);
@@ -93,6 +167,40 @@ export function OnedriveAdminPage() {
           )}
         </div>
       )}
+
+      {justConnected && status?.connected ? (
+        <div className="rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-950">
+          {catchUpBusy && !catchUp ? (
+            <p>Rattrapage des dossiers et devis manquants…</p>
+          ) : catchUpBusy ? (
+            <p>
+              Rattrapage en cours : {catchUp?.folders ?? 0} dossier
+              {(catchUp?.folders ?? 0) > 1 ? "s" : ""}, {catchUp?.devis ?? 0}{" "}
+              devis.
+            </p>
+          ) : (
+            <p>
+              Rattrapage terminé : {catchUp?.folders ?? 0} dossier
+              {(catchUp?.folders ?? 0) > 1 ? "s" : ""} créé
+              {(catchUp?.folders ?? 0) > 1 ? "s" : ""} ou lié
+              {(catchUp?.folders ?? 0) > 1 ? "s" : ""}, {catchUp?.devis ?? 0}{" "}
+              devis copié
+              {(catchUp?.devis ?? 0) > 1 ? "s" : ""}.
+              {(catchUp?.remainingFolders ?? 0) > 0 ||
+              (catchUp?.remainingDevis ?? 0) > 0
+                ? " Il en reste : recliquez « Connecter OneDrive » pour continuer."
+                : ""}
+            </p>
+          )}
+          {catchUp?.errors?.length ? (
+            <ul className="mt-2 list-disc space-y-1 pl-5 text-amber-950">
+              {catchUp.errors.map((message) => (
+                <li key={message}>{message}</li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
 
       {status?.error && !status.needsMigration && !connected && !expired && (
         <p className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">

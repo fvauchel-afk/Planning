@@ -469,6 +469,20 @@ export async function createClientFolder(nomClient: string): Promise<string> {
   return link;
 }
 
+/** Trouve le dossier client s’il existe déjà, sinon le crée, puis renvoie le lien. */
+export async function ensureClientFolderShareUrl(nomClient: string): Promise<string> {
+  const token = await getValidAccessToken();
+  const folder = await ensureChildFolder(nomClient);
+  const item = await driveItemById(token, folder.itemId);
+  const link =
+    (await createShareLink(token, folder.driveId, folder.itemId)) ||
+    item?.webUrl;
+  if (!link) {
+    throw new Error("Dossier trouvé ou créé mais aucun lien de partage n’a été renvoyé.");
+  }
+  return link;
+}
+
 export async function ensureChildFolder(
   name: string,
   parentItemId?: string,

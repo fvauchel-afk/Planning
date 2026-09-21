@@ -1,5 +1,44 @@
 import "server-only";
+import {
+  chantierNeedsOnedriveFolder,
+  devisNeedsOnedriveArchive,
+} from "@/lib/onedrive/catch-up-filter";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+
+export async function listChantiersMissingOnedriveLink(): Promise<
+  { id: string; nom_client: string }[]
+> {
+  const supabase = createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("chantiers")
+    .select("id, nom_client, lien_dossier_onedrive")
+    .order("date_creation", { ascending: false });
+  if (error) throw error;
+  return ((data ?? []) as {
+    id?: string;
+    nom_client?: string;
+    lien_dossier_onedrive?: string | null;
+  }[])
+    .filter((row) => chantierNeedsOnedriveFolder(row.lien_dossier_onedrive))
+    .map((row) => ({
+      id: String(row.id ?? ""),
+      nom_client: String(row.nom_client ?? "").trim(),
+    }))
+    .filter((row) => row.id && row.nom_client);
+}
+
+export async function listDevisMissingOnedriveFichier(): Promise<{ id: string }[]> {
+  const supabase = createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("devis")
+    .select("id, onedrive_fichier")
+    .order("numero", { ascending: false });
+  if (error) throw error;
+  return ((data ?? []) as { id?: string; onedrive_fichier?: string | null }[])
+    .filter((row) => devisNeedsOnedriveArchive(row.onedrive_fichier))
+    .map((row) => ({ id: String(row.id ?? "") }))
+    .filter((row) => row.id);
+}
 
 export async function updateChantierOnedriveLink(
   chantierId: string,
