@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { devisApi } from "@/lib/devis/client-api";
+import { FormNotice } from "@/components/FormNotice";
 import { formatMontantFr, totauxDevis } from "@/lib/devis/lignes";
 import { formatIsoFr } from "@/lib/dates";
 import {
@@ -81,7 +82,7 @@ export function ClientFiche({ clientId }: { clientId: string }) {
   if (!client) {
     return (
       <section className="space-y-3">
-        <p className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{error}</p>
+        <FormNotice>{error}</FormNotice>
         <Link href="/devis/clients" className="underline">
           Retour
         </Link>
@@ -116,9 +117,7 @@ export function ClientFiche({ clientId }: { clientId: string }) {
           Nouveau devis
         </Link>
       </div>
-      {error ? (
-        <p className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{error}</p>
-      ) : null}
+      {error ? <FormNotice>{error}</FormNotice> : null}
 
       <div className="rounded-lg border-2 border-amber-400 bg-amber-50 p-4">
         <p className="text-sm font-semibold text-amber-950">Commentaires internes</p>

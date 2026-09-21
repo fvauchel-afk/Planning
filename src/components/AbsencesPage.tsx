@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { AbsenceImpactEditor } from "@/components/AbsenceImpactEditor";
+import { FormNotice } from "@/components/FormNotice";
 import { ConflictModal } from "@/components/ConflictModal";
 import { formatLongDate } from "@/lib/dates";
 import { compareEmployeesByOrdre } from "@/lib/display-order";
@@ -596,7 +597,7 @@ export function AbsencesPage() {
         <h3 className="font-medium">
           {editingId ? "Modifier l’absence" : "Ajouter une absence"}
         </h3>
-        {error && !reviewPayload && <p className="text-sm text-red-700">{error}</p>}
+        {error && !reviewPayload ? <FormNotice>{error}</FormNotice> : null}
         <label className="block text-sm">
           <span className="mb-1 block">Employé</span>
           <select
@@ -760,7 +761,7 @@ export function AbsencesPage() {
                 onChange={setChoices}
               />
             </div>
-            {error && <p className="mt-3 text-sm text-red-700">{error}</p>}
+            {error ? <FormNotice className="mt-3">{error}</FormNotice> : null}
             <div className="mt-4 flex flex-wrap gap-2">
               <button
                 type="button"

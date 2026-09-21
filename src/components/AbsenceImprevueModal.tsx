@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { ConflictModal } from "@/components/ConflictModal";
+import { FormNotice } from "@/components/FormNotice";
 import { AbsenceImpactEditor } from "@/components/AbsenceImpactEditor";
 import {
   candidatesForChoices,
@@ -166,7 +167,7 @@ export function AbsenceImprevueModal({
               Par défaut : aujourd’hui uniquement. Élargissez les dates si
               l’absence dure plusieurs jours.
             </p>
-            {error && <p className="text-sm text-red-700">{error}</p>}
+            {error ? <FormNotice>{error}</FormNotice> : null}
             <div className="flex gap-2 pt-2">
               <button
                 type="button"
@@ -217,7 +218,7 @@ export function AbsenceImprevueModal({
                 onChange={setChoices}
               />
             )}
-            {error && <p className="text-sm text-red-700">{error}</p>}
+            {error ? <FormNotice>{error}</FormNotice> : null}
             <div className="flex flex-wrap gap-2 pt-2">
               <button
                 type="button"

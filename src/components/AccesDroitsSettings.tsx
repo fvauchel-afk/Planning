@@ -4,6 +4,7 @@ import { useState } from "react";
 import { compareEmployeesByOrdre } from "@/lib/display-order";
 import { usePlanning } from "@/lib/planning-context";
 import { formatSaveError } from "@/lib/supabase/errors";
+import { FormNotice } from "@/components/FormNotice";
 
 export function AccesDroitsSettings() {
   const { snapshot, patchEmployee } = usePlanning();
@@ -33,11 +34,7 @@ export function AccesDroitsSettings() {
           règlent dans Employés.
         </p>
       </div>
-      {error ? (
-        <p className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
-          {error}
-        </p>
-      ) : null}
+      {error ? <FormNotice>{error}</FormNotice> : null}
       <div className="overflow-hidden rounded-lg border border-stone-200 bg-white">
         <table className="min-w-full text-sm">
           <thead className="bg-stone-100 text-left">

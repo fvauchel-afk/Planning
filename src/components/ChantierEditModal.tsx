@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { BonCommandeModal } from "@/components/BonCommandeModal";
+import { FormNotice } from "@/components/FormNotice";
 import { PlanLeoChantierLink } from "@/components/PlanLeoChantierLink";
 import { SousTraitantSelect } from "@/components/SousTraitantSelect";
 import { FournituresEditor } from "@/components/FournituresEditor";
@@ -1466,7 +1467,7 @@ export function ChantierEditModal({
             )}
           </fieldset>
         </div>
-        {error && <p className="mt-3 text-sm text-red-700">{error}</p>}
+        {error ? <FormNotice className="mt-3">{error}</FormNotice> : null}
         {canGenerateBonCommande(snapshot, chantier.id) ? (
           <button
             type="button"

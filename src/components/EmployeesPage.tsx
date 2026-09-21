@@ -18,6 +18,7 @@ import { usePlanning } from "@/lib/planning-context";
 import { useDebouncedPatch } from "@/lib/form-live";
 import { formatSaveError } from "@/lib/supabase/errors";
 import { SaisonActiveBadge, saisonActiveCopy } from "@/components/SaisonActiveBadge";
+import { FormNotice } from "@/components/FormNotice";
 import {
   JOURS_OUVRES,
   JOUR_OUVRE_LABELS,
@@ -561,15 +562,11 @@ export function EmployeesPage() {
           <h3 className="font-medium">
             {editing ? "Modifier un employé" : "Ajouter un employé"}
           </h3>
-          {error && (
-            <p
-              ref={errorRef}
-              role="alert"
-              className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm font-medium text-red-800"
-            >
+          {error ? (
+            <FormNotice ref={errorRef} className="font-medium">
               {error}
-            </p>
-          )}
+            </FormNotice>
+          ) : null}
           <label className="block text-sm">
             <span className="mb-1 block">Nom</span>
             <input
@@ -692,11 +689,6 @@ export function EmployeesPage() {
             />
           </label>
           <div className="flex flex-col gap-2">
-            {error && (
-              <p role="alert" className="text-sm font-medium text-red-800">
-                {error}
-              </p>
-            )}
             <div className="flex gap-2">
               <button
                 type="submit"

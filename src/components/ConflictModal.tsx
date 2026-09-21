@@ -1,6 +1,7 @@
 "use client";
 
 import { PHASE_LABELS, PRIORITE_LABELS } from "@/lib/types";
+import { FormNotice } from "@/components/FormNotice";
 import { formatLongDate } from "@/lib/dates";
 import type { Displacement, PlannedPhase } from "@/lib/engine/planner";
 
@@ -89,7 +90,7 @@ export function ConflictModal({
         </div>
         )}
 
-        {error && <p className="mt-4 text-sm text-red-700">{error}</p>}
+        {error ? <FormNotice className="mt-4">{error}</FormNotice> : null}
 
         <div className="mt-5 flex flex-wrap gap-2">
           <button

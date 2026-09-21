@@ -17,6 +17,7 @@ import {
   type CalendarAssignment,
 } from "@/lib/calendar";
 import { AbsenceImprevueModal } from "@/components/AbsenceImprevueModal";
+import { FormNotice } from "@/components/FormNotice";
 import { ChantierEditModal } from "@/components/ChantierEditModal";
 import { LaunchValidateButton } from "@/components/LaunchValidateButton";
 import { PhaseFicheModal } from "@/components/PhaseFicheModal";
@@ -488,16 +489,8 @@ export function CalendarBoard() {
         </div>
       </div>
 
-      {dragError && (
-        <p className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
-          {dragError}
-        </p>
-      )}
-      {error && (
-        <p className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
-          {error}
-        </p>
-      )}
+      {dragError ? <FormNotice>{dragError}</FormNotice> : null}
+      {error ? <FormNotice>{error}</FormNotice> : null}
       {loading ? (
         <p className="text-sm text-stone-500">Chargement du planning…</p>
       ) : (

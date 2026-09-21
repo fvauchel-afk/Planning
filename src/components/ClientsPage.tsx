@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { ClientFormFields, EMPTY_CLIENT_CREATE } from "@/components/ClientFormFields";
+import { FormNotice } from "@/components/FormNotice";
 import { devisApi } from "@/lib/devis/client-api";
 import { TYPE_CLIENT_LABELS, type ClientCreateInput, type ClientFiche } from "@/lib/devis/types";
 
@@ -88,9 +89,7 @@ export function ClientsPage() {
           </button>
         </div>
       </div>
-      {error ? (
-        <p className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{error}</p>
-      ) : null}
+      {error ? <FormNotice>{error}</FormNotice> : null}
       {creating ? (
         <div className="grid gap-2 rounded-lg border border-stone-200 bg-white p-4 md:grid-cols-2">
           <ClientFormFields value={draft} onChange={setDraft} fieldClass={FIELD} />

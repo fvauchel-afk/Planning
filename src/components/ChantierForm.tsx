@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { ConflictModal } from "@/components/ConflictModal";
+import { FormNotice } from "@/components/FormNotice";
 import { compareEmployeesByOrdre } from "@/lib/display-order";
 import { employeeAvailableOnRange, rangeEndFromHours } from "@/lib/engine/hours";
 import { PhaseDureeFields } from "@/components/DureeJoursSelect";
@@ -690,16 +691,8 @@ export function ChantierForm() {
         ) : null}
       </div>
 
-      {error && (
-        <p className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
-          {error}
-        </p>
-      )}
-      {info && (
-        <p className="rounded border border-stone-200 bg-stone-50 px-3 py-2 text-sm text-stone-700">
-          {info}
-        </p>
-      )}
+      {error ? <FormNotice>{error}</FormNotice> : null}
+      {info ? <FormNotice tone="info">{info}</FormNotice> : null}
       {slotConflict && (
         <PlacementConflictPanel
           key={`${slotConflict.elementIndex}-${slotConflict.type_phase}-${slotConflict.date_debut}`}

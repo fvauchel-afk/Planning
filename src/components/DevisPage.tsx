@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { devisApi } from "@/lib/devis/client-api";
+import { FormNotice } from "@/components/FormNotice";
 import { formatMontantFr, totauxDevis } from "@/lib/devis/lignes";
 import { formatIsoFr } from "@/lib/dates";
 import {
@@ -69,9 +70,7 @@ export function DevisPage() {
           </Link>
         </div>
       </div>
-      {error ? (
-        <p className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{error}</p>
-      ) : null}
+      {error ? <FormNotice>{error}</FormNotice> : null}
       <div className="flex flex-wrap gap-2">
         <input
           value={q}

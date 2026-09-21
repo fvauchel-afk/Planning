@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { usePlanning } from "@/lib/planning-context";
 import { useSession } from "@/lib/auth/session-context";
 import { markCommandesSeen } from "@/components/CommandeAlert";
+import { FormNotice } from "@/components/FormNotice";
 import { DemandeCongeAdmin, DemandeCongeDetails } from "@/components/DemandeCongeAdmin";
 import { PiecesJointesListe } from "@/components/PiecesJointesListe";
 import { COMMANDE_MAIL_TEMPLATE_CHOICES } from "@/lib/mail/commande-templates";
@@ -246,11 +247,7 @@ export function DemandesPage() {
           </button>
         ))}
       </div>
-      {error ? (
-        <p className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
-          {error}
-        </p>
-      ) : null}
+      {error ? <FormNotice>{error}</FormNotice> : null}
       {mailNote ? (
         <p className="rounded border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
           {mailNote}

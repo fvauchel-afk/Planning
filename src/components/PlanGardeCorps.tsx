@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactElement } from "re
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { PlanOuvrageTabs } from "@/components/PlanOuvrageTabs";
+import { FormNotice } from "@/components/FormNotice";
 import { matchByClientNom } from "@/lib/plan-leo/match";
 import type { PlanLeo } from "@/lib/plan-leo/types";
 import { usePlanning } from "@/lib/planning-context";
@@ -297,9 +298,7 @@ export function PlanGardeCorps() {
           {saveBusy ? "Enregistrement…" : "Enregistrer sur OneDrive"}
         </button>
       </div>
-      {saveErr ? (
-        <p className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{saveErr}</p>
-      ) : null}
+      {saveErr ? <FormNotice>{saveErr}</FormNotice> : null}
       {saveMsg ? (
         <p className="rounded border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">{saveMsg}</p>
       ) : null}

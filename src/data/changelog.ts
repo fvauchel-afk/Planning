@@ -11,6 +11,13 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-21-bandeau-erreur-sticky",
+    title: "Message d’erreur toujours visible",
+    items: [
+      "Sur Nouveau chantier, Modifier, Absences, Employés et les autres formulaires, le bandeau rouge (ou gris d’info) reste collé en bas de l’écran tant que le message est là, même si vous êtes tout en bas de la page.",
+    ],
+  },
+  {
     id: "2026-09-21-saisons-jj-mm",
     title: "Saisons : jour et mois seulement",
     items: [

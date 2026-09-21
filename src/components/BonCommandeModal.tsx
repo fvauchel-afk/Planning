@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { BonCommandeLignesEditor } from "@/components/BonCommandeLignesEditor";
+import { FormNotice } from "@/components/FormNotice";
 import { PhotoPicker } from "@/components/PhotoPicker";
 import { PdfPreview } from "@/components/PdfPreview";
 import {
@@ -225,9 +226,7 @@ export function BonCommandeModal({
                 }}
               />
             </div>
-            {error ? (
-              <p className="mt-3 text-sm text-red-700">{error}</p>
-            ) : null}
+            {error ? <FormNotice className="mt-3">{error}</FormNotice> : null}
             {preview ? (
               <div className="mt-4 space-y-2">
                 <p className="text-sm font-medium text-stone-800">

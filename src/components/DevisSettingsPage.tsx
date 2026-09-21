@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { devisApi } from "@/lib/devis/client-api";
+import { FormNotice } from "@/components/FormNotice";
 import { MAIL_VARIABLES_AIDE } from "@/lib/devis/defaults";
 import type { DevisReglages } from "@/lib/devis/types";
 
@@ -45,7 +46,7 @@ export function DevisSettingsPage() {
     return <p className="text-sm text-stone-500">Chargement…</p>;
   }
   if (!form) {
-    return <p className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{error}</p>;
+    return <FormNotice>{error}</FormNotice>;
   }
 
   return (
@@ -65,9 +66,7 @@ export function DevisSettingsPage() {
           Modèle d’e-mail et conditions d’acceptation. {MAIL_VARIABLES_AIDE}
         </p>
       </div>
-      {error ? (
-        <p className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{error}</p>
-      ) : null}
+      {error ? <FormNotice>{error}</FormNotice> : null}
       {ok ? (
         <p className="rounded border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm">{ok}</p>
       ) : null}
