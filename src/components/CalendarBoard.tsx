@@ -50,6 +50,7 @@ import { halfFromLabel } from "@/lib/engine/slots";
 import { usePlanning } from "@/lib/planning-context";
 import { useFormDraftReopen } from "@/lib/form-draft";
 import { useEmployeeRowReorder } from "@/lib/use-employee-row-reorder";
+import { usePlanningSelection } from "@/lib/use-planning-selection";
 import { useSession } from "@/lib/auth/session-context";
 import { PRIORITE_LABELS, TRANSPORT_ROW_ID, type Chantier, type Employee } from "@/lib/types";
 import { WelcomeBanner } from "@/components/WelcomeBanner";
@@ -156,6 +157,9 @@ export function CalendarBoard() {
         }
       },
     });
+
+  const rowIds = useMemo(() => rows.map((row) => row.id), [rows]);
+  const selection = usePlanningSelection(rowIds);
 
   const chantiersInView = useMemo(() => {
     if (loading) return [];
@@ -498,6 +502,27 @@ export function CalendarBoard() {
           {error}
         </p>
       )}
+      {selection.count > 0 ? (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-950">
+          <span>
+            {selection.count} case{selection.count > 1 ? "s" : ""} sélectionnée
+            {selection.count > 1 ? "s" : ""} (vides ou occupées). Clic-glisser
+            ou Ctrl+clic ; Maj+clic pour étendre ; Échap pour annuler.
+          </span>
+          <button
+            type="button"
+            className="rounded border border-sky-300 bg-white px-2 py-1 text-xs"
+            onClick={() => selection.clear()}
+          >
+            Tout désélectionner
+          </button>
+        </div>
+      ) : (
+        <p className="text-xs text-stone-500">
+          Pour choisir plusieurs cases : clic-glisser sur la grille, ou
+          Ctrl+clic (plusieurs blocs), ou Maj+clic (plage).
+        </p>
+      )}
       {loading ? (
         <p className="text-sm text-stone-500">Chargement du planning…</p>
       ) : (
@@ -737,8 +762,10 @@ export function CalendarBoard() {
                         dragScope === "phase"
                           ? cellAssignments
                           : uniqueAssignmentsByChantier(cellAssignments);
+                      const cellId = { rowId: row.id, date: iso, half };
                       const cellKey = `${row.id}|${iso}|${half}`;
                       const dropTarget = dragPreview?.cells.has(cellKey);
+                      const selected = selection.isSelected(cellId);
                       const focused =
                         focusCell?.rowId === row.id &&
                         focusCell.date === iso &&
@@ -747,8 +774,26 @@ export function CalendarBoard() {
                       <td
                         key={`${row.id}-${iso}-${slot}`}
                         data-plan-cell={cellKey}
+                        onPointerDown={(event) => {
+                          if (event.button !== 0) return;
+                          const target = event.target as HTMLElement;
+                          if (target.closest("button")) return;
+                          event.preventDefault();
+                          event.currentTarget.setPointerCapture(event.pointerId);
+                          selection.beginPaint(event, cellId);
+                        }}
+                        onPointerMove={(event) => {
+                          if (!selection.painting()) return;
+                          selection.extendPaint(event.clientX, event.clientY);
+                        }}
+                        onPointerUp={(event) => selection.endPaint(event.pointerId)}
+                        onPointerCancel={(event) =>
+                          selection.endPaint(event.pointerId)
+                        }
                         className={`h-16 border-b border-l border-stone-200 p-1 ${
-                          focused
+                          selected
+                            ? "bg-sky-100 ring-2 ring-inset ring-sky-500"
+                            : focused
                             ? "bg-amber-200 ring-2 ring-inset ring-amber-600"
                             : dropTarget && dragPreview?.blocked
                               ? "bg-red-200 ring-2 ring-inset ring-red-500"
@@ -779,6 +824,12 @@ export function CalendarBoard() {
                               showLivraisonAddress={row.id === TRANSPORT_ROW_ID}
                               allowDrag={row.id !== TRANSPORT_ROW_ID}
                               clockLabel={assignmentClockLabel(snapshot, assignment)}
+                              selected={selected}
+                              onSelectCell={(event) => {
+                                event.preventDefault();
+                                event.currentTarget.setPointerCapture(event.pointerId);
+                                selection.beginPaint(event, cellId);
+                              }}
 
                               onPointerDragStart={(event) => {
                                 beginChipDrag(
@@ -791,6 +842,10 @@ export function CalendarBoard() {
                                 );
                               }}
                               onPointerDragMove={(event) => {
+                                if (selection.painting()) {
+                                  selection.extendPaint(event.clientX, event.clientY);
+                                  return;
+                                }
                                 const drag = dragRef.current;
                                 if (!drag || drag.pointerId !== event.pointerId) {
                                   return;
@@ -807,6 +862,10 @@ export function CalendarBoard() {
                                 updateDragPreview(event.clientX, event.clientY);
                               }}
                               onPointerDragEnd={(event, phaseId) => {
+                                selection.endPaint(event.pointerId);
+                                if (event.ctrlKey || event.metaKey || event.shiftKey) {
+                                  return;
+                                }
                                 if (!dragRef.current) {
                                   setSelectedPhaseId(phaseId);
                                   return;
@@ -1237,6 +1296,8 @@ function PhaseChipButton({
   showLivraisonAddress,
   allowDrag = true,
   clockLabel,
+  selected = false,
+  onSelectCell,
   onPointerDragStart,
   onPointerDragMove,
   onPointerDragEnd,
@@ -1247,6 +1308,8 @@ function PhaseChipButton({
   showLivraisonAddress?: boolean;
   allowDrag?: boolean;
   clockLabel?: string | null;
+  selected?: boolean;
+  onSelectCell?: (event: PointerEvent<HTMLButtonElement>) => void;
   onPointerDragStart: (event: PointerEvent<HTMLButtonElement>) => void;
   onPointerDragMove: (event: PointerEvent<HTMLButtonElement>) => void;
   onPointerDragEnd: (
@@ -1258,14 +1321,27 @@ function PhaseChipButton({
     <button
       type="button"
       className={`block w-full text-left ${
+        selected ? "ring-2 ring-sky-600 rounded" : ""
+      } ${
         allowDrag
           ? `touch-none ${dragging ? "cursor-grabbing" : "cursor-grab"}`
           : "cursor-pointer"
       }`}
-      onPointerDown={allowDrag ? onPointerDragStart : undefined}
+      onPointerDown={(event) => {
+        if (event.ctrlKey || event.metaKey || event.shiftKey) {
+          onSelectCell?.(event);
+          return;
+        }
+        if (allowDrag) onPointerDragStart(event);
+      }}
       onPointerMove={allowDrag ? onPointerDragMove : undefined}
-      onPointerUp={(event) => onPointerDragEnd(event, assignment.phase.id)}
-      onPointerCancel={(event) => onPointerDragEnd(event, assignment.phase.id)}
+      onPointerUp={(event) => {
+        if (event.ctrlKey || event.metaKey || event.shiftKey) return;
+        onPointerDragEnd(event, assignment.phase.id);
+      }}
+      onPointerCancel={(event) =>
+        onPointerDragEnd(event, assignment.phase.id)
+      }
     >
       <AssignmentChip
         assignment={assignment}

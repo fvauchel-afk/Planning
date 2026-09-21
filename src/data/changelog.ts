@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-21-selection-multiple-blocs",
+    title: "Planning : sélectionner plusieurs cases",
+    items: [
+      "Sur la grille équipe, on peut enfin sélectionner plusieurs cases d’un coup : clic-glisser, Ctrl+clic (une par une, vides ou occupées), Maj+clic pour étendre la plage.",
+      "Les cases choisies se colorent en bleu. Échap ou « Tout désélectionner » annule. Ce geste servira ensuite à glisser plusieurs blocs ou à créer un chantier sur les cases vides.",
+    ],
+  },
+  {
     id: "2026-09-21-saisons-jj-mm",
     title: "Saisons : jour et mois seulement",
     items: [
