@@ -26,6 +26,7 @@ import {
   planChantierDateEdits,
   previewPhaseEdits,
 } from "@/lib/engine/resize-chantier";
+import { extraPosePhaseInsertsForChantier } from "@/lib/engine/poseurs-auto";
 import {
   chantierPhaseOptions,
   missingGridAssignee,
@@ -242,6 +243,7 @@ export function ChantierEditModal({
   const [employeLivraison, setEmployeLivraison] = useState("");
   const [employeFabrication, setEmployeFabrication] = useState("");
   const [employePose, setEmployePose] = useState("");
+  const [poseursAuto, setPoseursAuto] = useState<0 | 1 | 2>(0);
   const [staleCascade, setStaleCascade] = useState(false);
   const dirtySimple = useRef(new Set<string>());
   const cascadeDirty = useRef(false);
@@ -319,6 +321,7 @@ export function ChantierEditModal({
     });
     setEmployeFabrication(fab?.employe_id ?? "");
     setEmployePose(pose?.employe_id ?? "");
+    setPoseursAuto(0);
     setDatesDirty(false);
     cascadeDirty.current = false;
     cascadeBaseline.current = chantierCascadeFingerprint(source, chantier.id);
@@ -466,7 +469,14 @@ export function ChantierEditModal({
       parsedHoursByPhaseId(),
       Number(delaiLaquage || 5),
     );
-    return mergePhaseEdits(mergePhaseEdits(dateEdits, optionEdits), durationEdits);
+    const merged = mergePhaseEdits(mergePhaseEdits(dateEdits, optionEdits), durationEdits);
+    const afterMerged = previewPhaseEdits(source, merged);
+    const extraInserts = extraPosePhaseInsertsForChantier(
+      afterMerged,
+      chantier.id,
+      avecPose ? poseursAuto : 0,
+    );
+    return mergePhaseEdits(merged, { inserts: extraInserts });
   }
 
   function setHoursForPhase(phaseId: string, type: TypePhase, value: string) {
@@ -527,6 +537,7 @@ export function ChantierEditModal({
     employeLivraison,
     employeFabrication,
     employePose,
+    poseursAuto,
     delaiLaquage,
     datesEstimatives,
     phaseHours,
@@ -1056,6 +1067,7 @@ export function ChantierEditModal({
               </label>
             </div>
             {avecPose ? (
+              <>
               <label className="mt-3 block">
                 <span className="mb-1 block font-medium">
                   Salarié responsable de la pose
@@ -1072,6 +1084,35 @@ export function ChantierEditModal({
                   className="w-full rounded border border-stone-300 bg-white px-3 py-2"
                 />
               </label>
+              <div className="mt-3 space-y-2">
+                <p className="text-xs text-stone-600">
+                  Ajouter un ou deux poseurs libres en plus de ceux déjà sur ce
+                  chantier, mêmes dates de pose.
+                </p>
+                <label className="inline-flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={poseursAuto === 1}
+                    onChange={() => {
+                      markCascade();
+                      setPoseursAuto((current) => (current === 1 ? 0 : 1));
+                    }}
+                  />
+                  <span>+1 poseur (libre à déterminer)</span>
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={poseursAuto === 2}
+                    onChange={() => {
+                      markCascade();
+                      setPoseursAuto((current) => (current === 2 ? 0 : 2));
+                    }}
+                  />
+                  <span>+2 poseurs (libres à déterminer)</span>
+                </label>
+              </div>
+              </>
             ) : null}
           </fieldset>
           <fieldset className="rounded-lg border border-stone-300 bg-stone-50/60 p-3 text-sm">
