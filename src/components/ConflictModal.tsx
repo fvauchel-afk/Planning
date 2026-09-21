@@ -1,5 +1,6 @@
 "use client";
 
+import { ConflictFrise } from "@/components/ConflictFrise";
 import { ModalFrame } from "@/components/ModalFrame";
 import { PHASE_LABELS, PRIORITE_LABELS } from "@/lib/types";
 import { FormNotice } from "@/components/FormNotice";
@@ -38,9 +39,15 @@ export function ConflictModal({
   onCancel: () => void;
 }) {
   return (
-    <ModalFrame onClose={onCancel} maxWidthClass="max-w-2xl">
+    <ModalFrame onClose={onCancel} maxWidthClass="max-w-3xl">
         <h3 className="font-serif text-2xl text-stone-900">{title}</h3>
         <p className="mt-2 text-sm text-stone-600">{message}</p>
+
+        <ConflictFrise
+          displacements={displacements}
+          incoming={incoming}
+          showIncoming={showIncoming}
+        />
 
         <div className="mt-4 space-y-3">
           <h4 className="text-sm font-medium">Décalages proposés</h4>
