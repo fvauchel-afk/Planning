@@ -31,6 +31,7 @@ export function PlacementConflictPanel({
   onReassign,
   onOvertime,
   onMarkUrgent,
+  onSplitInsert,
 }: {
   conflict: SlotConflict;
   onUseSlot: () => void;
@@ -40,6 +41,7 @@ export function PlacementConflictPanel({
   ) => void;
   onOvertime: (fit: OvertimeFit) => void;
   onMarkUrgent: () => void;
+  onSplitInsert?: () => void;
 }) {
   const options = useMemo(() => {
     const rows: { value: string; label: string }[] = [];
@@ -88,6 +90,24 @@ export function PlacementConflictPanel({
       ) : (
         <p>Aucun créneau libre assez long n’a été trouvé pour cette personne.</p>
       )}
+
+      {onSplitInsert ? (
+        <div className="rounded border border-amber-200 bg-white p-3">
+          <p>
+            Insérer quand même le{" "}
+            <strong>{formatLongDate(conflict.date_debut)}</strong> : «{" "}
+            {conflict.occupiedBy} » est mis en pause, reprend juste après pour
+            le reste de ses heures.
+          </p>
+          <button
+            type="button"
+            className="mt-2 rounded bg-amber-800 px-3 py-1.5 text-sm text-amber-50"
+            onClick={onSplitInsert}
+          >
+            Couper « {conflict.occupiedBy} » en deux et insérer ici
+          </button>
+        </div>
+      ) : null}
 
       {options.length > 0 && (
         <div className="rounded border border-amber-200 bg-white p-3">

@@ -122,7 +122,7 @@ type MutateBody =
   | { action: "patchChantier"; input: ChantierSimplePatch }
   | { action: "deleteChantier"; chantierId: string }
   | { action: "scheduleChantierDay"; input: ScheduleChantierDayInput }
-  | { action: "createChantierWithPatches"; input: NewChantierInput; patches: PhasePatch[] }
+  | { action: "createChantierWithPatches"; input: NewChantierInput; patches: PhasePatch[]; edits?: PhaseEdits }
   | { action: "upsertEmployee"; input: NewEmployeeInput & { id?: string } }
   | { action: "patchEmployee"; input: EmployeePatch }
   | {
@@ -250,7 +250,11 @@ export async function POST(request: NextRequest) {
       if (hasPendingSignalements(current)) {
         return NextResponse.json({ error: PENDING_CHANTIER_MESSAGE }, { status: 400 });
       }
-      if (body.patches?.length) await supabaseApplyPhasePatches(body.patches);
+      if (body.edits && (body.edits.patches?.length || body.edits.inserts?.length || body.edits.deleteIds?.length)) {
+        await supabaseApplyPhaseEdits(body.edits);
+      } else if (body.patches?.length) {
+        await supabaseApplyPhasePatches(body.patches);
+      }
       chantierId = await supabaseCreateChantier(body.input, session.nom);
       createdForPlanId = chantierId;
     } else if (body.action === "upsertEmployee") {

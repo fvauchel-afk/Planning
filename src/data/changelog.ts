@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-21-urgent-couper-en-deux",
+    title: "Urgent : insérer au milieu d’un chantier",
+    items: [
+      "Si la date forcée d’un nouveau chantier tombe en plein milieu d’une affaire déjà planifiée, l’écran de conflit propose une 3e option : couper cette affaire en deux.",
+      "Exemple : Blaevoet est mis en pause, le nouveau chantier se place le jour voulu, puis Blaevoet reprend juste après pour le reste de ses heures. Si l’affaire coupée est prioritaire ou déjà en cours, une confirmation s’affiche.",
+    ],
+  },
+  {
     id: "2026-09-21-retard-planning-fiche",
     title: "Retard (jours) depuis la fiche d’une phase",
     items: [

@@ -110,6 +110,7 @@ type PlanningContextValue = {
   createChantierWithPatches: (
     input: NewChantierInput,
     patches: PhasePatch[],
+    edits?: PhaseEdits,
   ) => Promise<void>;
   createSignalement: (input: NewSignalementInput) => Promise<void>;
   setSignalementStatut: (
@@ -572,12 +573,12 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
   );
 
   const createChantierWithPatches = useCallback(
-    async (input: NewChantierInput, patches: PhasePatch[]) => {
+    async (input: NewChantierInput, patches: PhasePatch[], edits?: PhaseEdits) => {
       assertWritable();
       if (useShared) {
         const created = await mutate<{ chantierId?: string }>(
-          patches.length > 0
-            ? { action: "createChantierWithPatches", input, patches }
+          patches.length > 0 || (edits && (edits.patches?.length || edits.inserts?.length))
+            ? { action: "createChantierWithPatches", input, patches, edits }
             : { action: "createChantier", input },
         );
         const chantierId = created.chantierId ?? "";
@@ -587,8 +588,11 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
       }
       let chantierId = "";
       setSnapshot((current) => {
-        const shifted =
-          patches.length > 0 ? localApplyPhasePatches(current, patches) : current;
+        const shifted = edits
+          ? localApplyPhaseEdits(current, edits)
+          : patches.length > 0
+            ? localApplyPhasePatches(current, patches)
+            : current;
         const created = localCreateChantier(shifted, input, createdByNom);
         chantierId = created.chantierId;
         return created.snapshot;
