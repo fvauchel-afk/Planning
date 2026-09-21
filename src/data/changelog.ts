@@ -11,6 +11,13 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-21-vire-toggle-chantier-phase",
+    title: "Planning : plus d’interrupteur Chantier entier / Cette phase",
+    items: [
+      "L’interrupteur en haut du planning a été retiré : un glisser déplace le chantier entier (les blocs collés bougent ensemble), comme pour Décaler.",
+    ],
+  },
+  {
     id: "2026-09-21-saisons-jj-mm",
     title: "Saisons : jour et mois seulement",
     items: [

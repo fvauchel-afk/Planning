@@ -42,7 +42,6 @@ import { formatClock, formatHoursLabel, hoursForSlot, workWindowsForRow } from "
 import {
   shiftChantierBlockByMinutes,
   shiftOrMoveChantierBlock,
-  shiftPhaseDay,
   type OccupiedHalf,
 } from "@/lib/engine/drag-shift";
 import { clampToWorkWindows } from "@/lib/engine/hour-grid";
@@ -63,7 +62,6 @@ import {
 import { fabricationAwaitingLaunch } from "@/lib/dates-estimatives";
 
 type ViewMode = "overview" | "week" | "day";
-type DragScope = "chantier" | "phase";
 
 export function CalendarBoard() {
   const { snapshot, loading, error, usingSupabase, applyPhaseEdits, reorderEmployees } =
@@ -71,7 +69,6 @@ export function CalendarBoard() {
   const { reopen, clearReopen } = useFormDraftReopen();
   const { session } = useSession();
   const [view, setView] = useState<ViewMode>("overview");
-  const [dragScope, setDragScope] = useState<DragScope>("chantier");
   const [todayIso, setTodayIso] = useState(() => toISODate(new Date()));
   const [cursorIso, setCursorIso] = useState(todayIso);
   const [selectedPhaseId, setSelectedPhaseId] = useState<string | null>(null);
@@ -96,7 +93,6 @@ export function CalendarBoard() {
     rowId: string;
     chantierId: string;
     phaseId: string;
-    scope: DragScope;
     grab: OccupiedHalf;
     startX: number;
     startY: number;
@@ -216,18 +212,7 @@ export function CalendarBoard() {
   function computeMove(
     drag: NonNullable<typeof dragRef.current>,
     drop: OccupiedHalf & { rowId: string; startMin?: number },
-    phaseMode: boolean,
   ) {
-    if (phaseMode) {
-      return shiftPhaseDay({
-        snapshot,
-        fromRowId: drag.rowId,
-        toRowId: drop.rowId,
-        phaseId: drag.phaseId,
-        grab: { date: drag.grab.date, half: drag.grab.half },
-        drop: { date: drop.date, half: drop.half },
-      });
-    }
     if (view === "day" && drag.startMin != null && drop.startMin != null) {
       return shiftChantierBlockByMinutes({
         snapshot,
@@ -264,7 +249,7 @@ export function CalendarBoard() {
       setDragPreview({ cells: new Set(), blocked: false });
       return;
     }
-    const result = computeMove(drag, drop, drag.scope === "phase");
+    const result = computeMove(drag, drop);
     const keys = new Set<string>();
     for (const cell of result.preview) {
       keys.add(`${cell.rowId}|${cell.date}|${cell.half}`);
@@ -290,7 +275,6 @@ export function CalendarBoard() {
       rowId,
       chantierId,
       phaseId,
-      scope: dragScope,
       grab: { date, half, startMin },
       startX: event.clientX,
       startY: event.clientY,
@@ -342,7 +326,7 @@ export function CalendarBoard() {
         ? planDayDropFromPoint(clientX, clientY)
         : planCellFromPoint(clientX, clientY);
     if (!drop || savingDrag.current) return;
-    const result = computeMove(drag, drop, drag.scope === "phase");
+    const result = computeMove(drag, drop);
     if (result.blocked) {
       setDragError(
         "Créneau occupé : le chantier est revenu à sa place. Impossible de déposer sur une absence ou un créneau hors horaire (0 h).",
@@ -401,10 +385,6 @@ export function CalendarBoard() {
             la ligne d’arrivée reculent ou avancent pour laisser la place.
             Vous pouvez aussi déposer un chantier au milieu d’un autre : le
             début reste en place, la suite reprend juste après.
-            Avec « Cette phase », vous glissez un seul jour de l’étape
-            (pose, fabrication…) : les jours avant et après restent en place,
-            un creux vide reste à l’ancienne date. À l’arrivée, ce jour se
-            cale dans un trou libre ou saute un autre chantier.
             Un dépôt sur une absence ou un créneau hors horaire
             à 0 h (vendredi après-midi en 35 h, week-end) est annulé.
             Glissez une ligne de salarié (clic gauche maintenu sur le nom)
@@ -432,27 +412,6 @@ export function CalendarBoard() {
                 }}
                 className={`rounded px-3 py-1.5 text-sm ${
                   view === id
-                    ? "bg-stone-900 text-white"
-                    : "text-stone-700 hover:bg-stone-100"
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-          <div className="inline-flex rounded-md border border-stone-300 bg-white p-0.5">
-            {(
-              [
-                ["chantier", "Chantier entier"],
-                ["phase", "Cette phase"],
-              ] as const
-            ).map(([id, label]) => (
-              <button
-                key={id}
-                type="button"
-                onClick={() => setDragScope(id)}
-                className={`rounded px-3 py-1.5 text-sm ${
-                  dragScope === id
                     ? "bg-stone-900 text-white"
                     : "text-stone-700 hover:bg-stone-100"
                 }`}
@@ -582,7 +541,6 @@ export function CalendarBoard() {
           canReorder={Boolean(session?.isAdmin)}
           draggingId={draggingId}
           dragPreview={dragPreview}
-          dragScope={dragScope}
           rowHandleProps={rowHandleProps}
           focusCell={focusCell}
           onSelectDay={setCursorIso}
@@ -733,10 +691,7 @@ export function CalendarBoard() {
                           iso,
                           slot,
                         );
-                      const assignments =
-                        dragScope === "phase"
-                          ? cellAssignments
-                          : uniqueAssignmentsByChantier(cellAssignments);
+                      const assignments = uniqueAssignmentsByChantier(cellAssignments);
                       const cellKey = `${row.id}|${iso}|${half}`;
                       const dropTarget = dragPreview?.cells.has(cellKey);
                       const focused =
@@ -879,7 +834,6 @@ function DayDetail({
   canReorder,
   draggingId,
   dragPreview,
-  dragScope,
   rowHandleProps,
   focusCell,
   onSelectDay,
@@ -897,7 +851,6 @@ function DayDetail({
   canReorder: boolean;
   draggingId: string | null;
   dragPreview: { cells: Set<string>; blocked: boolean } | null;
-  dragScope: DragScope;
   rowHandleProps: ReturnType<typeof useEmployeeRowReorder>["rowHandleProps"];
   focusCell: { rowId: string; date: string; half: 0 | 1 } | null;
   onSelectDay: (iso: string) => void;
@@ -961,10 +914,7 @@ function DayDetail({
           );
           const windows = workWindowsForRow(snapshot, row.id, iso);
           const dayAssignments = assignmentsForDay(snapshot, row.id, iso);
-          const assignments =
-            dragScope === "phase"
-              ? dayAssignments
-              : uniqueAssignmentsByChantier(dayAssignments);
+          const assignments = uniqueAssignmentsByChantier(dayAssignments);
           const dayStart = windows[0]?.start ?? 7 * 60;
           const dayEnd = windows[windows.length - 1]?.end ?? 17 * 60;
           const span = Math.max(1, dayEnd - dayStart);
