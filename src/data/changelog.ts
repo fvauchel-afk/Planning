@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-21-crayon-duree-conflit",
+    title: "Crayon : alerte si la durée chevauche un autre chantier",
+    items: [
+      "En allongeant une phase (Fabrication, Pose…) depuis le crayon du planning, si le salarié a déjà un autre chantier sur ces jours, un écran de conflit s’affiche — plus d’écrasement silencieux.",
+      "Deux choix : décaler le chantier suivant, ou le laisser à sa place (cela interrompt celui que vous allongez). Si le chantier suivant est déjà en cours, une confirmation supplémentaire apparaît.",
+    ],
+  },
+  {
     id: "2026-09-21-saisons-jj-mm",
     title: "Saisons : jour et mois seulement",
     items: [
