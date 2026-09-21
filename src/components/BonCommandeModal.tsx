@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { BonCommandeLignesEditor } from "@/components/BonCommandeLignesEditor";
 import { PhotoPicker } from "@/components/PhotoPicker";
 import { PdfPreview } from "@/components/PdfPreview";
+import { ModalFrame } from "@/components/ModalFrame";
 import {
   defaultLignesBonCommande,
   normalizeLignesBonCommande,
@@ -130,8 +131,7 @@ export function BonCommandeModal({
   }
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-stone-900/50 p-4">
-      <div className="max-h-[92vh] w-full max-w-2xl overflow-auto rounded-xl bg-white p-5 shadow-xl">
+    <ModalFrame onClose={onClose} maxWidthClass="max-w-2xl" zClass="z-[60]">
         <h3 className="font-serif text-xl text-stone-900">
           Bon de commande
         </h3>
@@ -280,7 +280,6 @@ export function BonCommandeModal({
             </div>
           </>
         )}
-      </div>
-    </div>
+    </ModalFrame>
   );
 }

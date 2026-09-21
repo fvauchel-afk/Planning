@@ -1,5 +1,6 @@
 "use client";
 
+import { ModalFrame } from "@/components/ModalFrame";
 import { PHASE_LABELS, PRIORITE_LABELS } from "@/lib/types";
 import { formatLongDate } from "@/lib/dates";
 import type { Displacement, PlannedPhase } from "@/lib/engine/planner";
@@ -36,8 +37,7 @@ export function ConflictModal({
   onCancel: () => void;
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/50 p-4">
-      <div className="max-h-[90vh] w-full max-w-2xl overflow-auto rounded-lg border border-stone-300 bg-white p-5 shadow-xl">
+    <ModalFrame onClose={onCancel} maxWidthClass="max-w-2xl">
         <h3 className="font-serif text-2xl text-stone-900">{title}</h3>
         <p className="mt-2 text-sm text-stone-600">{message}</p>
 
@@ -119,7 +119,6 @@ export function ConflictModal({
             </button>
           ) : null}
         </div>
-      </div>
-    </div>
+    </ModalFrame>
   );
 }
