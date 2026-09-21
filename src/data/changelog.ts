@@ -11,6 +11,15 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-21-poseurs-lies",
+    title: "Poseurs d’un même élément : toujours ensemble",
+    items: [
+      "Les poses du même élément restent liées, même si leurs dates n’étaient plus les mêmes : décaler ou glisser l’un déplace tout le monde sur les mêmes jours.",
+      "Si vous déposez un poseur sur une autre ligne, lui seul change de personne ; les autres restent sur leur ligne, aux nouvelles dates.",
+      "S’il n’y a pas de place pour tout le monde, le planning cherche le prochain créneau où tous sont libres en même temps — on ne sépare plus l’aide dans un trou à part. Même règle au glisser et au bouton Décaler de la fiche.",
+    ],
+  },
+  {
     id: "2026-09-21-conflit-frise",
     title: "Conflit : une frise avant / après",
     items: [

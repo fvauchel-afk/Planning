@@ -302,6 +302,7 @@ export function CalendarBoard() {
       chantierId: drag.chantierId,
       grab: drag.grab,
       drop: { date: drop.date, half: drop.half },
+      phaseId: drag.phaseId,
     });
   }
 

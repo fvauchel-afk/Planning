@@ -11,6 +11,11 @@ import {
   type Half,
 } from "@/lib/engine/slots";
 import {
+  grabbedPoseFromPhaseIds,
+  linkedPosePhases,
+  planLinkedPoseMove,
+} from "@/lib/engine/linked-pose";
+import {
   isVirtualPlanningRow,
   type PhaseInsert,
   type PhasePatch,
@@ -478,6 +483,75 @@ function emptyDragShift(preview: DragShiftPreviewCell[] = []): DragShiftResult {
   return { delta: 0, patches: [], inserts: [], chain: [], preview, blocked: false };
 }
 
+function finishLinkedPoseDrag(
+  snapshot: PlanningSnapshot,
+  result: DragShiftResult,
+  phaseIds: string[],
+  preferredPhaseId: string | undefined,
+  toEmployeeId: string,
+  delta: number,
+): DragShiftResult {
+  const grabbed = grabbedPoseFromPhaseIds(snapshot, phaseIds, preferredPhaseId);
+  if (!grabbed?.date_debut) return result;
+  const debut = addHalfSteps(grabbed.date_debut, 0, delta).date;
+  const fin = addHalfSteps(
+    grabbed.date_fin || grabbed.date_debut,
+    0,
+    delta,
+  ).date;
+  return mergeLinkedPoseDrag(
+    snapshot,
+    result,
+    grabbed,
+    toEmployeeId,
+    debut,
+    fin,
+  );
+}
+
+function mergeLinkedPoseDrag(
+  snapshot: PlanningSnapshot,
+  result: DragShiftResult,
+  grabbed: PhasePlanning | null,
+  toEmployeeId: string,
+  intendedDebut: string,
+  intendedFin: string,
+): DragShiftResult {
+  if (!grabbed || !intendedDebut) return result;
+  const linked = planLinkedPoseMove(
+    snapshot,
+    grabbed,
+    toEmployeeId,
+    intendedDebut,
+    intendedFin,
+  );
+  if (!linked) return result;
+  if (linked.blocked) {
+    return {
+      ...result,
+      patches: [],
+      preview: linked.preview.length ? linked.preview : result.preview,
+      blocked: true,
+    };
+  }
+  const linkedIds = new Set(linked.patches.map((item) => item.id));
+  const keepBase =
+    linked.date_debut === intendedDebut
+      ? result.patches.filter((item) => !linkedIds.has(item.id))
+      : result.patches.filter(
+          (item) =>
+            !linkedIds.has(item.id) &&
+            snapshot.phases.find((phase) => phase.id === item.id)?.type_phase !==
+              "pose",
+        );
+  return {
+    ...result,
+    blocked: false,
+    patches: [...keepBase, ...linked.patches],
+    preview: [...result.preview, ...linked.preview],
+  };
+}
+
 function halfKey(item: OccupiedHalf): string {
   return `${item.date}|${item.half}`;
 }
@@ -796,8 +870,24 @@ export function shiftChantierBlock(input: {
       origin,
       delta,
     });
-    if (inserted) return inserted;
-    return { delta, patches: [], chain, preview, blocked: true };
+    if (inserted) {
+      return finishLinkedPoseDrag(
+        input.snapshot,
+        inserted,
+        origin.phaseIds,
+        undefined,
+        input.rowId,
+        delta,
+      );
+    }
+    return finishLinkedPoseDrag(
+      input.snapshot,
+      { delta, patches: [], chain, preview, blocked: true },
+      origin.phaseIds,
+      undefined,
+      input.rowId,
+      delta,
+    );
   }
   const byId = new Map<string, PhasePatch>();
   for (const block of chain) {
@@ -805,13 +895,20 @@ export function shiftChantierBlock(input: {
       byId.set(patch.id, patch);
     }
   }
-  return {
+  return finishLinkedPoseDrag(
+    input.snapshot,
+    {
+      delta,
+      patches: Array.from(byId.values()),
+      chain,
+      preview,
+      blocked: false,
+    },
+    origin.phaseIds,
+    undefined,
+    input.rowId,
     delta,
-    patches: Array.from(byId.values()),
-    chain,
-    preview,
-    blocked: false,
-  };
+  );
 }
 
 export function shiftOrMoveChantierBlock(input: {
@@ -821,6 +918,7 @@ export function shiftOrMoveChantierBlock(input: {
   chantierId: string;
   grab: OccupiedHalf;
   drop: OccupiedHalf;
+  phaseId?: string;
 }): DragShiftResult {
   if (input.toRowId === input.fromRowId) {
     return shiftChantierBlock({
@@ -869,7 +967,16 @@ export function shiftOrMoveChantierBlock(input: {
     origin,
     delta,
   });
-  if (inserted) return inserted;
+  if (inserted) {
+    return finishLinkedPoseDrag(
+      input.snapshot,
+      inserted,
+      origin.phaseIds,
+      input.phaseId,
+      input.toRowId,
+      delta,
+    );
+  }
   let destChain: ChantierBlock[] = [];
   if (delta !== 0) {
     const direction: 1 | -1 = delta > 0 ? 1 : -1;
@@ -896,13 +1003,20 @@ export function shiftOrMoveChantierBlock(input: {
   ]);
   const destCanCascade = delta !== 0;
   if (!destCanCascade && destChain.length > 0) {
-    return {
+    return finishLinkedPoseDrag(
+      input.snapshot,
+      {
+        delta,
+        patches: [],
+        chain: [{ ...origin, rowId: input.toRowId }, ...destChain],
+        preview,
+        blocked: true,
+      },
+      origin.phaseIds,
+      input.phaseId,
+      input.toRowId,
       delta,
-      patches: [],
-      chain: [{ ...origin, rowId: input.toRowId }, ...destChain],
-      preview,
-      blocked: true,
-    };
+    );
   }
   for (const block of destChain) {
     const halves = previewHalves(block, delta);
@@ -910,13 +1024,20 @@ export function shiftOrMoveChantierBlock(input: {
     preview.push(...previewCellsForHalves(block.rowId, halves));
   }
   if (landingHasConflict(input.snapshot, landings, movingPhaseIds)) {
-    return {
+    return finishLinkedPoseDrag(
+      input.snapshot,
+      {
+        delta,
+        patches: [],
+        chain: [{ ...origin, rowId: input.toRowId }, ...destChain],
+        preview,
+        blocked: true,
+      },
+      origin.phaseIds,
+      input.phaseId,
+      input.toRowId,
       delta,
-      patches: [],
-      chain: [{ ...origin, rowId: input.toRowId }, ...destChain],
-      preview,
-      blocked: true,
-    };
+    );
   }
   const byId = new Map<string, PhasePatch>();
   for (const patch of patchesForBlock(
@@ -934,13 +1055,20 @@ export function shiftOrMoveChantierBlock(input: {
       }
     }
   }
-  return {
+  return finishLinkedPoseDrag(
+    input.snapshot,
+    {
+      delta,
+      patches: Array.from(byId.values()),
+      chain: [{ ...origin, rowId: input.toRowId }, ...destChain],
+      preview,
+      blocked: false,
+    },
+    origin.phaseIds,
+    input.phaseId,
+    input.toRowId,
     delta,
-    patches: Array.from(byId.values()),
-    chain: [{ ...origin, rowId: input.toRowId }, ...destChain],
-    preview,
-    blocked: false,
-  };
+  );
 }
 
 export function shiftPhaseOrJump(input: {
@@ -1177,6 +1305,30 @@ export function shiftPhaseDay(input: {
   drop: OccupiedHalf;
 }): DragShiftResult {
   const previewDrop = previewCellsForHalves(input.toRowId, [input.drop]);
+  if (
+    isVirtualPlanningRow(input.toRowId) ||
+    isVirtualPlanningRow(input.fromRowId)
+  ) {
+    return { ...emptyDragShift(previewDrop), blocked: true };
+  }
+  const grabbed = grabbedPoseFromPhaseIds(
+    input.snapshot,
+    [input.phaseId],
+    input.phaseId,
+  );
+  if (grabbed && linkedPosePhases(input.snapshot, grabbed.id).length >= 2) {
+    const delta =
+      halfIndex(input.drop.date, input.drop.half) -
+      halfIndex(input.grab.date, input.grab.half);
+    return finishLinkedPoseDrag(
+      input.snapshot,
+      emptyDragShift(previewDrop),
+      [input.phaseId],
+      input.phaseId,
+      input.toRowId,
+      delta,
+    );
+  }
   if (
     isVirtualPlanningRow(input.toRowId) ||
     isVirtualPlanningRow(input.fromRowId)
@@ -1506,13 +1658,23 @@ export function shiftChantierBlockByMinutes(input: {
   if (patches.length === 0) {
     return { ...emptyDragShift(previewSeed), blocked: true };
   }
-  return {
-    delta: deltaMinutes === 0 ? 0 : 1,
-    patches,
-    chain: [{ ...origin, rowId: input.toRowId }],
-    preview: preview.length > 0 ? preview : previewSeed,
-    blocked: false,
-  };
+  const deltaHalves =
+    halfIndex(input.drop.date, input.drop.half) -
+    halfIndex(input.grab.date, input.grab.half);
+  return finishLinkedPoseDrag(
+    input.snapshot,
+    {
+      delta: deltaMinutes === 0 ? 0 : 1,
+      patches,
+      chain: [{ ...origin, rowId: input.toRowId }],
+      preview: preview.length > 0 ? preview : previewSeed,
+      blocked: false,
+    },
+    origin.phaseIds,
+    input.phaseId,
+    input.toRowId,
+    deltaHalves,
+  );
 }
 
 export type IndependentHalf = {
