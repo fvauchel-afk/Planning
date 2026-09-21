@@ -43,6 +43,8 @@ import type {
   NewReceptionInput,
   NewDemandeInput,
   DemandeUpdateInput,
+  Commande,
+  CommandePatch,
   NewSignalementInput,
   PhaseEdits,
   PhaseInsert,
@@ -58,6 +60,7 @@ import type {
   SousTraitant,
 } from "@/lib/types";
 import { formatFournituresMessage, normalizeFournitures, parseFournitures } from "@/lib/fournitures";
+import { parseStatutCommande } from "@/lib/commandes";
 import {
   normalizeLignesBonCommande,
   parseLignesBonCommande,
@@ -187,10 +190,13 @@ async function fetchSupabaseSnapshotOnce(): Promise<PlanningSnapshot> {
     supabase.from("demandes").select("*").order("date_creation", {
       ascending: false,
     }),
+    supabase.from("commandes").select("*").order("date_creation", {
+      ascending: false,
+    }),
     supabase.from("sous_traitants").select("*").order("nom"),
     supabase.from("planning_reglages").select("saison_forcee").eq("id", "default").maybeSingle(),
   ]);
-  const [signalements, receptions, demandes, sousTraitants, reglages] = extra;
+  const [signalements, receptions, demandes, commandes, sousTraitants, reglages] = extra;
 
   const signalementRows = isMissingSchemaError(signalements.error)
     ? []
@@ -331,6 +337,7 @@ async function fetchSupabaseSnapshotOnce(): Promise<PlanningSnapshot> {
         (left, right) =>
           Date.parse(right.date_creation) - Date.parse(left.date_creation),
       ),
+    commandes: optionalTable<Record<string, unknown>>(commandes).map(mapCommandeRow),
     sousTraitants: optionalTable<SousTraitant>(sousTraitants).map((row) => ({
       id: row.id,
       nom: row.nom,
@@ -378,6 +385,20 @@ function optionalTable<T>(result: {
   if (!result.error) return result.data ?? [];
   if (isMissingSchemaError(result.error)) return [];
   throw wrapSupabaseError(result.error);
+}
+
+function mapCommandeRow(row: Record<string, unknown>): Commande {
+  return {
+    id: String(row.id ?? ""),
+    chantier_id: String(row.chantier_id ?? ""),
+    created_by: row.created_by ? String(row.created_by) : null,
+    date_creation: String(row.date_creation ?? ""),
+    statut: parseStatutCommande(row.statut),
+    fournisseur: row.fournisseur ? String(row.fournisseur) : null,
+    fournitures: parseFournitures(row.fournitures),
+    onedrive_lien: row.onedrive_lien ? String(row.onedrive_lien) : null,
+    nom_client: String(row.nom_client ?? ""),
+  };
 }
 
 export async function supabaseCreateChantier(
@@ -802,24 +823,37 @@ export async function supabaseValidateChantierPlan(input: {
     normalizeFournitures(chantier.fournitures ?? []),
     chantier.lien_dossier_onedrive,
   );
-  await supabaseCreateDemande({
-    categorie: "commande",
-    message,
-    employe_id: input.employeId,
+  const supabase = createSupabaseServerClient();
+  const { error } = await supabase.from("commandes").insert({
+    chantier_id: input.chantierId,
+    created_by: input.employeId,
+    statut: "a_faire",
+    fournisseur: null,
+    fournitures: normalizeFournitures(chantier.fournitures ?? []),
+    onedrive_lien: chantier.lien_dossier_onedrive,
+    nom_client: chantier.nom_client,
   });
+  if (error) throw wrapSupabaseError(error);
   invalidateSupabaseSnapshotCache();
-  const after = await fetchSupabaseSnapshot();
-  const demande = after.demandes.find(
-    (row) =>
-      row.categorie === "commande" &&
-      row.employe_id === input.employeId &&
-      row.message === message,
-  );
   await updateChantierPayload(input.chantierId, {
     plan_valide: true,
-    plan_demande_id: demande?.id ?? null,
   });
   return { created: true, message, nomClient };
+}
+
+export async function supabasePatchCommande(input: CommandePatch): Promise<void> {
+  const supabase = createSupabaseServerClient();
+  const payload: Record<string, unknown> = {};
+  if (input.statut !== undefined) payload.statut = parseStatutCommande(input.statut);
+  if (input.fournisseur !== undefined) {
+    payload.fournisseur = input.fournisseur?.trim() || null;
+  }
+  if (input.fournitures !== undefined) {
+    payload.fournitures = normalizeFournitures(input.fournitures);
+  }
+  if (Object.keys(payload).length === 0) return;
+  const { error } = await supabase.from("commandes").update(payload).eq("id", input.id);
+  if (error) throw wrapSupabaseError(error);
 }
 
 export async function supabaseDeleteChantier(chantierId: string): Promise<void> {

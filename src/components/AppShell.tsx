@@ -11,6 +11,7 @@ import { LancementAlert } from "@/components/LancementAlert";
 import { AdministratifIdleAlert } from "@/components/AdministratifIdleAlert";
 import { AdminDesktopNav, AdminMobileNav, AdminSectionTabs } from "@/components/AdminNav";
 import { lancementsEnAttente } from "@/lib/dates-estimatives";
+import { commandeEstOuverte } from "@/lib/commandes";
 import { demandeEstOuverte, isReunionDirectionDemande } from "@/lib/demandes";
 import { adminNavForSession } from "@/lib/nav/admin-nav";
 import { useSession } from "@/lib/auth/session-context";
@@ -38,15 +39,15 @@ export function AppShell({
   const { session, ready } = useSession();
   const { snapshot, saveNotice, clearSaveNotice } = usePlanning();
   const [menuOpen, setMenuOpen] = useState(false);
-  const pendingCommandes =
-    session?.canReceiveCommandes
-      ? (snapshot.demandes ?? []).filter(
-          (row) =>
-            row.categorie === "commande" &&
-            row.statut !== "traite" &&
-            !row.archivee,
-        ).length
-      : 0;
+  const pendingCommandes = session?.isAdmin
+    ? (snapshot.commandes ?? []).filter(commandeEstOuverte).length +
+      (snapshot.demandes ?? []).filter(
+        (row) =>
+          row.categorie === "commande" &&
+          row.statut !== "traite" &&
+          !row.archivee,
+      ).length
+    : 0;
   const pendingLancements = session?.canReceiveLancementAlerts
     ? lancementsEnAttente(snapshot).length
     : 0;

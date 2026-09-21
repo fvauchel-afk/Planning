@@ -1,3 +1,4 @@
+import type { StatutCommande } from "@/lib/commandes";
 import type { LigneFourniture } from "@/lib/fournitures";
 import type { LigneBonCommande } from "@/lib/bon-commande/lignes";
 import type { FinitionLaquage } from "@/lib/thermolaquage";
@@ -263,6 +264,25 @@ export const STATUT_DEMANDE_LABELS: Record<StatutDemande, string> = {
   refusee: "Refusée",
 };
 
+export type Commande = {
+  id: string;
+  chantier_id: string;
+  created_by: string | null;
+  date_creation: string;
+  statut: StatutCommande;
+  fournisseur: string | null;
+  fournitures: LigneFourniture[];
+  onedrive_lien: string | null;
+  nom_client: string;
+};
+
+export type CommandePatch = {
+  id: string;
+  statut?: StatutCommande;
+  fournisseur?: string | null;
+  fournitures?: LigneFourniture[];
+};
+
 export type Demande = {
   id: string;
   employe_id: string;
@@ -308,6 +328,7 @@ export type PlanningSnapshot = {
   signalements: Signalement[];
   receptions: ReceptionChantier[];
   demandes: Demande[];
+  commandes?: Commande[];
   horaires: HoraireSaison[];
   /** null = dates été / hiver ; ete | hiver = forcée jusqu’à nouvel ordre. */
   saison_forcee?: "ete" | "hiver" | null;
