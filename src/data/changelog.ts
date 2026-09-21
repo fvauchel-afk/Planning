@@ -11,6 +11,11 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-21-poseurs-plus-edit",
+    title: "Pose : +1 / +2 aussi sur un chantier déjà créé",
+    items: [
+      "Dans Modifier le chantier, sous le poseur déjà choisi, vous pouvez cocher +1 ou +2 poseurs libres : une nouvelle ligne Pose se cale aux mêmes dates, en plus des poseurs déjà nommés.",
+      "S’il n’y a personne de libre, le premier du rôle est pris quand même, comme à la création. Les cases se vident après enregistrement.",
     id: "2026-09-21-onglet-commande",
     title: "Onglet Commande (après Plan)",
     items: [
