@@ -11,6 +11,7 @@ import {
   validateDemandeCongeInput,
 } from "@/lib/demandes";
 import { PieceJointePicker } from "@/components/PieceJointePicker";
+import { FormNotice } from "@/components/FormNotice";
 import type { PieceJointe } from "@/lib/pieces-jointes";
 import {
   ABSENCE_LABELS,
@@ -262,7 +263,7 @@ export function DemandesWidget() {
               disabled={sending}
               onError={setError}
             />
-            {error && <p className="text-sm text-red-700">{error}</p>}
+            {error ? <FormNotice>{error}</FormNotice> : null}
             {sent && (
               <p className="text-sm text-emerald-700">
                 {isConge

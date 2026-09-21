@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { MobileShell } from "@/components/MobileShell";
+import { FormNotice } from "@/components/FormNotice";
 import { PHASE_LABELS, type SensSignalement } from "@/lib/types";
 import { usePlanning } from "@/lib/planning-context";
 import { planDelayCascade } from "@/lib/engine/delay";
@@ -99,11 +100,7 @@ export function SignalerRetardPage() {
         avance rapproche les phases suivantes, sans descendre sous 10 à 11 jours
         ouvrés de logistique.
       </p>
-      {error && (
-        <p className="mb-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
-          {error}
-        </p>
-      )}
+      {error ? <FormNotice className="mb-3">{error}</FormNotice> : null}
       <form onSubmit={onSubmit} className="space-y-3">
         <fieldset className="grid grid-cols-2 gap-2">
           <legend className="mb-1 block text-sm font-medium">Type</legend>

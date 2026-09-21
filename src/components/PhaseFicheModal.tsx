@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { BonCommandeModal } from "@/components/BonCommandeModal";
+import { FormNotice } from "@/components/FormNotice";
 import { ReceptionModal } from "@/components/ReceptionModal";
 import { ConflictModal } from "@/components/ConflictModal";
 import { LaunchValidateButton } from "@/components/LaunchValidateButton";
@@ -459,7 +460,7 @@ export function PhaseFicheModal({
                 className="w-full rounded border border-stone-300 px-3 py-2"
               />
             </label>
-            {error && <p className="text-sm text-red-700">{error}</p>}
+            {error ? <FormNotice>{error}</FormNotice> : null}
             <div className="flex flex-wrap gap-2 pt-1">
               <button
                 type="submit"

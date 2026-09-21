@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DevisLignesEditor } from "@/components/DevisLignesEditor";
+import { FormNotice } from "@/components/FormNotice";
 import { PdfPreview } from "@/components/PdfPreview";
 import { ClientFormFields, EMPTY_CLIENT_CREATE } from "@/components/ClientFormFields";
 import { devisApi } from "@/lib/devis/client-api";
@@ -300,9 +301,7 @@ export function DevisEditor({ devisId }: { devisId?: string }) {
           <p className="text-sm text-stone-500">La date d’émission est posée à la création, sans saisie.</p>
         )}
       </div>
-      {error ? (
-        <p className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{error}</p>
-      ) : null}
+      {error ? <FormNotice>{error}</FormNotice> : null}
       {searchParams.get("onedriveErreur") ? (
         <p className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
           Devis créé. OneDrive : {searchParams.get("onedriveErreur")}

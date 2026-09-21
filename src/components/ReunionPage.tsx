@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { PiecesJointesListe } from "@/components/PiecesJointesListe";
+import { FormNotice } from "@/components/FormNotice";
 import { usePlanning } from "@/lib/planning-context";
 import { demandeEstOuverte, isReunionDirectionDemande } from "@/lib/demandes";
 import type { Demande } from "@/lib/types";
@@ -128,11 +129,7 @@ export function ReunionPage() {
           réglés restent en historique en dessous.
         </p>
       </div>
-      {error ? (
-        <p className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
-          {error}
-        </p>
-      ) : null}
+      {error ? <FormNotice>{error}</FormNotice> : null}
       {loading ? (
         <p className="text-sm text-stone-500">Chargement…</p>
       ) : (

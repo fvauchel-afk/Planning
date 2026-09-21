@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { devisApi } from "@/lib/devis/client-api";
+import { FormNotice } from "@/components/FormNotice";
 import {
   EMPTY_ENTREPRISE,
   MAX_LOGO_BASE64,
@@ -93,9 +94,7 @@ export function EntrepriseSettingsPage() {
           Identité juridique et bancaire, plus le logo du PDF. Rien n’est figé dans le code.
         </p>
       </div>
-      {error ? (
-        <p className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{error}</p>
-      ) : null}
+      {error ? <FormNotice>{error}</FormNotice> : null}
       {ok ? (
         <p className="rounded border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm">{ok}</p>
       ) : null}

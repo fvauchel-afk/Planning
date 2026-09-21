@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useDebouncedPatch } from "@/lib/form-live";
+import { FormNotice } from "@/components/FormNotice";
 import { usePlanning } from "@/lib/planning-context";
 import type { SousTraitant } from "@/lib/types";
 
@@ -180,11 +181,7 @@ export function SousTraitantsPage() {
           tout seuls.
         </p>
       </div>
-      {error ? (
-        <p className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
-          {error}
-        </p>
-      ) : null}
+      {error ? <FormNotice>{error}</FormNotice> : null}
       <form
         className="grid gap-3 rounded-lg border border-stone-200 bg-white p-4 md:grid-cols-2"
         onSubmit={(event) => {
