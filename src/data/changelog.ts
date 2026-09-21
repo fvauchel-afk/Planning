@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-21-nav-reunion-demandes",
+    title: "Menu : Demandes, Réunion et Commande ensemble",
+    items: [
+      "Comme Planning / Chantiers : l’onglet Demandes regroupe Réunion et Commande en sous-onglets (bandeau sous le menu).",
+      "Réunion reste réservé à Jonathan et Mika. Commande et Demandes restent visibles pour tous les admins.",
+    ],
+  },
+  {
     id: "2026-09-21-commandes-backfill",
     title: "Commande : aussi les plans déjà validés",
     items: [
