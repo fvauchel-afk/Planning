@@ -11,6 +11,18 @@ import {
   type TypeAbsence,
 } from "@/lib/types";
 
+export const CATEGORIE_REUNION_DIRECTION = "reunion_direction" as const;
+
+export function isReunionDirectionDemande(item: {
+  categorie?: CategorieDemande | string;
+}): boolean {
+  return item.categorie === CATEGORIE_REUNION_DIRECTION;
+}
+
+export function categoriesDemandeHorsReunion(): CategorieDemande[] {
+  return CATEGORIES_DEMANDE.filter((id) => id !== CATEGORIE_REUNION_DIRECTION);
+}
+
 export function parseCategorieDemande(value: unknown): CategorieDemande {
   if (
     typeof value === "string" &&
@@ -102,6 +114,15 @@ export function validateDemandeCongeInput(input: NewDemandeInput): string | null
 function runDemandesSelfCheck() {
   if (parseCategorieDemande("conge") !== "conge") {
     throw new Error("demandes: catégorie congé");
+  }
+  if (parseCategorieDemande("reunion_direction") !== "reunion_direction") {
+    throw new Error("demandes: catégorie réunion direction");
+  }
+  if (isReunionDirectionDemande({ categorie: "commande" })) {
+    throw new Error("demandes: une commande n’est pas un sujet de réunion");
+  }
+  if (categoriesDemandeHorsReunion().includes("reunion_direction")) {
+    throw new Error("demandes: la réunion ne doit pas apparaître dans Demandes");
   }
   if (parseStatutDemande("acceptee") !== "acceptee") {
     throw new Error("demandes: statut acceptée");

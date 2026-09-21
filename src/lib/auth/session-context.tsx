@@ -10,6 +10,7 @@ export type ClientSession = {
   canReceiveCommandes?: boolean;
   canReceiveLancementAlerts?: boolean;
   canManageAdministratifIdle?: boolean;
+  canManageReunionDirection?: boolean;
 };
 
 type SessionContextValue = {

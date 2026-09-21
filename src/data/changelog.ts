@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-21-reunion-direction",
+    title: "Réunion de direction",
+    items: [
+      "Dans la bulle de demandes, Jonathan et Mika ont une catégorie Sujet Réunion Direction (invisible pour l’atelier).",
+      "L’onglet Réunion liste ces sujets à cocher : À traiter en haut, Réglés en dessous, avec la date et l’auteur.",
+    ],
+  },
+  {
     id: "2026-09-20-admin-idle-role",
     title: "Administratif : plus de suggestion hors rôle",
     items: [

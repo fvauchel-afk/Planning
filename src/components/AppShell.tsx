@@ -9,6 +9,7 @@ import { CommandeAlert } from "@/components/CommandeAlert";
 import { LancementAlert } from "@/components/LancementAlert";
 import { AdministratifIdleAlert } from "@/components/AdministratifIdleAlert";
 import { lancementsEnAttente } from "@/lib/dates-estimatives";
+import { demandeEstOuverte, isReunionDirectionDemande } from "@/lib/demandes";
 import { useSession } from "@/lib/auth/session-context";
 import { BrandMark } from "@/components/BrandMark";
 import { usePlanning } from "@/lib/planning-context";
@@ -24,6 +25,7 @@ const ADMIN_LINKS: { href: string; label: string }[] = [
   { href: "/absences", label: "Absences" },
   { href: "/signalements", label: "Signalements" },
   { href: "/demandes", label: "Demandes" },
+  { href: "/reunion", label: "Réunion" },
   { href: "/admin/onedrive", label: "OneDrive" },
   { href: "/parametres", label: "Paramètres" },
   { href: "/sauvegarde", label: "Sauvegarde" },
@@ -64,6 +66,16 @@ export function AppShell({
     ? lancementsEnAttente(snapshot).length
     : 0;
 
+  const pendingReunion =
+    session?.canManageReunionDirection
+      ? (snapshot.demandes ?? []).filter(
+          (row) =>
+            isReunionDirectionDemande(row) &&
+            demandeEstOuverte(row) &&
+            !row.archivee,
+        ).length
+      : 0;
+
   useEffect(() => {
     setMenuOpen(false);
   }, [currentPath]);
@@ -79,7 +91,10 @@ export function AppShell({
     !ready || !session
       ? []
       : session.isAdmin
-        ? ADMIN_LINKS
+        ? ADMIN_LINKS.filter(
+            (link) =>
+              link.href !== "/reunion" || Boolean(session.canManageReunionDirection),
+          )
         : SALARIE_LINKS;
 
   return (
@@ -117,6 +132,11 @@ export function AppShell({
                   {link.href === "/demandes" && pendingCommandes > 0 ? (
                     <span className="ml-1 rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-semibold text-stone-900">
                       {pendingCommandes}
+                    </span>
+                  ) : null}
+                  {link.href === "/reunion" && pendingReunion > 0 ? (
+                    <span className="ml-1 rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-semibold text-stone-900">
+                      {pendingReunion}
                     </span>
                   ) : null}
                   {link.href === "/" && pendingLancements > 0 ? (
@@ -180,6 +200,11 @@ export function AppShell({
                     {link.href === "/demandes" && pendingCommandes > 0 ? (
                       <span className="ml-2 rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-semibold text-stone-900">
                         {pendingCommandes}
+                      </span>
+                    ) : null}
+                    {link.href === "/reunion" && pendingReunion > 0 ? (
+                      <span className="ml-2 rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-semibold text-stone-900">
+                        {pendingReunion}
                       </span>
                     ) : null}
                     {link.href === "/" && pendingLancements > 0 ? (
