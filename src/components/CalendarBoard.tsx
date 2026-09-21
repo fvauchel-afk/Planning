@@ -17,6 +17,7 @@ import {
   type CalendarAssignment,
 } from "@/lib/calendar";
 import { AbsenceImprevueModal } from "@/components/AbsenceImprevueModal";
+import { CreateFromSelectionModal } from "@/components/CreateFromSelectionModal";
 import { FormNotice } from "@/components/FormNotice";
 import { ChantierEditModal } from "@/components/ChantierEditModal";
 import { LaunchValidateButton } from "@/components/LaunchValidateButton";
@@ -54,7 +55,17 @@ import { usePlanning } from "@/lib/planning-context";
 import { useFormDraftReopen } from "@/lib/form-draft";
 import { useEmployeeRowReorder } from "@/lib/use-employee-row-reorder";
 import { useSession } from "@/lib/auth/session-context";
-import { PRIORITE_LABELS, TRANSPORT_ROW_ID, type Chantier, type Employee } from "@/lib/types";
+import {
+  LOGISTIQUE_ROW_ID,
+  PRIORITE_LABELS,
+  TRANSPORT_ROW_ID,
+  type Chantier,
+  type Employee,
+} from "@/lib/types";
+import {
+  emptyCellKey,
+  type EmptyCellPick,
+} from "@/lib/engine/create-from-selection";
 import { WelcomeBanner } from "@/components/WelcomeBanner";
 import { SaisonActiveBadge } from "@/components/SaisonActiveBadge";
 import {
@@ -91,6 +102,12 @@ export function CalendarBoard() {
   const [receptionPhaseId, setReceptionPhaseId] = useState<string | null>(null);
   const [absenceEmployee, setAbsenceEmployee] = useState<Employee | null>(null);
   const [editingChantier, setEditingChantier] = useState<Chantier | null>(null);
+  const [emptyPicks, setEmptyPicks] = useState<EmptyCellPick[]>([]);
+  const [createFromSelection, setCreateFromSelection] = useState(false);
+  const emptyPickKeys = useMemo(
+    () => new Set(emptyPicks.map(emptyCellKey)),
+    [emptyPicks],
+  );
 
   useEffect(() => {
     if (reopen?.kind !== "chantier") return;
@@ -333,6 +350,29 @@ export function CalendarBoard() {
     });
   }
 
+  function onEmptyCellClick(
+    rowId: string,
+    date: string,
+    half: 0 | 1,
+    additive: boolean,
+  ) {
+    if (!session?.isAdmin) return;
+    if (rowId === TRANSPORT_ROW_ID || rowId === LOGISTIQUE_ROW_ID) return;
+    const pick: EmptyCellPick = { rowId, date, half };
+    const key = emptyCellKey(pick);
+    if (additive) {
+      setEmptyPicks((current) => {
+        if (current.some((item) => emptyCellKey(item) === key)) {
+          return current.filter((item) => emptyCellKey(item) !== key);
+        }
+        return [...current, pick];
+      });
+      return;
+    }
+    setEmptyPicks([pick]);
+    setCreateFromSelection(true);
+  }
+
   function beginChipDrag(
     event: PointerEvent<HTMLButtonElement>,
     rowId: string,
@@ -566,6 +606,32 @@ export function CalendarBoard() {
       ) : null}
       {dragError ? <FormNotice>{dragError}</FormNotice> : null}
       {error ? <FormNotice>{error}</FormNotice> : null}
+      {session?.isAdmin && emptyPicks.length > 0 ? (
+        <div className="flex flex-wrap items-center gap-2 rounded border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-950">
+          <span>
+            {emptyPicks.length} case{emptyPicks.length > 1 ? "s" : ""} vide
+            {emptyPicks.length > 1 ? "s" : ""} — Ctrl+clic (Cmd sur Mac) pour en
+            ajouter d’autres, y compris sur d’autres salariés.
+          </span>
+          <button
+            type="button"
+            onClick={() => setCreateFromSelection(true)}
+            className="rounded bg-sky-800 px-3 py-1.5 text-sm font-medium text-white"
+          >
+            Créer un chantier
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setEmptyPicks([]);
+              setCreateFromSelection(false);
+            }}
+            className="rounded border border-sky-300 bg-white px-3 py-1.5 text-sm"
+          >
+            Annuler
+          </button>
+        </div>
+      ) : null}
       {loading ? (
         <p className="text-sm text-stone-500">Chargement du planning…</p>
       ) : (
@@ -652,12 +718,14 @@ export function CalendarBoard() {
           dragPreview={dragPreview}
           dragScope={dragScope}
           selectedKeys={selectedKeys}
+          emptyPickKeys={emptyPickKeys}
           rowHandleProps={rowHandleProps}
           focusCell={focusCell}
           onSelectDay={setCursorIso}
           onOpenPhase={setSelectedPhaseId}
           onReception={setReceptionPhaseId}
           onAbsence={setAbsenceEmployee}
+          onEmptyCellClick={onEmptyCellClick}
           onChipDragStart={(event, rowId, chantierId, phaseId, date, half, startMin) => {
             if (dragScope === "libre" && (event.ctrlKey || event.metaKey)) {
               event.preventDefault();
@@ -816,6 +884,13 @@ export function CalendarBoard() {
                           : uniqueAssignmentsByChantier(cellAssignments);
                       const cellKey = `${row.id}|${iso}|${half}`;
                       const dropTarget = dragPreview?.cells.has(cellKey);
+                      const emptySelected = emptyPickKeys.has(cellKey);
+                      const canCreate =
+                        Boolean(session?.isAdmin) &&
+                        row.employee &&
+                        cellAssignments.length === 0 &&
+                        absences.length === 0 &&
+                        !slotOff;
                       const focused =
                         focusCell?.rowId === row.id &&
                         focusCell.date === iso &&
@@ -825,7 +900,9 @@ export function CalendarBoard() {
                         key={`${row.id}-${iso}-${slot}`}
                         data-plan-cell={cellKey}
                         className={`h-16 border-b border-l border-stone-200 p-1 ${
-                          focused
+                          emptySelected
+                            ? "bg-sky-100 ring-2 ring-inset ring-sky-600"
+                          : focused
                             ? "bg-amber-200 ring-2 ring-inset ring-amber-600"
                             : dropTarget && dragPreview?.blocked
                               ? "bg-red-200 ring-2 ring-inset ring-red-500"
@@ -836,7 +913,16 @@ export function CalendarBoard() {
                                 : isSunday(iso) || slotOff
                                   ? "bg-stone-50/80"
                                   : "bg-white"
-                        }`}
+                        } ${canCreate ? "cursor-pointer" : ""}`}
+                        onClick={(event) => {
+                          if (!canCreate || dragPreview) return;
+                          onEmptyCellClick(
+                            row.id,
+                            iso,
+                            half,
+                            event.ctrlKey || event.metaKey,
+                          );
+                        }}
                       >
                         <div className="flex flex-col gap-1">
                           {absences.map((absence) => (
@@ -958,6 +1044,16 @@ export function CalendarBoard() {
           onClose={() => setSelectedPhaseId(null)}
         />
       )}
+      {createFromSelection && emptyPicks.length > 0 ? (
+        <CreateFromSelectionModal
+          picks={emptyPicks}
+          onClose={() => setCreateFromSelection(false)}
+          onCreated={() => {
+            setCreateFromSelection(false);
+            setEmptyPicks([]);
+          }}
+        />
+      ) : null}
       {receptionPhaseId ? (
         <ReceptionModal
           phaseId={receptionPhaseId}
@@ -980,12 +1076,14 @@ function DayDetail({
   dragPreview,
   dragScope,
   selectedKeys,
+  emptyPickKeys,
   rowHandleProps,
   focusCell,
   onSelectDay,
   onOpenPhase,
   onReception,
   onAbsence,
+  onEmptyCellClick,
   onChipDragStart,
   onChipDragMove,
   onChipDragEnd,
@@ -999,12 +1097,19 @@ function DayDetail({
   dragPreview: { cells: Set<string>; blocked: boolean } | null;
   dragScope: DragScope;
   selectedKeys: Set<string>;
+  emptyPickKeys: Set<string>;
   rowHandleProps: ReturnType<typeof useEmployeeRowReorder>["rowHandleProps"];
   focusCell: { rowId: string; date: string; half: 0 | 1 } | null;
   onSelectDay: (iso: string) => void;
   onOpenPhase: (phaseId: string) => void;
   onReception: (phaseId: string) => void;
   onAbsence: (employee: Employee) => void;
+  onEmptyCellClick: (
+    rowId: string,
+    date: string,
+    half: 0 | 1,
+    additive: boolean,
+  ) => void;
   onChipDragStart: (
     event: PointerEvent<HTMLButtonElement>,
     rowId: string,
@@ -1170,20 +1275,44 @@ function DayDetail({
                     {windows.map((window) => {
                       const cellKey = `${row.id}|${iso}|${window.half}`;
                       const dropTarget = dragPreview?.cells.has(cellKey);
+                      const slot = window.half === 0 ? "matin" : "apres_midi";
+                      const cellAssignments = assignmentsForCell(
+                        snapshot,
+                        row.id,
+                        iso,
+                        slot,
+                      );
+                      const emptySelected = emptyPickKeys.has(cellKey);
+                      const canCreate =
+                        canReorder &&
+                        Boolean(row.employee) &&
+                        cellAssignments.length === 0 &&
+                        absences.length === 0;
                       return (
                       <div
                         key={`${row.id}-${window.half}`}
                         data-plan-cell={cellKey}
                         className={`absolute top-0 h-full rounded ${
-                          dropTarget && dragPreview?.blocked
+                          emptySelected
+                            ? "bg-sky-100 ring-2 ring-inset ring-sky-600"
+                            : dropTarget && dragPreview?.blocked
                             ? "bg-red-200 ring-2 ring-inset ring-red-500"
                             : dropTarget
                               ? "bg-amber-100"
                               : "bg-stone-100"
-                        }`}
+                        } ${canCreate ? "cursor-pointer" : ""}`}
                         style={{
                           left: `${((window.start - dayStart) / span) * 100}%`,
                           width: `${((window.end - window.start) / span) * 100}%`,
+                        }}
+                        onClick={(event) => {
+                          if (!canCreate || dragPreview) return;
+                          onEmptyCellClick(
+                            row.id,
+                            iso,
+                            window.half,
+                            event.ctrlKey || event.metaKey,
+                          );
                         }}
                       />
                       );
