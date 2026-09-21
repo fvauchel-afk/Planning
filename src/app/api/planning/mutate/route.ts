@@ -28,6 +28,7 @@ import {
   fetchSupabaseSnapshot,
   supabaseConfirmPhaseDates,
   supabaseValidateChantierPlan,
+  supabasePatchCommande,
 } from "@/lib/store/supabase";
 import {
   DATABASE_UNAVAILABLE_MESSAGE,
@@ -49,6 +50,7 @@ import type {
   NewReceptionInput,
   NewDemandeInput,
   DemandeUpdateInput,
+  CommandePatch,
   NewSignalementInput,
   PhaseEdits,
   PhasePatch,
@@ -145,7 +147,8 @@ type MutateBody =
   | { action: "saveHoraires"; rows: HoraireSaison[] }
   | { action: "setSaisonForcee"; saison: "ete" | "hiver" | null }
   | { action: "confirmPhaseDates"; ids: string[] }
-  | { action: "validateChantierPlan"; chantierId: string };
+  | { action: "validateChantierPlan"; chantierId: string }
+  | { action: "patchCommande"; input: CommandePatch };
 
 export async function POST(request: NextRequest) {
   const session = await resolveSession(await getSession());
@@ -193,6 +196,7 @@ export async function POST(request: NextRequest) {
     "saveHoraires",
     "setSaisonForcee",
     "validateChantierPlan",
+    "patchCommande",
     "applyAdministratifIdle",
   ]);
 
@@ -379,6 +383,15 @@ export async function POST(request: NextRequest) {
           { status: 400 },
         );
       }
+      if (body.input.categorie === "commande") {
+        return NextResponse.json(
+          {
+            error:
+              "Les commandes se créent avec « Plan validé » sur la fiche chantier.",
+          },
+          { status: 400 },
+        );
+      }
       if (
         body.input.categorie === "reunion_direction" &&
         !canManageReunionDirection(session.nom)
@@ -424,26 +437,6 @@ export async function POST(request: NextRequest) {
         motif_precision: body.input.motif_precision,
         photos: parsePiecesJointes(body.input.photos),
       });
-      if (body.input.categorie === "commande") {
-        const snapshot = await fetchSupabaseSnapshot();
-        const auteur =
-          snapshot.employees.find((item) =>
-            idsEqual(item.id, session.employeeId),
-          )?.nom || session.nom;
-        const mail = await sendCommandeMailboxMessage({
-          templateId: "nouvelle",
-          auteur,
-          message,
-          categorie: "commande",
-        });
-        if (mail.warning) {
-          console.warn("[commande-mail]", mail.warning);
-        }
-        const push = await sendCommandePush({ auteur, message });
-        if (push.warning) {
-          console.warn("[commande-push]", push.warning);
-        }
-      }
     } else if (body.action === "updateDemande") {
       if (!body.input?.id) {
         return NextResponse.json({ error: "Demande inconnue." }, { status: 400 });
@@ -462,12 +455,6 @@ export async function POST(request: NextRequest) {
         !canManageReunionDirection(session.nom)
       ) {
         return forbidden("Seuls Jonathan et Mika gèrent les sujets de réunion.");
-      }
-      if (
-        demande?.categorie === "commande" &&
-        !canReceiveCommandes(session.nom)
-      ) {
-        return forbidden("Seuls Alexis et Mika traitent les commandes.");
       }
       if (
         demande?.categorie === "conge" &&
@@ -613,6 +600,11 @@ export async function POST(request: NextRequest) {
           console.warn("[commande-push]", push.warning);
         }
       }
+    } else if (body.action === "patchCommande") {
+      if (!body.input?.id) {
+        return NextResponse.json({ error: "Commande inconnue." }, { status: 400 });
+      }
+      await supabasePatchCommande(body.input);
     } else if (body.action === "applyAdministratifIdle") {
       if (!canManageAdministratifIdle(session.nom)) {
         return forbidden(

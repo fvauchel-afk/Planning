@@ -35,7 +35,7 @@ function NavBadges({
   const wrap = mobile ? "ml-2" : "ml-1";
   return (
     <>
-      {href === "/demandes" && pendingCommandes > 0 ? (
+      {href === "/commandes" && pendingCommandes > 0 ? (
         <span className={`${wrap} rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-semibold text-stone-900`}>
           {pendingCommandes}
         </span>

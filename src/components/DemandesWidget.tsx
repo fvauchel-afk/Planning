@@ -5,11 +5,7 @@ import { canManageReunionDirection } from "@/lib/auth/reunion-access";
 import { useSession } from "@/lib/auth/session-context";
 import { usePlanning } from "@/lib/planning-context";
 import { toISODate } from "@/lib/dates";
-import {
-  categoriesDemandeHorsReunion,
-  syntheseMessageConge,
-  validateDemandeCongeInput,
-} from "@/lib/demandes";
+import { categoriesDemandeCourantes, syntheseMessageConge, validateDemandeCongeInput } from "@/lib/demandes";
 import { PieceJointePicker } from "@/components/PieceJointePicker";
 import { FormNotice } from "@/components/FormNotice";
 import type { PieceJointe } from "@/lib/pieces-jointes";
@@ -25,7 +21,7 @@ export function DemandesWidget() {
   const { session } = useSession();
   const { createDemande } = usePlanning();
   const [open, setOpen] = useState(false);
-  const [categorie, setCategorie] = useState<CategorieDemande>("commande");
+  const [categorie, setCategorie] = useState<CategorieDemande>("suggestion_site");
   const [message, setMessage] = useState("");
   const [pieces, setPieces] = useState<PieceJointe[]>([]);
   const today = toISODate(new Date());
@@ -55,8 +51,8 @@ export function DemandesWidget() {
   const canReunion = Boolean(session.canManageReunionDirection) ||
     canManageReunionDirection(session.nom);
   const categories = canReunion
-    ? (["commande", "suggestion_site", "suggestion_entreprise", "reunion_direction", "conge"] as const)
-    : categoriesDemandeHorsReunion();
+    ? ([...categoriesDemandeCourantes(), "reunion_direction"] as const)
+    : categoriesDemandeCourantes();
   const isConge = categorie === "conge";
   const canSend = isConge
     ? Boolean(dateDebut && dateFin && typeAbsence) &&
@@ -242,13 +238,11 @@ export function DemandesWidget() {
                   rows={5}
                   maxLength={4000}
                   placeholder={
-                    categorie === "commande"
-                      ? "Matériel, outillage… (reçu par Alexis et Mika)"
-                      : categorie === "suggestion_entreprise"
-                        ? "Organisation, matériel, process atelier…"
-                        : categorie === "reunion_direction"
-                          ? "Sujet à traiter en réunion de direction…"
-                          : "Une idée pour améliorer le site…"
+                    categorie === "suggestion_entreprise"
+                      ? "Organisation, matériel, process atelier…"
+                      : categorie === "reunion_direction"
+                        ? "Sujet à traiter en réunion de direction…"
+                        : "Une idée pour améliorer le site…"
                   }
                   className="w-full resize-y rounded-lg border border-stone-300 px-3 py-2 text-sm"
                 />

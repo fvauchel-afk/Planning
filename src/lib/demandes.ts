@@ -23,6 +23,11 @@ export function categoriesDemandeHorsReunion(): CategorieDemande[] {
   return CATEGORIES_DEMANDE.filter((id) => id !== CATEGORIE_REUNION_DIRECTION);
 }
 
+/** Demandes du widget / onglet Demandes : plus de catégorie Commande (onglet dédié). */
+export function categoriesDemandeCourantes(): CategorieDemande[] {
+  return categoriesDemandeHorsReunion().filter((id) => id !== "commande");
+}
+
 export function parseCategorieDemande(value: unknown): CategorieDemande {
   if (
     typeof value === "string" &&
@@ -123,6 +128,9 @@ function runDemandesSelfCheck() {
   }
   if (categoriesDemandeHorsReunion().includes("reunion_direction")) {
     throw new Error("demandes: la réunion ne doit pas apparaître dans Demandes");
+  }
+  if (categoriesDemandeCourantes().includes("commande")) {
+    throw new Error("demandes: la commande ne doit plus apparaître dans Demandes");
   }
   if (parseStatutDemande("acceptee") !== "acceptee") {
     throw new Error("demandes: statut acceptée");

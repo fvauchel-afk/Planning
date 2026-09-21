@@ -30,14 +30,14 @@ import type {
   PlanningSnapshot,
   ReceptionChantier,
   Demande,
+  Commande,
+  CommandePatch,
   Signalement,
   StatutSignalement,
 } from "@/lib/types";
 import { TYPES_PHASE } from "@/lib/types";
-import {
-  formatFournituresMessage,
-  normalizeFournitures,
-} from "@/lib/fournitures";
+import { normalizeFournitures, parseFournitures } from "@/lib/fournitures";
+import { parseStatutCommande } from "@/lib/commandes";
 import {
   phaseIdsStartedToday,
   withConfirmedPhases,
@@ -117,6 +117,15 @@ export function loadLocalSnapshot(): PlanningSnapshot {
         motif_refus: row.motif_refus ?? null,
         absence_id: row.absence_id ?? null,
         photos: parsePiecesJointes(row.photos),
+      })),
+      commandes: (parsed.commandes ?? []).map((row) => ({
+        ...row,
+        statut: parseStatutCommande(row.statut),
+        fournisseur: row.fournisseur ?? null,
+        fournitures: parseFournitures(row.fournitures),
+        onedrive_lien: row.onedrive_lien ?? null,
+        nom_client: row.nom_client ?? "",
+        created_by: row.created_by ?? null,
       })),
       sousTraitants: parsed.sousTraitants ?? [],
     };
@@ -699,27 +708,54 @@ export function localValidateChantierPlan(
 ): PlanningSnapshot {
   const chantier = snapshot.chantiers.find((row) => row.id === chantierId);
   if (!chantier || chantier.plan_valide) return snapshot;
-  const message = formatFournituresMessage(
-    chantier.nom_client,
-    normalizeFournitures(chantier.fournitures ?? []),
-    chantier.lien_dossier_onedrive,
-  );
-  let next = localCreateDemande(snapshot, {
-    categorie: "commande",
-    message,
-    employe_id: employeId,
-  });
-  const demande = next.demandes.find(
-    (row) =>
-      row.categorie === "commande" &&
-      row.employe_id === employeId &&
-      row.message === message,
-  );
-  next = {
-    ...next,
-    chantiers: next.chantiers.map((row) =>
-      row.id === chantierId
-        ? { ...row, plan_valide: true, plan_demande_id: demande?.id ?? null }
+  const commande: Commande = {
+    id:
+      typeof crypto !== "undefined" && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `cmd-${Date.now()}`,
+    chantier_id: chantierId,
+    created_by: employeId,
+    date_creation: new Date().toISOString(),
+    statut: "a_faire",
+    fournisseur: null,
+    fournitures: normalizeFournitures(chantier.fournitures ?? []),
+    onedrive_lien: chantier.lien_dossier_onedrive,
+    nom_client: chantier.nom_client,
+  };
+  const next: PlanningSnapshot = {
+    ...snapshot,
+    commandes: [commande, ...(snapshot.commandes ?? [])],
+    chantiers: snapshot.chantiers.map((row) =>
+      row.id === chantierId ? { ...row, plan_valide: true } : row,
+    ),
+  };
+  saveLocalSnapshot(next);
+  return next;
+}
+
+export function localPatchCommande(
+  snapshot: PlanningSnapshot,
+  input: CommandePatch,
+): PlanningSnapshot {
+  const next: PlanningSnapshot = {
+    ...snapshot,
+    commandes: (snapshot.commandes ?? []).map((row) =>
+      row.id === input.id
+        ? {
+            ...row,
+            statut:
+              input.statut !== undefined
+                ? parseStatutCommande(input.statut)
+                : row.statut,
+            fournisseur:
+              input.fournisseur !== undefined
+                ? input.fournisseur?.trim() || null
+                : row.fournisseur,
+            fournitures:
+              input.fournitures !== undefined
+                ? normalizeFournitures(input.fournitures)
+                : row.fournitures,
+          }
         : row,
     ),
   };

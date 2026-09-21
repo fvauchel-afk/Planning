@@ -1,14 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { usePlanning } from "@/lib/planning-context";
-import { useSession } from "@/lib/auth/session-context";
-import { markCommandesSeen } from "@/components/CommandeAlert";
 import { FormNotice } from "@/components/FormNotice";
 import { DemandeCongeAdmin, DemandeCongeDetails } from "@/components/DemandeCongeAdmin";
 import { PiecesJointesListe } from "@/components/PiecesJointesListe";
-import { COMMANDE_MAIL_TEMPLATE_CHOICES } from "@/lib/mail/commande-templates";
-import { demandeEstOuverte, demandePeutEtreSupprimee, categoriesDemandeHorsReunion, isReunionDirectionDemande } from "@/lib/demandes";
+import { categoriesDemandeCourantes, demandeEstOuverte, demandePeutEtreSupprimee, isReunionDirectionDemande } from "@/lib/demandes";
 import {
   CATEGORIE_DEMANDE_LABELS,
   STATUT_DEMANDE_LABELS,
@@ -49,30 +46,12 @@ function DemandeMessage({ text }: { text: string }) {
 }
 
 export function DemandesPage() {
-  const { snapshot, loading, updateDemande, deleteDemande, sendDemandeMail } =
-    usePlanning();
-  const { session } = useSession();
-  const canMail = Boolean(session?.canReceiveCommandes);
+  const { snapshot, loading, updateDemande, deleteDemande } = usePlanning();
   const [filtre, setFiltre] = useState<"tout" | CategorieDemande>("tout");
-  const [filtreChoisi, setFiltreChoisi] = useState(false);
   const [archives, setArchives] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [mailNote, setMailNote] = useState<string | null>(null);
 
-  const activeFiltre: "tout" | CategorieDemande =
-    !filtreChoisi && canMail ? "commande" : filtre;
-
-  const nouveauCommandes = useMemo(
-    () =>
-      (snapshot.demandes ?? []).filter(
-        (row) =>
-          row.categorie === "commande" &&
-          demandeEstOuverte(row) &&
-          !row.archivee,
-      ).length,
-    [snapshot.demandes],
-  );
   const nouveauConges = useMemo(
     () =>
       (snapshot.demandes ?? []).filter(
@@ -84,53 +63,20 @@ export function DemandesPage() {
     [snapshot.demandes],
   );
 
-  const categoryTabs = useMemo(() => {
-    const base = categoriesDemandeHorsReunion();
-    if (!canMail) return base;
-    return [
-      "commande" as const,
-      ...base.filter((id) => id !== "commande"),
-    ];
-  }, [canMail]);
+  const categoryTabs = useMemo(() => categoriesDemandeCourantes(), []);
 
   const rows = useMemo(() => {
     const list = [...(snapshot.demandes ?? [])]
       .filter((row) => !isReunionDirectionDemande(row))
+      .filter((row) => row.categorie !== "commande")
       .filter((row) => (archives ? row.archivee : !row.archivee));
-    list.sort((left, right) => {
-      if (canMail && activeFiltre === "tout") {
-        const leftNew =
-          left.categorie === "commande" && demandeEstOuverte(left) ? 1 : 0;
-        const rightNew =
-          right.categorie === "commande" && demandeEstOuverte(right) ? 1 : 0;
-        if (leftNew !== rightNew) return rightNew - leftNew;
-      }
-      return Date.parse(right.date_creation) - Date.parse(left.date_creation);
-    });
-    if (activeFiltre === "tout") return list;
-    return list.filter((row) => row.categorie === activeFiltre);
-  }, [snapshot.demandes, activeFiltre, archives, canMail]);
-
-  useEffect(() => {
-    const ids = (snapshot.demandes ?? [])
-      .filter((row) => row.categorie === "commande")
-      .map((row) => row.id);
-    if (ids.length) markCommandesSeen(ids);
-  }, [snapshot.demandes]);
-
-  async function sendMail(demande: Demande, templateId: string) {
-    setBusyId(demande.id);
-    setError(null);
-    setMailNote(null);
-    try {
-      await sendDemandeMail(demande.id, templateId);
-      setMailNote("Message envoyé depuis la boîte f.vauchel.");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "E-mail impossible.");
-    } finally {
-      setBusyId(null);
-    }
-  }
+    list.sort(
+      (left, right) =>
+        Date.parse(right.date_creation) - Date.parse(left.date_creation),
+    );
+    if (filtre === "tout") return list;
+    return list.filter((row) => row.categorie === filtre);
+  }, [snapshot.demandes, filtre, archives]);
 
   async function patch(demande: Demande, input: Parameters<typeof updateDemande>[0]) {
     setBusyId(demande.id);
@@ -175,9 +121,7 @@ export function DemandesPage() {
           <p className="mt-1 text-sm text-stone-600">
             {archives
               ? "Anciennes demandes mises de côté, sans les supprimer."
-              : canMail
-                ? "Vue commandes en priorité. Un e-mail part aussi sur f.vauchel. Les autres admins voient toute la liste."
-                : "Liste complète de toutes les demandes, pour supervision."}
+              : "Congés, suggestions et le reste. Les commandes atelier sont dans l’onglet Commande."}
           </p>
         </div>
         <button
@@ -192,11 +136,10 @@ export function DemandesPage() {
         <button
           type="button"
           onClick={() => {
-            setFiltreChoisi(true);
             setFiltre("tout");
           }}
           className={`rounded px-3 py-1.5 text-sm ${
-            activeFiltre === "tout"
+            filtre === "tout"
               ? "bg-stone-900 text-white"
               : "text-stone-700 hover:bg-stone-100"
           }`}
@@ -208,33 +151,19 @@ export function DemandesPage() {
             key={id}
             type="button"
             onClick={() => {
-              setFiltreChoisi(true);
               setFiltre(id);
             }}
             className={`inline-flex items-center gap-1.5 rounded px-3 py-1.5 text-sm ${
-              activeFiltre === id
+              filtre === id
                 ? "bg-stone-900 text-white"
                 : "text-stone-700 hover:bg-stone-100"
             }`}
           >
             {CATEGORIE_DEMANDE_LABELS[id]}
-            {id === "commande" && nouveauCommandes > 0 ? (
-              <span
-                className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase ${
-                  activeFiltre === id
-                    ? "bg-amber-400 text-stone-900"
-                    : "bg-amber-200 text-amber-950"
-                }`}
-              >
-                {nouveauCommandes > 1
-                  ? `${nouveauCommandes} nouveaux`
-                  : "nouveau"}
-              </span>
-            ) : null}
             {id === "conge" && nouveauConges > 0 ? (
               <span
                 className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase ${
-                  activeFiltre === id
+                  filtre === id
                     ? "bg-amber-400 text-stone-900"
                     : "bg-amber-200 text-amber-950"
                 }`}
@@ -248,11 +177,6 @@ export function DemandesPage() {
         ))}
       </div>
       {error ? <FormNotice>{error}</FormNotice> : null}
-      {mailNote ? (
-        <p className="rounded border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-          {mailNote}
-        </p>
-      ) : null}
       {loading ? (
         <p className="text-sm text-stone-500">Chargement…</p>
       ) : rows.length === 0 ? (
@@ -296,14 +220,6 @@ export function DemandesPage() {
                   >
                     {STATUT_DEMANDE_LABELS[demande.statut]}
                   </span>
-                  {canMail &&
-                  demande.categorie === "commande" &&
-                  waiting &&
-                  !demande.archivee ? (
-                    <span className="rounded-full bg-amber-200 px-2 py-0.5 text-[11px] font-semibold uppercase text-amber-950">
-                      Nouveau
-                    </span>
-                  ) : null}
                 </div>
                 <DemandeCongeDetails demande={demande} />
                 {demande.categorie !== "conge" ? (
@@ -373,19 +289,6 @@ export function DemandesPage() {
                       {busy ? "Suppression…" : "Supprimer"}
                     </button>
                   ) : null}
-                  {canMail && demande.categorie === "commande"
-                    ? COMMANDE_MAIL_TEMPLATE_CHOICES.map((template) => (
-                        <button
-                          key={template.id}
-                          type="button"
-                          disabled={busy}
-                          onClick={() => void sendMail(demande, template.id)}
-                          className="rounded border border-amber-300 bg-amber-50 px-3 py-1.5 text-sm text-amber-950 disabled:opacity-60"
-                        >
-                          {template.label}
-                        </button>
-                      ))
-                    : null}
                 </div>
                 {waiting && demande.categorie === "conge" ? (
                   <DemandeCongeAdmin

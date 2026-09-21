@@ -1,5 +1,7 @@
+import { commandeEstOuverte } from "@/lib/commandes";
 import { lancementsEnAttente } from "@/lib/dates-estimatives";
 import type { StatutDevis } from "@/lib/devis/types";
+import { createEmptySnapshot } from "@/lib/seed";
 import { pendingSignalements } from "@/lib/signalements";
 import type { Demande, PlanningSnapshot } from "@/lib/types";
 
@@ -67,10 +69,15 @@ export function chosesAEffectuer(
     {
       id: "commandes",
       label: "Commandes à traiter",
-      count: demandes.filter(
-        (row) => row.categorie === "commande" && row.statut !== "traite" && !row.archivee,
-      ).length,
-      href: "/demandes",
+      count:
+        (snapshot.commandes ?? []).filter(commandeEstOuverte).length +
+        demandes.filter(
+          (row) =>
+            row.categorie === "commande" &&
+            row.statut !== "traite" &&
+            !row.archivee,
+        ).length,
+      href: "/commandes",
     },
     {
       id: "lancements",
@@ -91,3 +98,28 @@ export function chosesAEffectuer(
   ];
   return { total: lignes.reduce((sum, ligne) => sum + ligne.count, 0), lignes };
 }
+
+function runDashboardSelfCheck() {
+  const snapshot: PlanningSnapshot = {
+    ...createEmptySnapshot(),
+    commandes: [
+      {
+        id: "c1",
+        chantier_id: "ch1",
+        created_by: null,
+        date_creation: "2026-09-21T00:00:00.000Z",
+        statut: "a_faire",
+        fournisseur: null,
+        fournitures: [],
+        onedrive_lien: null,
+        nom_client: "Test",
+      },
+    ],
+  };
+  const result = chosesAEffectuer(snapshot, []);
+  const commandes = result.lignes.find((ligne) => ligne.id === "commandes");
+  if (!commandes || commandes.href !== "/commandes" || commandes.count !== 1) {
+    throw new Error("synthese: les commandes se comptent dans l’onglet Commande");
+  }
+}
+runDashboardSelfCheck();

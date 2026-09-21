@@ -11,6 +11,15 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-21-onglet-commande",
+    title: "Onglet Commande (après Plan)",
+    items: [
+      "Tous les admins voient l’onglet Commande, entre Plan et Absences.",
+      "Au clic sur « Plan validé » sur la fiche chantier, une commande est créée (fournitures du plan, lien OneDrive, fournisseur en texte libre).",
+      "Tous les admins peuvent passer le statut : À faire, En cours, Effectuée. Plus de catégorie Commande dans la bulle Demandes : l’ancien suivi reste listé en bas de l’onglet.",
+    ],
+  },
+  {
     id: "2026-09-21-bandeau-erreur-sticky",
     title: "Message d’erreur toujours visible",
     items: [
@@ -33,6 +42,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       "Le bouton « Connecter OneDrive » reste accessible à tout admin (case Admin dans Accès et droits), pas seulement à Jonathan.",
     ],
   },
+
   {
     id: "2026-09-21-saisons-jj-mm",
     title: "Saisons : jour et mois seulement",

@@ -43,6 +43,7 @@ import {
   localReorderEmployees,
   localConfirmPhaseDates,
   localValidateChantierPlan,
+  localPatchCommande,
   loadLocalSnapshot,
 } from "@/lib/store/local";
 import { fetchPlanningSnapshot, planningMutate } from "@/lib/planning/api";
@@ -66,6 +67,7 @@ import type {
   NewReceptionInput,
   NewDemandeInput,
   DemandeUpdateInput,
+  CommandePatch,
   NewSignalementInput,
   PhaseEdits,
   PhasePatch,
@@ -124,6 +126,7 @@ type PlanningContextValue = {
   sendDemandeMail: (id: string, templateId: string) => Promise<void>;
   confirmPhaseDates: (ids: string[]) => Promise<void>;
   validateChantierPlan: (chantierId: string) => Promise<void>;
+  patchCommande: (input: CommandePatch) => Promise<void>;
   saveHoraires: (rows: HoraireSaison[]) => Promise<void>;
   setSaisonForcee: (saison: "ete" | "hiver" | null) => Promise<void>;
   ensureChantierOnedriveFolder: (chantierId: string) => Promise<void>;
@@ -780,6 +783,19 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
     [useShared, refresh, assertWritable, mutate],
   );
 
+  const patchCommande = useCallback(
+    async (input: CommandePatch) => {
+      assertWritable();
+      if (useShared) {
+        await mutate({ action: "patchCommande", input });
+        await refresh({ throwOnError: true });
+        return;
+      }
+      setSnapshot((current) => localPatchCommande(current, input));
+    },
+    [useShared, refresh, assertWritable, mutate],
+  );
+
   const saveHoraires = useCallback(
     async (rows: HoraireSaison[]) => {
       assertWritable();
@@ -916,6 +932,7 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
       sendDemandeMail,
       confirmPhaseDates,
       validateChantierPlan,
+      patchCommande,
       saveHoraires,
       setSaisonForcee,
       ensureChantierOnedriveFolder,
@@ -955,6 +972,7 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
       sendDemandeMail,
       confirmPhaseDates,
       validateChantierPlan,
+      patchCommande,
       saveHoraires,
       setSaisonForcee,
       ensureChantierOnedriveFolder,
