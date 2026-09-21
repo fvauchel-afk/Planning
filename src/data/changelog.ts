@@ -11,6 +11,15 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-21-chantier-lance-facturer",
+    title: "Chantier lancé, terminé, à facturer",
+    items: [
+      "Le bouton « Je valide le lancement » s’appelle « Chantier lancé » et s’affiche sur chaque phase (pas seulement la fabrication).",
+      "Dès la première phase lancée, le chantier passe En cours (orange). Tant que personne n’a cliqué, il reste À venir (bleu), même si les dates ont commencé.",
+      "Quand toutes les phases datées sont en « J’ai fini », le chantier passe tout seul À facturer (violet). Il reste sur le planning. Le vert Terminé sert si les dates sont finies mais qu’il reste des phases non closes.",
+    ],
+  },
+  {
     id: "2026-09-21-blocs-choisis",
     title: "Planning : déplacer des blocs choisis sur du libre",
     items: [

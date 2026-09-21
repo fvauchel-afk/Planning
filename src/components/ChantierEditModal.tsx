@@ -14,6 +14,7 @@ import {
   chantierHasEstimativeDates,
   estimativePhaseIdsForChantier,
   fabricationPhaseIdsAwaitingLaunch,
+  phaseIdsAwaitingChantierLance,
 } from "@/lib/dates-estimatives";
 import { LaunchValidateButton } from "@/components/LaunchValidateButton";
 import {
@@ -1510,10 +1511,10 @@ export function ChantierEditModal({
             </div>
             <p className="mt-2 text-xs text-stone-500">
               Modifier le début ou la fin confirme les dates. Un chantier déjà
-              commencé, un bon de commande, ou « Je valide le lancement » aussi.
+              commencé, un bon de commande, ou « Chantier lancé » aussi.
             </p>
             <div className="mt-3">
-              {fabricationPhaseIdsAwaitingLaunch(snapshot, chantier.id).map(
+              {phaseIdsAwaitingChantierLance(snapshot, chantier.id).map(
                 (phaseId) => (
                   <LaunchValidateButton key={phaseId} phaseId={phaseId} />
                 ),

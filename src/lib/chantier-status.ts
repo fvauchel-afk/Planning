@@ -18,6 +18,7 @@ export const STATUTS_CHANTIER = [
   "a_venir",
   "en_cours",
   "termine",
+  "a_facturer",
 ] as const;
 export type StatutChantier = (typeof STATUTS_CHANTIER)[number];
 
@@ -26,6 +27,7 @@ export const STATUT_CHANTIER_LABELS: Record<StatutChantier, string> = {
   a_venir: "À venir",
   en_cours: "En cours",
   termine: "Terminé",
+  a_facturer: "À facturer",
 };
 
 export const STATUT_CHANTIER_COLORS: Record<
@@ -36,6 +38,7 @@ export const STATUT_CHANTIER_COLORS: Record<
   a_venir: { dot: "#2563eb", tint: "bg-blue-50", text: "text-blue-800" },
   en_cours: { dot: "#ea580c", tint: "bg-orange-50", text: "text-orange-800" },
   termine: { dot: "#16a34a", tint: "bg-green-50", text: "text-green-800" },
+  a_facturer: { dot: "#7c3aed", tint: "bg-violet-50", text: "text-violet-900" },
 };
 
 export type ChantierPlanningInfo = {
@@ -89,13 +92,56 @@ export function statutChantierFromRange(
   return "en_cours";
 }
 
+function phasesOfChantier(snapshot: PlanningSnapshot, chantierId: string) {
+  const elementIds = new Set(
+    snapshot.elements
+      .filter((element) => element.chantier_id === chantierId)
+      .map((element) => element.id),
+  );
+  return snapshot.phases.filter((phase) => elementIds.has(phase.element_id));
+}
+
+/** Au moins une phase a le clic « Chantier lancé ». */
+export function chantierEstLance(
+  snapshot: PlanningSnapshot,
+  chantierId: string,
+): boolean {
+  return phasesOfChantier(snapshot, chantierId).some(
+    (phase) => phase.lancement_valide,
+  );
+}
+
+/** Toutes les phases datées sont en « J’ai fini ». */
+export function chantierToutFini(
+  snapshot: PlanningSnapshot,
+  chantierId: string,
+): boolean {
+  const dated = phasesOfChantier(snapshot, chantierId).filter(
+    (phase) => phase.date_debut,
+  );
+  return dated.length > 0 && dated.every((phase) => phase.statut === "termine");
+}
+
+export function statutChantier(
+  snapshot: PlanningSnapshot,
+  chantierId: string,
+  today = toISODate(new Date()),
+): StatutChantier {
+  const { firstDate, lastDate } = chantierDateRange(snapshot, chantierId);
+  if (!firstDate || !lastDate) return "non_planifie";
+  if (chantierToutFini(snapshot, chantierId)) return "a_facturer";
+  if (!chantierEstLance(snapshot, chantierId)) return "a_venir";
+  if (lastDate < today) return "termine";
+  return "en_cours";
+}
+
 export function chantierPlanningInfo(
   snapshot: PlanningSnapshot,
   chantierId: string,
   today = toISODate(new Date()),
 ): ChantierPlanningInfo {
   const { firstDate, lastDate } = chantierDateRange(snapshot, chantierId);
-  const statut = statutChantierFromRange(firstDate, lastDate, today);
+  const statut = statutChantier(snapshot, chantierId, today);
   const rangeLabel =
     firstDate && lastDate
       ? `${formatIsoFr(firstDate)} → ${formatIsoFr(lastDate)}`
@@ -187,6 +233,29 @@ function runChantierStatusSelfCheck() {
   }
   if (!isChantierLastPlannedDay(lastDaySnap, "c1", "2026-09-18")) {
     throw new Error("chantier-status: le 18 est le dernier jour planifié");
+  }
+  if (statutChantier(lastDaySnap, "c1", "2026-09-18") !== "a_venir") {
+    throw new Error("chantier-status: sans clic Lancé → reste À venir");
+  }
+  const lanceSnap: PlanningSnapshot = {
+    ...lastDaySnap,
+    phases: [{ ...lastDaySnap.phases[0]!, lancement_valide: true }],
+  };
+  if (statutChantier(lanceSnap, "c1", "2026-09-18") !== "en_cours") {
+    throw new Error("chantier-status: 1re phase lancée → En cours");
+  }
+  const finiSnap: PlanningSnapshot = {
+    ...lastDaySnap,
+    phases: [
+      {
+        ...lastDaySnap.phases[0]!,
+        lancement_valide: true,
+        statut: "termine",
+      },
+    ],
+  };
+  if (statutChantier(finiSnap, "c1", "2026-09-18") !== "a_facturer") {
+    throw new Error("chantier-status: toutes phases J’ai fini → À facturer");
   }
 }
 

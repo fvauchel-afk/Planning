@@ -16,7 +16,7 @@ import { colorForChantier } from "@/lib/colors";
 import { dateInRange, formatOvertimeHours } from "@/lib/dates";
 import {
   phaseIsEstimative,
-  fabricationAwaitingLaunch,
+  phaseAwaitingChantierLance,
 } from "@/lib/dates-estimatives";
 import {
   LOGISTIQUE_ROW_LABEL,
@@ -302,7 +302,7 @@ export function AssignmentChip({
   clockLabel?: string | null;
 }) {
   const color = colorForChantier(assignment.chantier.id);
-  const needsLaunch = fabricationAwaitingLaunch(assignment.phase);
+  const needsLaunch = phaseAwaitingChantierLance(assignment.phase);
   const address =
     assignment.chantier.adresse_livraison?.trim() ||
     assignment.chantier.adresse?.trim() ||

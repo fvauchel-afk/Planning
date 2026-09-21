@@ -24,7 +24,7 @@ import { WelcomeBanner } from "@/components/WelcomeBanner";
 import { LaunchValidateButton } from "@/components/LaunchValidateButton";
 import { PhaseFicheModal } from "@/components/PhaseFicheModal";
 import { ReceptionModal } from "@/components/ReceptionModal";
-import { fabricationAwaitingLaunch, phaseIsEstimative } from "@/lib/dates-estimatives";
+import { phaseAwaitingChantierLance, phaseIsEstimative } from "@/lib/dates-estimatives";
 import { isChantierLastPlannedDay } from "@/lib/chantier-status";
 
 export function MonPlanningPage() {
@@ -241,7 +241,7 @@ function SlotBlock({
           <div
             key={assignment.phase.id + title}
             className={`rounded-md px-2 py-2 text-xs ${
-              fabricationAwaitingLaunch(assignment.phase)
+              phaseAwaitingChantierLance(assignment.phase)
                 ? "ring-2 ring-orange-500"
                 : ""
             }`}
@@ -254,7 +254,7 @@ function SlotBlock({
             >
               <p className="font-semibold">
                 {assignment.chantier.nom_client}
-                {fabricationAwaitingLaunch(assignment.phase) ? (
+                {phaseAwaitingChantierLance(assignment.phase) ? (
                   <span className="ml-1 rounded bg-orange-600 px-1 text-[9px] font-semibold uppercase tracking-wide text-orange-50">
                     ⚠ à valider
                   </span>

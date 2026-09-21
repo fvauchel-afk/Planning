@@ -205,6 +205,14 @@ export function fabricationAwaitingLaunch(
   today = toISODate(new Date()),
 ): boolean {
   if (phase.type_phase !== "fabrication") return false;
+  return phaseAwaitingChantierLance(phase, today);
+}
+
+/** Bouton « Chantier lancé » : phase datée, pas encore cliquée, pas « J’ai fini ». */
+export function phaseAwaitingChantierLance(
+  phase: PhasePlanning,
+  today = toISODate(new Date()),
+): boolean {
   if (phase.statut === "termine") return false;
   if (phase.lancement_valide) return false;
   const start = phase.date_debut?.slice(0, 10);
@@ -213,6 +221,18 @@ export function fabricationAwaitingLaunch(
 }
 
 export function fabricationPhaseIdsAwaitingLaunch(
+  snapshot: PlanningSnapshot,
+  chantierId: string,
+  today = toISODate(new Date()),
+): string[] {
+  return phaseIdsAwaitingChantierLance(snapshot, chantierId, today).filter(
+    (id) =>
+      snapshot.phases.find((phase) => phase.id === id)?.type_phase ===
+      "fabrication",
+  );
+}
+
+export function phaseIdsAwaitingChantierLance(
   snapshot: PlanningSnapshot,
   chantierId: string,
   today = toISODate(new Date()),
@@ -226,7 +246,7 @@ export function fabricationPhaseIdsAwaitingLaunch(
     .filter(
       (phase) =>
         elementIds.has(phase.element_id) &&
-        fabricationAwaitingLaunch(phase, today),
+        phaseAwaitingChantierLance(phase, today),
     )
     .map((phase) => phase.id);
 }

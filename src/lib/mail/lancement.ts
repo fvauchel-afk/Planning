@@ -49,7 +49,7 @@ export async function sendLancementReminderEmail(
     "",
     `La fabrication de « ${cible.nomClient} » démarre aujourd’hui (${dateFr}) et le lancement n’est pas encore validé.`,
     "",
-    "Merci de cliquer « Je valide le lancement » sur le planning, ou d’ouvrir la fiche :",
+    "Merci de cliquer « Chantier lancé » sur le planning, ou d’ouvrir la fiche :",
     ficheUrl,
     "",
     COMPANY_SIGN_OFF,

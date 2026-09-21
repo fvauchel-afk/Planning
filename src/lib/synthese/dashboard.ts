@@ -81,7 +81,7 @@ export function chosesAEffectuer(
     },
     {
       id: "lancements",
-      label: "Lancements fabrication à valider",
+      label: "Chantiers lancés à valider",
       count: lancementsEnAttente(snapshot).length,
       href: "/",
     },

@@ -22,12 +22,11 @@ export function LancementAlert() {
     <div className="mb-4 rounded-lg border border-orange-300 bg-orange-50 px-4 py-3 text-sm text-orange-950">
       <p className="font-medium">
         {rows.length === 1
-          ? `Lancement à valider : ${names} (fabrication déjà commencée).`
-          : `${rows.length} lancements à valider : ${names}${extra}.`}
+          ? `Chantier lancé à valider : ${names} (déjà commencé).`
+          : `${rows.length} chantiers lancés à valider : ${names}${extra}.`}
       </p>
       <p className="mt-1 text-xs">
-        Cliquez « Je valide le lancement » ci-dessous, ou ouvrez le bloc fabrication /
-        la fiche chantier.
+        Cliquez « Chantier lancé » ci-dessous, ou ouvrez le bloc / la fiche.
       </p>
       <ul className="mt-2 space-y-2">
         {rows.map((row) => (
