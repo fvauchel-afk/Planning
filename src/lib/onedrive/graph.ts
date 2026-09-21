@@ -10,7 +10,7 @@ import {
   getValidAccessToken,
   loadOnedriveTokens,
   saveOnedriveRoot,
-  saveOnedriveTokens,
+  saveOnedriveAccountLabel,
 } from "@/lib/onedrive/tokens";
 import { needsOnedriveReconnect } from "@/lib/onedrive/reconnect";
 
@@ -322,7 +322,10 @@ export type OnedriveProbeResult = {
 };
 
 /** Vérifie un appel Graph réel, pas seulement la présence d’un jeton en base. */
-export async function probeOnedriveConnection(): Promise<OnedriveProbeResult> {
+export async function probeOnedriveConnection(options?: {
+  checkBackup?: boolean;
+}): Promise<OnedriveProbeResult> {
+  const checkBackup = options?.checkBackup !== false;
   const row = await loadOnedriveTokens();
   if (!row?.refresh_token) {
     return { connected: false, expired: false, account: null };
@@ -336,11 +339,25 @@ export async function probeOnedriveConnection(): Promise<OnedriveProbeResult> {
     const token = await getValidAccessToken();
     const label =
       (await fetchOnedriveAccountLabel(token)) || row.account_label || null;
-    // Même opération que /sauvegarde (liste du dossier Sauvegarde), pas un
-    // simple GET /me/drive : ce GET peut réussir alors que Microsoft refuse
-    // d’écrire ou de lister les dossiers métier.
-    await listBackupFiles();
-    return { ...base, connected: true, expired: false, account: label };
+    if (!checkBackup) {
+      return { ...base, connected: true, expired: false, account: label };
+    }
+    try {
+      await listBackupFiles();
+      return { ...base, connected: true, expired: false, account: label };
+    } catch (backupErr) {
+      const message =
+        backupErr instanceof Error
+          ? backupErr.message
+          : "Dossier Sauvegarde inaccessible.";
+      return {
+        ...base,
+        connected: true,
+        expired: false,
+        account: label,
+        error: message,
+      };
+    }
   } catch (err) {
     const message =
       err instanceof Error ? err.message : "Accès OneDrive impossible.";
@@ -357,16 +374,8 @@ export async function probeOnedriveConnection(): Promise<OnedriveProbeResult> {
 export async function persistAccountLabel(): Promise<void> {
   const token = await getValidAccessToken();
   const label = await fetchOnedriveAccountLabel(token);
-  const row = await loadOnedriveTokens();
-  if (!row || !label) return;
-  await saveOnedriveTokens({
-    access_token: row.access_token,
-    refresh_token: row.refresh_token,
-    expires_at: row.expires_at,
-    account_label: label,
-    root_item_id: row.root_item_id,
-    root_drive_id: row.root_drive_id,
-  });
+  if (!label) return;
+  await saveOnedriveAccountLabel(label);
 }
 
 export async function getRootFolder(): Promise<{ itemId: string; driveId: string }> {

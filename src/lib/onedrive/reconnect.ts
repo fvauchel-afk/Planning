@@ -8,6 +8,8 @@ export function needsOnedriveReconnect(message: string | undefined): boolean {
 /** Marge avant expiration de l’access token pour un rafraîchissement au login. */
 export const ONEDRIVE_KEEPALIVE_TTL_MS = 10 * 60 * 1000;
 
+export const ONEDRIVE_REFRESH_RETRY_MAX = 2;
+
 export function onedriveAccessNeedsRefresh(
   expiresAt: string | null | undefined,
   nowMs: number,
@@ -17,6 +19,31 @@ export function onedriveAccessNeedsRefresh(
   const expires = new Date(expiresAt).getTime();
   if (!Number.isFinite(expires)) return true;
   return expires - minTtlMs <= nowMs;
+}
+
+/**
+ * Microsoft invalide l’ancien refresh token dès qu’un autre appel en a obtenu
+ * un nouveau. Un second rafraîchissement concurrent (login + keepalive + statut)
+ * reçoit alors invalid_grant alors que la ligne en base est déjà à jour.
+ */
+export function shouldRetryOnedriveRefresh(input: {
+  attempt: number;
+  errorMessage: string;
+  previousRefreshToken: string;
+  currentRefreshToken: string | null | undefined;
+  currentExpiresAt: string | null | undefined;
+  nowMs: number;
+  minTtlMs: number;
+}): boolean {
+  if (input.attempt >= ONEDRIVE_REFRESH_RETRY_MAX) return false;
+  if (!needsOnedriveReconnect(input.errorMessage)) return false;
+  if (!input.currentRefreshToken) return false;
+  if (input.currentRefreshToken !== input.previousRefreshToken) return true;
+  return !onedriveAccessNeedsRefresh(
+    input.currentExpiresAt,
+    input.nowMs,
+    input.minTtlMs,
+  );
 }
 
 function runOnedriveReconnectSelfCheck() {
@@ -66,6 +93,59 @@ function runOnedriveReconnectSelfCheck() {
     )
   ) {
     throw new Error("onedrive: access token déjà expiré doit être rafraîchi");
+  }
+  const grant = "Connexion OneDrive expirée. Ouvrez l’onglet OneDrive.";
+  if (
+    !shouldRetryOnedriveRefresh({
+      attempt: 0,
+      errorMessage: grant,
+      previousRefreshToken: "R1",
+      currentRefreshToken: "R2",
+      currentExpiresAt: "2026-09-14T13:00:00.000Z",
+      nowMs: now,
+      minTtlMs: ONEDRIVE_KEEPALIVE_TTL_MS,
+    })
+  ) {
+    throw new Error("onedrive: invalid_grant après rotation concurrente doit retenter");
+  }
+  if (
+    shouldRetryOnedriveRefresh({
+      attempt: 0,
+      errorMessage: grant,
+      previousRefreshToken: "R1",
+      currentRefreshToken: "R1",
+      currentExpiresAt: "2026-09-14T11:00:00.000Z",
+      nowMs: now,
+      minTtlMs: ONEDRIVE_KEEPALIVE_TTL_MS,
+    })
+  ) {
+    throw new Error("onedrive: invalid_grant sans nouveau jeton ne doit pas boucler");
+  }
+  if (
+    !shouldRetryOnedriveRefresh({
+      attempt: 0,
+      errorMessage: grant,
+      previousRefreshToken: "R1",
+      currentRefreshToken: "R1",
+      currentExpiresAt: "2026-09-14T13:00:00.000Z",
+      nowMs: now,
+      minTtlMs: ONEDRIVE_KEEPALIVE_TTL_MS,
+    })
+  ) {
+    throw new Error("onedrive: un autre worker a déjà rafraîchi l’access token");
+  }
+  if (
+    shouldRetryOnedriveRefresh({
+      attempt: ONEDRIVE_REFRESH_RETRY_MAX,
+      errorMessage: grant,
+      previousRefreshToken: "R1",
+      currentRefreshToken: "R2",
+      currentExpiresAt: "2026-09-14T13:00:00.000Z",
+      nowMs: now,
+      minTtlMs: ONEDRIVE_KEEPALIVE_TTL_MS,
+    })
+  ) {
+    throw new Error("onedrive: trop de tentatives de rafraîchissement");
   }
 }
 

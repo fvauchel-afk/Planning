@@ -11,6 +11,15 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-21-onedrive-toujours-connecte",
+    title: "OneDrive : alerte dès l’entrée, plus de faux « expiré »",
+    items: [
+      "À chaque ouverture du planning (pas seulement au code PIN), le jeton OneDrive est rafraîchi en silence.",
+      "Si Microsoft a vraiment coupé l’accès Hotmail, un bandeau rouge s’affiche tout de suite pour Jonathan, avec un lien « Reconnecter maintenant » — plus besoin d’ouvrir l’onglet OneDrive par hasard.",
+      "Un compte Hotmail ne peut pas rester connecté à 100 % tout seul : si Microsoft révoque l’accès, il faut recliquer une fois sur « Connecter OneDrive ».",
+    ],
+  },
+  {
     id: "2026-09-21-dates-chantier-chaine",
     title: "Dates du chantier : toute la chaîne",
     items: [

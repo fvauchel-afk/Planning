@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { probeOnedriveConnection } from "@/lib/onedrive/graph";
 import { isMissingSchemaError } from "@/lib/supabase/errors";
 
@@ -8,9 +8,10 @@ export const fetchCache = "force-no-store";
 
 const NO_STORE = { "Cache-Control": "private, no-store, max-age=0" };
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const status = await probeOnedriveConnection();
+    const lite = request.nextUrl.searchParams.get("lite") === "1";
+    const status = await probeOnedriveConnection({ checkBackup: !lite });
     return NextResponse.json(status, { headers: NO_STORE });
   } catch (err) {
     if (isMissingSchemaError(err)) {
