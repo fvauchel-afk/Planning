@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-21-blocs-choisis",
+    title: "Planning : déplacer des blocs choisis sur du libre",
+    items: [
+      "Nouveau mode « Blocs choisis » : vous glissez un ou plusieurs blocs (Ctrl+clic pour en cocher plusieurs) vers la case vide que vous voulez.",
+      "Seuls ces blocs bougent : pas toute la suite du chantier, et pas de saut automatique vers le prochain trou. Un dépôt sur une case déjà prise, une absence ou un horaire à 0 h est refusé.",
+    ],
+  },
+  {
     id: "2026-09-21-saisons-jj-mm",
     title: "Saisons : jour et mois seulement",
     items: [

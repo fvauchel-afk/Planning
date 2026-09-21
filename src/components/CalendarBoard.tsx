@@ -41,8 +41,10 @@ import {
 import { formatClock, formatHoursLabel, hoursForSlot, workWindowsForRow } from "@/lib/engine/hours";
 import {
   shiftChantierBlockByMinutes,
+  shiftIndependentHalves,
   shiftOrMoveChantierBlock,
   shiftPhaseDay,
+  type IndependentHalf,
   type OccupiedHalf,
 } from "@/lib/engine/drag-shift";
 import { clampToWorkWindows } from "@/lib/engine/hour-grid";
@@ -63,7 +65,16 @@ import {
 import { fabricationAwaitingLaunch } from "@/lib/dates-estimatives";
 
 type ViewMode = "overview" | "week" | "day";
-type DragScope = "chantier" | "phase";
+type DragScope = "chantier" | "phase" | "libre";
+
+function halfSelectKey(
+  rowId: string,
+  phaseId: string,
+  date: string,
+  half: 0 | 1,
+): string {
+  return `${rowId}|${phaseId}|${date}|${half}`;
+}
 
 export function CalendarBoard() {
   const { snapshot, loading, error, usingSupabase, applyPhaseEdits, reorderEmployees } =
@@ -72,6 +83,7 @@ export function CalendarBoard() {
   const { session } = useSession();
   const [view, setView] = useState<ViewMode>("overview");
   const [dragScope, setDragScope] = useState<DragScope>("chantier");
+  const [selectedHalves, setSelectedHalves] = useState<IndependentHalf[]>([]);
   const [todayIso, setTodayIso] = useState(() => toISODate(new Date()));
   const [cursorIso, setCursorIso] = useState(todayIso);
   const [selectedPhaseId, setSelectedPhaseId] = useState<string | null>(null);
@@ -97,6 +109,7 @@ export function CalendarBoard() {
     chantierId: string;
     phaseId: string;
     scope: DragScope;
+    selected: IndependentHalf[];
     grab: OccupiedHalf;
     startX: number;
     startY: number;
@@ -174,6 +187,16 @@ export function CalendarBoard() {
     return snapshot.chantiers.filter((chantier) => ids.has(chantier.id));
   }, [days, loading, rows, snapshot]);
 
+  const selectedKeys = useMemo(
+    () =>
+      new Set(
+        selectedHalves.map((item) =>
+          halfSelectKey(item.rowId, item.phaseId, item.date, item.half),
+        ),
+      ),
+    [selectedHalves],
+  );
+
   function planCellFromPoint(clientX: number, clientY: number) {
     const node = document
       .elementFromPoint(clientX, clientY)
@@ -218,6 +241,17 @@ export function CalendarBoard() {
     drop: OccupiedHalf & { rowId: string; startMin?: number },
     phaseMode: boolean,
   ) {
+    if (drag.scope === "libre") {
+      return shiftIndependentHalves({
+        snapshot,
+        fromRowId: drag.rowId,
+        toRowId: drop.rowId,
+        phaseId: drag.phaseId,
+        grab: { date: drag.grab.date, half: drag.grab.half },
+        drop: { date: drop.date, half: drop.half },
+        selected: drag.selected,
+      });
+    }
     if (phaseMode) {
       return shiftPhaseDay({
         snapshot,
@@ -275,6 +309,29 @@ export function CalendarBoard() {
     setDragPreview({ cells: keys, blocked: result.blocked });
   }
 
+  function toggleHalfSelection(
+    rowId: string,
+    phaseId: string,
+    date: string,
+    half: 0 | 1,
+  ) {
+    const key = halfSelectKey(rowId, phaseId, date, half);
+    setSelectedHalves((current) => {
+      const exists = current.some(
+        (item) =>
+          halfSelectKey(item.rowId, item.phaseId, item.date, item.half) === key,
+      );
+      if (exists) {
+        return current.filter(
+          (item) =>
+            halfSelectKey(item.rowId, item.phaseId, item.date, item.half) !==
+            key,
+        );
+      }
+      return [...current, { rowId, phaseId, date, half }];
+    });
+  }
+
   function beginChipDrag(
     event: PointerEvent<HTMLButtonElement>,
     rowId: string,
@@ -291,6 +348,7 @@ export function CalendarBoard() {
       chantierId,
       phaseId,
       scope: dragScope,
+      selected: selectedHalves,
       grab: { date, half, startMin },
       startX: event.clientX,
       startY: event.clientY,
@@ -345,7 +403,9 @@ export function CalendarBoard() {
     const result = computeMove(drag, drop, drag.scope === "phase");
     if (result.blocked) {
       setDragError(
-        "Créneau occupé : le chantier est revenu à sa place. Impossible de déposer sur une absence ou un créneau hors horaire (0 h).",
+        drag.scope === "libre"
+          ? "Créneau non libre : les blocs sont revenus à leur place. Déposez sur une case vide, pendant les horaires du salarié (pas d’absence, pas de 0 h)."
+          : "Créneau occupé : le chantier est revenu à sa place. Impossible de déposer sur une absence ou un créneau hors horaire (0 h).",
       );
       return;
     }
@@ -357,6 +417,7 @@ export function CalendarBoard() {
         patches: result.patches,
         inserts: result.inserts,
       });
+      if (drag.scope === "libre") setSelectedHalves([]);
     } catch (err) {
       setDragError(
         err instanceof Error ? err.message : "Déplacement impossible à enregistrer.",
@@ -445,12 +506,16 @@ export function CalendarBoard() {
               [
                 ["chantier", "Chantier entier"],
                 ["phase", "Cette phase"],
+                ["libre", "Blocs choisis"],
               ] as const
             ).map(([id, label]) => (
               <button
                 key={id}
                 type="button"
-                onClick={() => setDragScope(id)}
+                onClick={() => {
+                  setDragScope(id);
+                  if (id !== "libre") setSelectedHalves([]);
+                }}
                 className={`rounded px-3 py-1.5 text-sm ${
                   dragScope === id
                     ? "bg-stone-900 text-white"
@@ -488,6 +553,16 @@ export function CalendarBoard() {
         </div>
       </div>
 
+      {dragScope === "libre" ? (
+        <p className="rounded border border-stone-200 bg-stone-50 px-3 py-2 text-sm text-stone-700">
+          Ctrl+clic (Cmd sur Mac) pour cocher plusieurs blocs, puis glisser vers
+          une case <strong>vide</strong>. Seuls ces blocs bougent — pas toute la
+          suite du chantier, et pas de saut automatique vers le prochain trou.
+          {selectedHalves.length > 0
+            ? ` ${selectedHalves.length} bloc${selectedHalves.length > 1 ? "s" : ""} choisi${selectedHalves.length > 1 ? "s" : ""}.`
+            : ""}
+        </p>
+      ) : null}
       {dragError && (
         <p className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
           {dragError}
@@ -583,13 +658,21 @@ export function CalendarBoard() {
           draggingId={draggingId}
           dragPreview={dragPreview}
           dragScope={dragScope}
+          selectedKeys={selectedKeys}
           rowHandleProps={rowHandleProps}
           focusCell={focusCell}
           onSelectDay={setCursorIso}
           onOpenPhase={setSelectedPhaseId}
           onReception={setReceptionPhaseId}
           onAbsence={setAbsenceEmployee}
-          onChipDragStart={beginChipDrag}
+          onChipDragStart={(event, rowId, chantierId, phaseId, date, half, startMin) => {
+            if (dragScope === "libre" && (event.ctrlKey || event.metaKey)) {
+              event.preventDefault();
+              toggleHalfSelection(rowId, phaseId, date, half);
+              return;
+            }
+            beginChipDrag(event, rowId, chantierId, phaseId, date, half, startMin);
+          }}
           onChipDragMove={(event) => {
             const drag = dragRef.current;
             if (!drag || drag.pointerId !== event.pointerId) return;
@@ -605,6 +688,7 @@ export function CalendarBoard() {
             updateDragPreview(event.clientX, event.clientY);
           }}
           onChipDragEnd={(event, phaseId) => {
+            if (event.ctrlKey || event.metaKey) return;
             if (!dragRef.current) {
               setSelectedPhaseId(phaseId);
               return;
@@ -734,7 +818,7 @@ export function CalendarBoard() {
                           slot,
                         );
                       const assignments =
-                        dragScope === "phase"
+                        dragScope === "phase" || dragScope === "libre"
                           ? cellAssignments
                           : uniqueAssignmentsByChantier(cellAssignments);
                       const cellKey = `${row.id}|${iso}|${half}`;
@@ -776,11 +860,32 @@ export function CalendarBoard() {
                               assignment={assignment}
                               compact={compact}
                               dragging={Boolean(dragPreview)}
+                              selected={selectedKeys.has(
+                                halfSelectKey(
+                                  row.id,
+                                  assignment.phase.id,
+                                  iso,
+                                  half,
+                                ),
+                              )}
                               showLivraisonAddress={row.id === TRANSPORT_ROW_ID}
                               allowDrag={row.id !== TRANSPORT_ROW_ID}
                               clockLabel={assignmentClockLabel(snapshot, assignment)}
 
                               onPointerDragStart={(event) => {
+                                if (
+                                  dragScope === "libre" &&
+                                  (event.ctrlKey || event.metaKey)
+                                ) {
+                                  event.preventDefault();
+                                  toggleHalfSelection(
+                                    row.id,
+                                    assignment.phase.id,
+                                    iso,
+                                    half,
+                                  );
+                                  return;
+                                }
                                 beginChipDrag(
                                   event,
                                   row.id,
@@ -807,6 +912,7 @@ export function CalendarBoard() {
                                 updateDragPreview(event.clientX, event.clientY);
                               }}
                               onPointerDragEnd={(event, phaseId) => {
+                                if (event.ctrlKey || event.metaKey) return;
                                 if (!dragRef.current) {
                                   setSelectedPhaseId(phaseId);
                                   return;
@@ -880,6 +986,7 @@ function DayDetail({
   draggingId,
   dragPreview,
   dragScope,
+  selectedKeys,
   rowHandleProps,
   focusCell,
   onSelectDay,
@@ -898,6 +1005,7 @@ function DayDetail({
   draggingId: string | null;
   dragPreview: { cells: Set<string>; blocked: boolean } | null;
   dragScope: DragScope;
+  selectedKeys: Set<string>;
   rowHandleProps: ReturnType<typeof useEmployeeRowReorder>["rowHandleProps"];
   focusCell: { rowId: string; date: string; half: 0 | 1 } | null;
   onSelectDay: (iso: string) => void;
@@ -962,7 +1070,7 @@ function DayDetail({
           const windows = workWindowsForRow(snapshot, row.id, iso);
           const dayAssignments = assignmentsForDay(snapshot, row.id, iso);
           const assignments =
-            dragScope === "phase"
+            dragScope === "phase" || dragScope === "libre"
               ? dayAssignments
               : uniqueAssignmentsByChantier(dayAssignments);
           const dayStart = windows[0]?.start ?? 7 * 60;
@@ -1112,7 +1220,16 @@ function DayDetail({
                                   ? `touch-none ${dragPreview ? "cursor-grabbing" : "cursor-grab"}`
                                   : "cursor-pointer"
                               } ${
-                                focusCell?.rowId === row.id &&
+                                selectedKeys.has(
+                                  halfSelectKey(
+                                    row.id,
+                                    assignment.phase.id,
+                                    iso,
+                                    slot.half,
+                                  ),
+                                )
+                                  ? "ring-2 ring-sky-600"
+                                  : focusCell?.rowId === row.id &&
                                 focusCell.date === iso &&
                                 focusCell.half === slot.half
                                   ? "ring-2 ring-amber-600"
@@ -1234,6 +1351,7 @@ function PhaseChipButton({
   assignment,
   compact,
   dragging,
+  selected,
   showLivraisonAddress,
   allowDrag = true,
   clockLabel,
@@ -1244,6 +1362,7 @@ function PhaseChipButton({
   assignment: CalendarAssignment;
   compact?: boolean;
   dragging?: boolean;
+  selected?: boolean;
   showLivraisonAddress?: boolean;
   allowDrag?: boolean;
   clockLabel?: string | null;
@@ -1261,7 +1380,7 @@ function PhaseChipButton({
         allowDrag
           ? `touch-none ${dragging ? "cursor-grabbing" : "cursor-grab"}`
           : "cursor-pointer"
-      }`}
+      } ${selected ? "rounded ring-2 ring-sky-600" : ""}`}
       onPointerDown={allowDrag ? onPointerDragStart : undefined}
       onPointerMove={allowDrag ? onPointerDragMove : undefined}
       onPointerUp={(event) => onPointerDragEnd(event, assignment.phase.id)}
