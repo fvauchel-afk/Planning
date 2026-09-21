@@ -14,7 +14,8 @@ export const CHANGELOG: ChangelogEntry[] = [
     id: "2026-09-21-vire-toggle-chantier-phase",
     title: "Planning : plus d’interrupteur Chantier entier / Cette phase",
     items: [
-      "L’interrupteur en haut du planning a été retiré : un glisser déplace le chantier entier (les blocs collés bougent ensemble), comme pour Décaler.",
+      "L’interrupteur en haut du planning a été retiré : un glisser déplace le chantier entier (les blocs collés bougent ensemble).",
+      "Sur la fiche phase, Décaler n’a plus le choix « cette phase et dépendances » / « tout le chantier restant » : ça décale toujours tout le chantier restant, comme le glisser.",
     ],
   },
   {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { BonCommandeModal } from "@/components/BonCommandeModal";
 import { ReceptionModal } from "@/components/ReceptionModal";
 import { ConflictModal } from "@/components/ConflictModal";
@@ -16,7 +16,6 @@ import {
   planBestDelayInWindow,
   planDelayCascade,
   type DelayPlanResult,
-  type DelayScope,
 } from "@/lib/engine/delay";
 import { usePlanning } from "@/lib/planning-context";
 import { delayWindowFlexDays } from "@/lib/priorite";
@@ -42,7 +41,6 @@ export function PhaseFicheModal({
   const [unite, setUnite] = useState<"jours" | "demi">("jours");
   const [targetDate, setTargetDate] = useState("");
   const [flex, setFlex] = useState("3");
-  const [scope, setScope] = useState<DelayScope>("chantier");
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -60,17 +58,6 @@ export function PhaseFicheModal({
   );
   const assignee = snapshot.employees.find((item) => item.id === phase?.employe_id);
   const reception = snapshot.receptions.find((row) => row.phase_id === phaseId);
-
-  const remainingCount = useMemo(() => {
-    if (!chantier) return 0;
-    const elementIds = snapshot.elements
-      .filter((item) => item.chantier_id === chantier.id)
-      .map((item) => item.id);
-    return snapshot.phases.filter(
-      (item) =>
-        elementIds.includes(item.element_id) && item.statut !== "termine",
-    ).length;
-  }, [chantier, snapshot.elements, snapshot.phases]);
 
   useEffect(() => {
     if (!chantier) return;
@@ -138,7 +125,7 @@ export function PhaseFicheModal({
           proposition:
             propositionFromSolutions(
               generateDelaySolutions(snapshot, phaseId, halfDays, result, {
-                scope,
+                scope: "chantier",
                 target: delayKind === "cible" ? targetDate : undefined,
                 flex: delayKind === "cible" ? Number(flex) || undefined : undefined,
               }),
@@ -182,7 +169,7 @@ export function PhaseFicheModal({
       }
       const flexDays = Math.max(0, Number(flex) || 0);
       const result = planBestDelayInWindow(snapshot, phaseId, targetDate, flexDays, {
-        scope,
+        scope: "chantier",
       });
       if (!result.chosenStart && result.patches.length === 0) {
         setError(result.message);
@@ -198,7 +185,7 @@ export function PhaseFicheModal({
       setError("Indiquez une durée supérieure à 0.");
       return;
     }
-    void applyPlan(planDelayCascade(snapshot, phaseId, halfDays, { scope }), halfDays);
+    void applyPlan(planDelayCascade(snapshot, phaseId, halfDays, { scope: "chantier" }), halfDays);
   }
 
   const signedAt = reception?.date_signature
@@ -309,7 +296,6 @@ export function PhaseFicheModal({
                 className="rounded-lg bg-stone-900 px-4 py-2 text-sm text-white"
                 onClick={() => {
                   setDelayKind("cible");
-                  setScope("chantier");
                   setFlex(String(delayWindowFlexDays(chantier)));
                   if (phase.date_debut) setTargetDate(phase.date_debut);
                   setMode("decaler");
@@ -335,6 +321,10 @@ export function PhaseFicheModal({
               {PHASE_LABELS[phase.type_phase]}
             </p>
             <p className="text-xs text-stone-500">
+              Comme un glisser sur le planning : tout le chantier restant
+              bouge ensemble (pas seulement cette phase).
+            </p>
+            <p className="text-xs text-stone-500">
               En date cible, l’algorithme choisit le meilleur jour dans la
               fourchette, en respectant le délai logistique incompressible et
               les chantiers prioritaires.
@@ -348,7 +338,6 @@ export function PhaseFicheModal({
                   checked={delayKind === "cible"}
                   onChange={() => {
                     setDelayKind("cible");
-                    setScope("chantier");
                     if (!targetDate && phase.date_debut) setTargetDate(phase.date_debut);
                   }}
                 />
@@ -419,36 +408,6 @@ export function PhaseFicheModal({
               </label>
             </div>
             )}
-            <fieldset className="space-y-1 text-sm">
-              <legend className="mb-1 font-medium">Périmètre</legend>
-              <label className="flex items-start gap-2">
-                <input
-                  type="radio"
-                  name="scope"
-                  checked={scope === "dependances"}
-                  onChange={() => setScope("dependances")}
-                  className="mt-1"
-                />
-                <span>
-                  Cette phase et celles qui en dépendent (même élément) — comme
-                  un retard salarié.
-                </span>
-              </label>
-              <label className="flex items-start gap-2">
-                <input
-                  type="radio"
-                  name="scope"
-                  checked={scope === "chantier"}
-                  onChange={() => setScope("chantier")}
-                  className="mt-1"
-                />
-                <span>
-                  Tout le chantier restant ({remainingCount} phase
-                  {remainingCount > 1 ? "s" : ""} non terminée
-                  {remainingCount > 1 ? "s" : ""}).
-                </span>
-              </label>
-            </fieldset>
             <label className="block text-sm">
               <span className="mb-1 block font-medium">Note (optionnel)</span>
               <textarea
