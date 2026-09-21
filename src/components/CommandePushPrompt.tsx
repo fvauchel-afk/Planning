@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useSession } from "@/lib/auth/session-context";
 
 const STORAGE_ASKED = "vauchel_push_asked_v2";
+const STORAGE_DENIED_DISMISSED = "vauchel_push_denied_dismissed";
 
 function urlBase64ToUint8Array(base64: string): Uint8Array {
   const padding = "=".repeat((4 - (base64.length % 4)) % 4);
@@ -62,6 +63,10 @@ export function CommandePushPrompt() {
 
     async function sync() {
       if (Notification.permission === "denied") {
+        if (window.localStorage.getItem(STORAGE_DENIED_DISMISSED) === "1") {
+          setStatus("hidden");
+          return;
+        }
         setStatus("denied");
         return;
       }
@@ -143,10 +148,18 @@ export function CommandePushPrompt() {
 
   if (status === "denied") {
     return (
-      <div className="fixed bottom-24 left-4 right-4 z-30 mx-auto max-w-lg rounded-lg border border-stone-300 bg-white px-4 py-3 text-sm text-stone-800 shadow-lg md:left-auto md:right-24 md:w-96">
+      <button
+        type="button"
+        onClick={() => {
+          window.localStorage.setItem(STORAGE_DENIED_DISMISSED, "1");
+          setStatus("hidden");
+        }}
+        className="fixed bottom-24 left-4 right-4 z-30 mx-auto max-w-lg cursor-pointer rounded-lg border border-stone-300 bg-white px-4 py-3 text-left text-sm text-stone-800 shadow-lg md:left-auto md:right-24 md:w-96"
+      >
         Les notifications sont bloquées dans le navigateur. Autorisez-les
         dans les réglages du site, ou ajoutez l’app à l’écran d’accueil sur iPhone.
-      </div>
+        <span className="mt-2 block text-xs text-stone-500">Appuyez pour fermer</span>
+      </button>
     );
   }
 
