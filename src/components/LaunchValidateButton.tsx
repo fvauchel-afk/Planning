@@ -3,7 +3,7 @@
 import { useState, type MouseEvent, type PointerEvent } from "react";
 import { idsEqual } from "@/lib/auth/ids";
 import { useSession } from "@/lib/auth/session-context";
-import { fabricationAwaitingLaunch } from "@/lib/dates-estimatives";
+import { phaseAwaitingChantierLance } from "@/lib/dates-estimatives";
 import { usePlanning } from "@/lib/planning-context";
 
 export function LaunchValidateButton({
@@ -18,7 +18,7 @@ export function LaunchValidateButton({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const phase = snapshot.phases.find((item) => item.id === phaseId);
-  if (!phase || !fabricationAwaitingLaunch(phase)) return null;
+  if (!phase || !phaseAwaitingChantierLance(phase)) return null;
   if (
     !session?.isAdmin &&
     !idsEqual(phase.employe_id, session?.employeeId)
@@ -58,7 +58,7 @@ export function LaunchValidateButton({
         onPointerMove={stopDrag}
         onClick={(event) => void onClick(event)}
       >
-        {busy ? "Validation…" : "Je valide le lancement"}
+        {busy ? "Validation…" : "Chantier lancé"}
       </button>
       {error ? (
         <span className="block text-[11px] text-red-800">{error}</span>

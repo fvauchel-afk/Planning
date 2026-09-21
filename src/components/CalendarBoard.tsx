@@ -74,7 +74,7 @@ import {
   STATUTS_CHANTIER,
   chantierPlanningInfo,
 } from "@/lib/chantier-status";
-import { fabricationAwaitingLaunch } from "@/lib/dates-estimatives";
+import { phaseAwaitingChantierLance } from "@/lib/dates-estimatives";
 
 type ViewMode = "overview" | "week" | "day";
 type DragScope = "chantier" | "phase" | "libre";
@@ -1227,7 +1227,7 @@ function DayDetail({
                   </button>
                 )}
                 {assignments
-                  .filter((item) => fabricationAwaitingLaunch(item.phase))
+                  .filter((item) => phaseAwaitingChantierLance(item.phase))
                   .map((item) => (
                     <div key={`launch-${item.phase.id}`} className="mt-2">
                       <LaunchValidateButton phaseId={item.phase.id} compact />
@@ -1357,7 +1357,7 @@ function DayDetail({
                                   ? "ring-2 ring-amber-600"
                                   : dropTarget && dragPreview?.blocked
                                     ? "ring-2 ring-red-500"
-                                  : fabricationAwaitingLaunch(assignment.phase)
+                                  : phaseAwaitingChantierLance(assignment.phase)
                                     ? "ring-2 ring-orange-500"
                                     : ""
                               }`}
@@ -1413,7 +1413,7 @@ function DayDetail({
                                   {assignment.chantier.adresse_livraison}
                                 </span>
                               ) : null}
-                              {fabricationAwaitingLaunch(assignment.phase) ? (
+                              {phaseAwaitingChantierLance(assignment.phase) ? (
                                 <span className="mt-0.5 inline-block rounded bg-orange-600 px-1 text-[9px] font-semibold uppercase tracking-wide text-orange-50">
                                   ⚠ à valider
                                 </span>
