@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-21-nav-onglets",
+    title: "Menu : Synthèse, Devis, Planning, Réunion",
+    items: [
+      "Les onglets admin sont dans cet ordre : Synthèse, Devis, Planning (avec Chantiers en sous-onglet), Réunion, Signalements, Paramètres (Sous-traitants, Employés, OneDrive, Sauvegarde), puis Plan, Absences, Demandes, Mon planning.",
+      "Les pages et les droits ne changent pas : seul le menu est regroupé. Le menu salarié (Mon planning, Mes congés, Signalements) reste comme avant.",
+    ],
+  },
+  {
     id: "2026-09-21-reunion-direction",
     title: "Réunion de direction",
     items: [
