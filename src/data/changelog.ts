@@ -11,6 +11,15 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-21-retard-planning-fiche",
+    title: "Retard (jours) depuis la fiche d’une phase",
+    items: [
+      "Sur le planning, un clic sur un bloc ouvre toujours la fiche. Les admins y ont un bouton « Retard (jours) » : indiquer le nombre de jours ouvrés décale toute la suite du chantier, tout de suite.",
+      "Si un chantier prioritaire est concerné, l’écran de conflit s’affiche d’abord : rien ne bouge tant que vous n’avez pas validé.",
+      "Les salariés n’ont pas ce bouton : ils continuent à « Signaler un retard » depuis Mon planning (proposition à valider).",
+    ],
+  },
+  {
     id: "2026-09-21-crayon-duree-conflit",
     title: "Crayon : alerte si la durée chevauche un autre chantier",
     items: [

@@ -39,7 +39,7 @@ export function PhaseFicheModal({
   const { snapshot, applyPhasePatches, createSignalement, patchChantier, finishPhase } =
     usePlanning();
   const { session } = useSession();
-  const [mode, setMode] = useState<"fiche" | "decaler">("fiche");
+  const [mode, setMode] = useState<"fiche" | "decaler" | "retard">("fiche");
   const [delayKind, setDelayKind] = useState<"fixe" | "cible">("cible");
   const [quantite, setQuantite] = useState("1");
   const [unite, setUnite] = useState<"jours" | "demi">("jours");
@@ -117,7 +117,11 @@ export function PhaseFicheModal({
           ? [note.trim(), `cible ${targetDate} ±${flex} j. → ${result.chosenStart ?? targetDate}`]
               .filter(Boolean)
               .join(" · ")
-          : note.trim();
+          : mode === "retard"
+            ? [note.trim(), "retard déclaré depuis le planning"]
+                .filter(Boolean)
+                .join(" · ")
+            : note.trim();
       if (delayKind === "cible") {
         if (!chantier) throw new Error("Chantier introuvable.");
         const flexDays = Math.max(0, Number(flex) || 0);
@@ -141,7 +145,7 @@ export function PhaseFicheModal({
           proposition:
             propositionFromSolutions(
               generateDelaySolutions(snapshot, phaseId, halfDays, result, {
-                scope,
+                scope: mode === "retard" ? "chantier" : scope,
                 target: delayKind === "cible" ? targetDate : undefined,
                 flex: delayKind === "cible" ? Number(flex) || undefined : undefined,
               }),
@@ -349,6 +353,22 @@ export function PhaseFicheModal({
                 Décaler (date cible ± marge)
               </button>
               ) : null}
+              {session?.isAdmin && phase.date_debut && phase.date_fin ? (
+                <button
+                  type="button"
+                  className="rounded-lg bg-amber-800 px-4 py-2 text-sm text-amber-50"
+                  onClick={() => {
+                    setDelayKind("fixe");
+                    setUnite("jours");
+                    setQuantite("1");
+                    setScope("chantier");
+                    setError(null);
+                    setMode("retard");
+                  }}
+                >
+                  Retard (jours)
+                </button>
+              ) : null}
               <button
                 type="button"
                 className="rounded-lg px-4 py-2 text-sm text-stone-600"
@@ -358,6 +378,89 @@ export function PhaseFicheModal({
               </button>
             </div>
           </>
+        ) : mode === "retard" ? (
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (!phase.date_debut || !phase.date_fin) {
+                setError("Cette phase n’a pas encore de dates à décaler.");
+                return;
+              }
+              const days = Number(quantite);
+              if (!days || days <= 0) {
+                setError("Indiquez un retard d’au moins 1 jour ouvré.");
+                return;
+              }
+              const halfDays = days * 2;
+              void applyPlan(
+                planDelayCascade(snapshot, phaseId, halfDays, { scope: "chantier" }),
+                halfDays,
+              );
+            }}
+            className="space-y-3"
+          >
+            <h3 className="font-serif text-xl text-stone-900">Retard (jours)</h3>
+            <p className="text-sm text-stone-600">
+              {chantier.nom_client} — {element.nom_element} ·{" "}
+              {PHASE_LABELS[phase.type_phase]}
+            </p>
+            <p className="text-sm text-stone-600">
+              Toute la suite du chantier est décalée ({remainingCount} phase
+              {remainingCount > 1 ? "s" : ""} non terminée
+              {remainingCount > 1 ? "s" : ""}), comme un retard classique.
+              Application immédiate, sauf si un chantier prioritaire est
+              concerné : l’écran de conflit s’affiche alors, et rien ne bouge
+              tant que vous n’avez pas validé.
+            </p>
+            <label className="block text-sm">
+              <span className="mb-1 block font-medium">Retard (jours ouvrés)</span>
+              <input
+                type="number"
+                min="1"
+                step="1"
+                value={quantite}
+                onChange={(event) => setQuantite(event.target.value)}
+                className="w-24 rounded border border-stone-300 px-3 py-2"
+              />
+            </label>
+            <label className="block text-sm">
+              <span className="mb-1 block font-medium">Note (optionnel)</span>
+              <textarea
+                value={note}
+                onChange={(event) => setNote(event.target.value)}
+                rows={2}
+                placeholder="ex. client pas prêt, pièce manquante"
+                className="w-full rounded border border-stone-300 px-3 py-2"
+              />
+            </label>
+            {error && <p className="text-sm text-red-700">{error}</p>}
+            <div className="flex flex-wrap gap-2 pt-1">
+              <button
+                type="submit"
+                disabled={saving}
+                className="rounded-lg bg-amber-800 px-4 py-2 text-sm text-amber-50 disabled:opacity-60"
+              >
+                {saving ? "Application…" : "Appliquer le retard"}
+              </button>
+              <button
+                type="button"
+                className="rounded-lg border border-stone-300 px-4 py-2 text-sm"
+                onClick={() => {
+                  setError(null);
+                  setMode("fiche");
+                }}
+              >
+                Retour
+              </button>
+              <button
+                type="button"
+                className="rounded-lg px-4 py-2 text-sm text-stone-600"
+                onClick={onClose}
+              >
+                Annuler
+              </button>
+            </div>
+          </form>
         ) : (
           <form onSubmit={onSubmit} className="space-y-3">
             <h3 className="font-serif text-xl text-stone-900">Décaler</h3>
