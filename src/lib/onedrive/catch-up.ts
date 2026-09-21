@@ -41,7 +41,7 @@ export async function catchUpOnedriveBatch(
   let devis = 0;
   const cap = Math.max(1, Math.min(limit, 20));
   let folderBudget = cap;
-  let devisBudget = cap;
+  const devisBudget = cap;
 
   const missingFolders = await listChantiersMissingOnedriveLink().catch((err) => {
     errors.push(
