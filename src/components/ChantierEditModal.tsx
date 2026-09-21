@@ -36,7 +36,12 @@ import {
   planChantierDurationEdits,
 } from "@/lib/engine/phase-chain";
 import { EmployeePhaseSelect } from "@/components/EmployeePhaseSelect";
+import { ConflictModal } from "@/components/ConflictModal";
 import { PhaseDureeFields } from "@/components/DureeJoursSelect";
+import {
+  planDurationOccupancyConflict,
+  type DurationOccupancyConflict,
+} from "@/lib/engine/duration-conflict";
 import { compareEmployeesByOrdre } from "@/lib/display-order";
 import { moisToToleranceJours, toleranceJoursToMois } from "@/lib/priorite";
 import { usePlanning } from "@/lib/planning-context";
@@ -194,6 +199,10 @@ export function ChantierEditModal({
     toleranceJoursToMois(chantier.tolerance_deplacement_jours),
   );
   const [saving, setSaving] = useState(false);
+  const [occupancyConflict, setOccupancyConflict] =
+    useState<DurationOccupancyConflict | null>(null);
+  const occupancyChoiceRef = useRef<"delay" | "interrupt" | undefined>(undefined);
+  const occupancyResumeRef = useRef<"save" | "plan">("save");
   const [scheduling, setScheduling] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [planDate, setPlanDate] = useState(toISODate(new Date()));
@@ -675,7 +684,7 @@ export function ChantierEditModal({
         dateFin: planEnd || planDate,
         employeeId: planEmployeeId,
       });
-      if (forceCreate) return;
+      if (forceCreate) return true;
     }
     const snap = latestSnap.current;
     const edits = combinedPhaseEdits(snap);
@@ -684,11 +693,30 @@ export function ChantierEditModal({
     if (missing) {
       throw new Error(missing);
     }
-    if (!isEmptyPhaseEdits(edits)) await applyPhaseEdits(edits);
+    const choice = occupancyChoiceRef.current;
+    const conflict = planDurationOccupancyConflict(snap, chantier.id, edits);
+    if (conflict && !choice) {
+      setOccupancyConflict(conflict);
+      return false;
+    }
+    const toApply =
+      choice === "interrupt" && conflict
+        ? conflict.interruptEdits
+        : choice === "delay" && conflict
+          ? conflict.delayEdits
+          : edits;
+    try {
+      if (!isEmptyPhaseEdits(toApply)) await applyPhaseEdits(toApply);
+    } catch (err) {
+      occupancyChoiceRef.current = undefined;
+      throw err;
+    }
+    setOccupancyConflict(null);
+    occupancyChoiceRef.current = undefined;
+    return true;
   }
 
-  async function onSubmit(event: React.FormEvent) {
-    event.preventDefault();
+  async function submitChantier() {
     if (!nomClient.trim()) {
       setError("Le nom du client est obligatoire.");
       return;
@@ -707,75 +735,75 @@ export function ChantierEditModal({
         return;
       }
     }
+    occupancyResumeRef.current = "save";
     setSaving(true);
     setError(null);
     try {
       const hadCascadeEdits = cascadeDirty.current;
       await live.flush();
       if (await abortIfStaleCascade()) {
-        setSaving(false);
         return;
       }
       if (hadCascadeEdits) {
-      const removed: string[] = [];
-      if (currentOptions.avecFabrication && !avecFabrication) {
-        removed.push("Fabrication");
-      }
-      if (currentOptions.avecThermolaquage && !avecThermolaquage) {
-        removed.push("Thermolaquage / galvanisation");
-      }
-      if (currentOptions.avecPose && !avecPose) {
-        removed.push("Installation / Pose");
-      }
-      if (currentOptions.avecLivraison && !avecLivraison) {
-        removed.push("Livraison");
-      }
-      if (removed.length > 0) {
-        const ok = window.confirm(
-          `Supprimer ${removed.join(" et ")} ? Les dates de ${
-            removed.length > 1 ? "ces phases" : "cette phase"
-          } seront perdues. Cette action est irréversible.`,
-        );
-        if (!ok) {
-          setSaving(false);
-          return;
+        const removed: string[] = [];
+        if (currentOptions.avecFabrication && !avecFabrication) {
+          removed.push("Fabrication");
         }
-      }
-      const startBefore = info.firstDate ?? "";
-      const endBefore = info.lastDate ?? info.firstDate ?? "";
-      const datesChanged =
-        visibleOnGrid &&
-        datesDirty &&
-        (planDate !== startBefore || (planEnd || planDate) !== endBefore);
-      await persistPlanning(false);
-      const confirmIds = Array.from(
-        new Set([
-          ...estimativePhaseIdsForChantier(latestSnap.current, chantier.id),
-          ...(!datesEstimatives
-            ? fabricationPhaseIdsAwaitingLaunch(latestSnap.current, chantier.id)
-            : []),
-        ]),
-      );
-      const confirmNow = (datesChanged || !datesEstimatives) && confirmIds.length > 0;
-      if (confirmNow) {
-        await confirmPhaseDates(confirmIds);
-      }
-      await updateChantier({
-        id: chantier.id,
-        nom_client: nomClient.trim(),
-        adresse: adresse.trim(),
-        priorite,
-        tolerance_deplacement_jours:
-          priorite === "pas_presse" ? moisToToleranceJours(toleranceMois) : null,
-        lien_dossier_onedrive: lien.trim() || null,
-        dates_estimatives: confirmNow ? false : datesEstimatives,
-        delai_sous_traitance_jours: avecThermolaquage
-          ? Math.min(60, Math.max(1, Number(delaiLaquage || 5)))
-          : chantier.delai_sous_traitance_jours ?? 5,
-        adresse_livraison: avecLivraison ? adresseLivraison.trim() : null,
-        telephone_livraison: avecLivraison ? telephoneLivraison.trim() : null,
-        sous_traitant_id: avecThermolaquage ? sousTraitantId || null : null,
-      });
+        if (currentOptions.avecThermolaquage && !avecThermolaquage) {
+          removed.push("Thermolaquage / galvanisation");
+        }
+        if (currentOptions.avecPose && !avecPose) {
+          removed.push("Installation / Pose");
+        }
+        if (currentOptions.avecLivraison && !avecLivraison) {
+          removed.push("Livraison");
+        }
+        if (removed.length > 0) {
+          const ok = window.confirm(
+            `Supprimer ${removed.join(" et ")} ? Les dates de ${
+              removed.length > 1 ? "ces phases" : "cette phase"
+            } seront perdues. Cette action est irréversible.`,
+          );
+          if (!ok) {
+            return;
+          }
+        }
+        const startBefore = info.firstDate ?? "";
+        const endBefore = info.lastDate ?? info.firstDate ?? "";
+        const datesChanged =
+          visibleOnGrid &&
+          datesDirty &&
+          (planDate !== startBefore || (planEnd || planDate) !== endBefore);
+        const planned = await persistPlanning(false);
+        if (!planned) return;
+        const confirmIds = Array.from(
+          new Set([
+            ...estimativePhaseIdsForChantier(latestSnap.current, chantier.id),
+            ...(!datesEstimatives
+              ? fabricationPhaseIdsAwaitingLaunch(latestSnap.current, chantier.id)
+              : []),
+          ]),
+        );
+        const confirmNow = (datesChanged || !datesEstimatives) && confirmIds.length > 0;
+        if (confirmNow) {
+          await confirmPhaseDates(confirmIds);
+        }
+        await updateChantier({
+          id: chantier.id,
+          nom_client: nomClient.trim(),
+          adresse: adresse.trim(),
+          priorite,
+          tolerance_deplacement_jours:
+            priorite === "pas_presse" ? moisToToleranceJours(toleranceMois) : null,
+          lien_dossier_onedrive: lien.trim() || null,
+          dates_estimatives: confirmNow ? false : datesEstimatives,
+          delai_sous_traitance_jours: avecThermolaquage
+            ? Math.min(60, Math.max(1, Number(delaiLaquage || 5)))
+            : chantier.delai_sous_traitance_jours ?? 5,
+          adresse_livraison: avecLivraison ? adresseLivraison.trim() : null,
+          telephone_livraison: avecLivraison ? telephoneLivraison.trim() : null,
+          sous_traitant_id: avecThermolaquage ? sousTraitantId || null : null,
+        });
       }
       dismissForm();
     } catch (err) {
@@ -783,6 +811,27 @@ export function ChantierEditModal({
     } finally {
       setSaving(false);
     }
+  }
+
+  async function onSubmit(event: React.FormEvent) {
+    event.preventDefault();
+    await submitChantier();
+  }
+
+  async function resolveOccupancy(choice: "delay" | "interrupt") {
+    if (choice === "interrupt" && occupancyConflict?.blockersInProgress) {
+      const ok = window.confirm(
+        "Le chantier suivant est déjà en cours. Le laisser à sa place interrompt celui que vous allongez. Continuer ?",
+      );
+      if (!ok) return;
+    }
+    occupancyChoiceRef.current = choice;
+    setOccupancyConflict(null);
+    if (occupancyResumeRef.current === "plan") {
+      await onPlanifier();
+      return;
+    }
+    await submitChantier();
   }
 
   async function onCreateOnedriveFolder() {
@@ -798,18 +847,20 @@ export function ChantierEditModal({
   }
 
   async function onPlanifier() {
+    occupancyResumeRef.current = "plan";
     setScheduling(true);
     setError(null);
     try {
       if (await abortIfStaleCascade(true)) {
-        setScheduling(false);
         return;
       }
       markCascade();
-      await persistPlanning(true);
+      const planned = await persistPlanning(true);
+      if (!planned) return;
       cascadeDirty.current = false;
       setStaleCascade(false);
     } catch (err) {
+      occupancyChoiceRef.current = undefined;
       setError(formatSaveError(err, "la planification a échoué"));
     } finally {
       setScheduling(false);
@@ -1551,6 +1602,24 @@ export function ChantierEditModal({
         <BonCommandeModal
           chantierId={chantier.id}
           onClose={() => setBonCommande(false)}
+        />
+      ) : null}
+      {occupancyConflict ? (
+        <ConflictModal
+          title="Conflit de placement"
+          message={occupancyConflict.message}
+          displacements={occupancyConflict.displacements}
+          incoming={[]}
+          showIncoming={false}
+          validateLabel="Décaler le chantier suivant"
+          adjustLabel="Laisser à sa place (interrompre)"
+          busy={saving || scheduling}
+          onValidate={() => void resolveOccupancy("delay")}
+          onAdjust={() => void resolveOccupancy("interrupt")}
+          onCancel={() => {
+            occupancyChoiceRef.current = undefined;
+            setOccupancyConflict(null);
+          }}
         />
       ) : null}
     </>
