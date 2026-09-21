@@ -85,6 +85,10 @@ import {
 import { sendPlanPourMikaEmail } from "@/lib/mail/plan";
 import { chantierPlanningInfo } from "@/lib/chantier-status";
 import { publicOrigin } from "@/lib/onedrive/oauth-state";
+import {
+  canSessionFinishPhase,
+  planFinishPhase,
+} from "@/lib/engine/finish-phase";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -148,7 +152,8 @@ type MutateBody =
   | { action: "setSaisonForcee"; saison: "ete" | "hiver" | null }
   | { action: "confirmPhaseDates"; ids: string[] }
   | { action: "validateChantierPlan"; chantierId: string }
-  | { action: "patchCommande"; input: CommandePatch };
+  | { action: "patchCommande"; input: CommandePatch }
+  | { action: "finishPhase"; phaseId: string };
 
 export async function POST(request: NextRequest) {
   const session = await resolveSession(await getSession());
@@ -572,6 +577,34 @@ export async function POST(request: NextRequest) {
         }
       }
       await supabaseConfirmPhaseDates(current, ids);
+    } else if (body.action === "finishPhase") {
+      const phaseId = body.phaseId?.trim();
+      if (!phaseId) {
+        return NextResponse.json({ error: "Phase inconnue." }, { status: 400 });
+      }
+      const current = await fetchSupabaseSnapshot();
+      const phase = current.phases.find((item) => item.id === phaseId);
+      if (!phase) {
+        return NextResponse.json({ error: "Phase introuvable." }, { status: 400 });
+      }
+      if (!canSessionFinishPhase(phase, session)) {
+        return forbidden("Vous ne pouvez terminer que vos propres phases.");
+      }
+      let plan;
+      try {
+        plan = planFinishPhase(current, phaseId);
+      } catch (err) {
+        return NextResponse.json(
+          {
+            error:
+              err instanceof Error
+                ? err.message
+                : "Impossible de terminer cette phase.",
+          },
+          { status: 400 },
+        );
+      }
+      if (plan.patches.length) await supabaseApplyPhasePatches(plan.patches);
     } else if (body.action === "validateChantierPlan") {
       if (!body.chantierId) {
         return NextResponse.json({ error: "Chantier inconnu." }, { status: 400 });

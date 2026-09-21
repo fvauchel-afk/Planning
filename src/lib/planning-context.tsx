@@ -46,6 +46,7 @@ import {
   localPatchCommande,
   loadLocalSnapshot,
 } from "@/lib/store/local";
+import { planFinishPhase } from "@/lib/engine/finish-phase";
 import { fetchPlanningSnapshot, planningMutate } from "@/lib/planning/api";
 import { syntheseMessageConge } from "@/lib/demandes";
 import { shouldUseSharedDatabase } from "@/lib/supabase/client";
@@ -105,6 +106,7 @@ type PlanningContextValue = {
   deleteAbsence: (id: string) => Promise<void>;
   applyPhasePatches: (patches: PhasePatch[]) => Promise<void>;
   applyPhaseEdits: (edits: PhaseEdits) => Promise<void>;
+  finishPhase: (phaseId: string) => Promise<void>;
   createChantierWithPatches: (
     input: NewChantierInput,
     patches: PhasePatch[],
@@ -553,6 +555,22 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
     [applyPhaseEdits],
   );
 
+  const finishPhase = useCallback(
+    async (phaseId: string) => {
+      assertWritable();
+      if (useShared) {
+        await mutate({ action: "finishPhase", phaseId });
+        await refresh({ throwOnError: true });
+        return;
+      }
+      setSnapshot((current) => {
+        const plan = planFinishPhase(current, phaseId);
+        return localApplyPhaseEdits(current, { patches: plan.patches });
+      });
+    },
+    [useShared, refresh, assertWritable, mutate],
+  );
+
   const createChantierWithPatches = useCallback(
     async (input: NewChantierInput, patches: PhasePatch[]) => {
       assertWritable();
@@ -921,6 +939,7 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
       deleteAbsence,
       applyPhasePatches,
       applyPhaseEdits,
+      finishPhase,
       createChantierWithPatches,
       createSignalement,
       setSignalementStatut,
@@ -961,6 +980,7 @@ export function PlanningProvider({ children }: { children: React.ReactNode }) {
       deleteAbsence,
       applyPhasePatches,
       applyPhaseEdits,
+      finishPhase,
       createChantierWithPatches,
       createSignalement,
       setSignalementStatut,

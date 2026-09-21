@@ -465,6 +465,7 @@ export type PhasePatch = {
   employe_id: string | null;
   heure_debut?: string | null;
   duree_estimee_heures?: number;
+  statut?: StatutPhase;
 };
 
 export type PhaseInsert = {

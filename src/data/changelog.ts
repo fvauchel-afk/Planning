@@ -11,6 +11,15 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-21-phase-jai-fini",
+    title: "Fiche phase : bouton « J’ai fini »",
+    items: [
+      "Sur la fiche d’une phase, Jonathan (et les autres admins) ainsi que le salarié assigné peuvent cliquer « J’ai fini », même si la phase est encore « À faire » ou datée aujourd’hui / plus tard.",
+      "La phase se termine le jour du clic : sa fin est coupée à aujourd’hui (si elle n’avait pas encore commencé, elle tient sur aujourd’hui).",
+      "Les phases suivantes du même élément sont recalées juste après. « J’ai fini » sur Fabrication recale toutes les Poses de l’élément ; terminer une ligne Pose ne clôt que celle-là.",
+    ],
+  },
+  {
     id: "2026-09-21-push-denied-dismiss",
     title: "Notifications bloquées : un clic pour fermer",
     items: [
@@ -39,6 +48,9 @@ export const CHANGELOG: ChangelogEntry[] = [
     items: [
       "Dans Modifier le chantier, sous le poseur déjà choisi, vous pouvez cocher +1 ou +2 poseurs libres : une nouvelle ligne Pose se cale aux mêmes dates, en plus des poseurs déjà nommés.",
       "S’il n’y a personne de libre, le premier du rôle est pris quand même, comme à la création. Les cases se vident après enregistrement.",
+    ],
+  },
+  {
     id: "2026-09-21-onglet-commande",
     title: "Onglet Commande (après Plan)",
     items: [
@@ -70,7 +82,6 @@ export const CHANGELOG: ChangelogEntry[] = [
       "Le bouton « Connecter OneDrive » reste accessible à tout admin (case Admin dans Accès et droits), pas seulement à Jonathan.",
     ],
   },
-
   {
     id: "2026-09-21-saisons-jj-mm",
     title: "Saisons : jour et mois seulement",

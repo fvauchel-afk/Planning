@@ -8,6 +8,7 @@ import { ConflictModal } from "@/components/ConflictModal";
 import { LaunchValidateButton } from "@/components/LaunchValidateButton";
 import { canGenerateBonCommande } from "@/lib/bon-commande/active-phase";
 import { idsEqual } from "@/lib/auth/ids";
+import { canSessionFinishPhase } from "@/lib/engine/finish-phase";
 import { useSession } from "@/lib/auth/session-context";
 import { phaseIsEstimative } from "@/lib/dates-estimatives";
 import { needsAlgoValidation, propositionFromDelay } from "@/lib/signalements";
@@ -34,7 +35,7 @@ export function PhaseFicheModal({
   phaseId: string;
   onClose: () => void;
 }) {
-  const { snapshot, applyPhasePatches, createSignalement, patchChantier } =
+  const { snapshot, applyPhasePatches, createSignalement, patchChantier, finishPhase } =
     usePlanning();
   const { session } = useSession();
   const [mode, setMode] = useState<"fiche" | "decaler">("fiche");
@@ -277,6 +278,34 @@ export function PhaseFicheModal({
               </div>
             )}
             <div className="mt-5 flex flex-wrap gap-2">
+              {canSessionFinishPhase(phase, session) ? (
+                <button
+                  type="button"
+                  disabled={saving}
+                  className="rounded-lg bg-emerald-800 px-4 py-2 text-sm text-emerald-50 disabled:opacity-60"
+                  onClick={async () => {
+                    setSaving(true);
+                    setError(null);
+                    try {
+                      await finishPhase(phase.id);
+                      onClose();
+                    } catch (err) {
+                      setError(
+                        err instanceof Error
+                          ? err.message
+                          : "Impossible de terminer cette phase.",
+                      );
+                    } finally {
+                      setSaving(false);
+                    }
+                  }}
+                >
+                  {saving ? "Enregistrement…" : "J’ai fini"}
+                </button>
+              ) : null}
+              {error && mode === "fiche" ? (
+                <p className="w-full text-sm text-red-700">{error}</p>
+              ) : null}
               <LaunchValidateButton phaseId={phase.id} />
               {session?.isAdmin &&
               (phase.type_phase === "logistique" ||
