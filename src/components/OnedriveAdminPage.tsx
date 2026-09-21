@@ -78,7 +78,14 @@ export function OnedriveAdminPage() {
               )}
               <p className="mt-2 text-amber-900">
                 {status.error?.trim() ||
-                  "Un jeton est encore enregistré, mais Microsoft refuse les appels (dossier chantier, sauvegarde). Cliquez sur « Connecter OneDrive »."}
+                  "Microsoft a révoqué le jeton Hotmail. Le planning ne peut pas le réparer tout seul : il faut cliquer sur « Connecter OneDrive » (connexion Microsoft, une fois)."}
+              </p>
+              <p className="mt-2 text-amber-900">
+                Un compte Microsoft personnel (Hotmail) n’est jamais « toujours
+                connecté » à 100 % : mot de passe changé, sécurité Microsoft, ou
+                jeton trop longtemps inutilisé. Le planning rafraîchit le jeton
+                à chaque entrée, mais si Microsoft le refuse, seule une action
+                humaine débloque.
               </p>
             </>
           ) : (

@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AuthOpenBanner } from "@/components/AuthOpenBanner";
 import { OnedriveBanner } from "@/components/OnedriveBanner";
+import { OnedriveExpiredBanner } from "@/components/OnedriveExpiredBanner";
 import { CommandeAlert } from "@/components/CommandeAlert";
 import { LancementAlert } from "@/components/LancementAlert";
 import { AdministratifIdleAlert } from "@/components/AdministratifIdleAlert";
@@ -68,6 +69,19 @@ export function AppShell({
   useEffect(() => {
     setMenuOpen(false);
   }, [currentPath]);
+
+  useEffect(() => {
+    if (!ready || !session) return;
+    void fetch("/api/onedrive/keepalive", {
+      method: "POST",
+      credentials: "include",
+      keepalive: true,
+      redirect: "manual",
+      headers: { Accept: "application/json" },
+    }).catch(() => {
+      /* OneDrive en arrière-plan : ne jamais bloquer l’écran. */
+    });
+  }, [ready, session]);
 
   async function logout() {
     setMenuOpen(false);
@@ -230,6 +244,7 @@ export function AppShell({
         )}
       </header>
       <main className="mx-auto max-w-[1600px] px-4 py-6">
+        <OnedriveExpiredBanner />
         <OnedriveBanner />
         {saveNotice ? (
           <div

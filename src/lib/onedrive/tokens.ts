@@ -4,6 +4,7 @@ import { getOnedriveConfig, ONEDRIVE_SCOPES } from "@/lib/onedrive/config";
 import {
   ONEDRIVE_KEEPALIVE_TTL_MS,
   onedriveAccessNeedsRefresh,
+  shouldRetryOnedriveRefresh,
 } from "@/lib/onedrive/reconnect";
 
 export type OnedriveTokenRow = {
@@ -65,16 +66,27 @@ export async function saveOnedriveRoot(ids: {
   root_item_id: string;
   root_drive_id: string;
 }): Promise<void> {
-  const current = await loadOnedriveTokens();
-  if (!current) throw new Error("OneDrive n’est pas connecté.");
-  await saveOnedriveTokens({
-    access_token: current.access_token,
-    refresh_token: current.refresh_token,
-    expires_at: current.expires_at,
-    account_label: current.account_label,
-    root_item_id: ids.root_item_id,
-    root_drive_id: ids.root_drive_id,
-  });
+  const supabase = createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("onedrive_tokens")
+    .update({
+      root_item_id: ids.root_item_id,
+      root_drive_id: ids.root_drive_id,
+    })
+    .eq("id", ROW_ID)
+    .select("id")
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw new Error("OneDrive n’est pas connecté.");
+}
+
+export async function saveOnedriveAccountLabel(label: string): Promise<void> {
+  const supabase = createSupabaseServerClient();
+  const { error } = await supabase
+    .from("onedrive_tokens")
+    .update({ account_label: label })
+    .eq("id", ROW_ID);
+  if (error) throw error;
 }
 
 type TokenResponse = {
@@ -96,6 +108,11 @@ async function requestToken(body: URLSearchParams): Promise<TokenResponse> {
   const json = (await res.json()) as TokenResponse & { error?: string; error_description?: string };
   if (!res.ok) {
     const raw = json.error_description || json.error || "";
+    console.warn(
+      "[onedrive-token]",
+      json.error || res.status,
+      String(raw).replace(/refresh_token=[^&\s]+/gi, "refresh_token=…").slice(0, 180),
+    );
     if (/AADSTS|invalid_grant/i.test(raw)) {
       throw new Error(
         "Connexion OneDrive expirée. Ouvrez l’onglet OneDrive et cliquez sur « Connecter OneDrive ».",
@@ -144,6 +161,13 @@ export async function getValidAccessToken(): Promise<string> {
 export async function refreshOnedriveAccessToken(options?: {
   minTtlMs?: number;
 }): Promise<string | null> {
+  return refreshOnedriveAccessTokenAttempt(options, 0);
+}
+
+async function refreshOnedriveAccessTokenAttempt(
+  options: { minTtlMs?: number } | undefined,
+  attempt: number,
+): Promise<string | null> {
   const row = await loadOnedriveTokens();
   if (!row?.refresh_token) return null;
   const minTtlMs = options?.minTtlMs ?? 120_000;
@@ -154,25 +178,44 @@ export async function refreshOnedriveAccessToken(options?: {
     return row.access_token;
   }
   const cfg = getOnedriveConfig();
-  const json = await requestToken(
-    new URLSearchParams({
-      client_id: cfg.clientId,
-      client_secret: cfg.clientSecret,
-      grant_type: "refresh_token",
-      refresh_token: row.refresh_token,
-      scope: ONEDRIVE_SCOPES,
-    }),
-  );
-  const refresh = json.refresh_token || row.refresh_token;
-  await saveOnedriveTokens({
-    access_token: json.access_token,
-    refresh_token: refresh,
-    expires_at: new Date(Date.now() + json.expires_in * 1000).toISOString(),
-    account_label: row.account_label,
-    root_item_id: row.root_item_id,
-    root_drive_id: row.root_drive_id,
-  });
-  return json.access_token;
+  try {
+    const json = await requestToken(
+      new URLSearchParams({
+        client_id: cfg.clientId,
+        client_secret: cfg.clientSecret,
+        grant_type: "refresh_token",
+        refresh_token: row.refresh_token,
+        scope: ONEDRIVE_SCOPES,
+      }),
+    );
+    const refresh = json.refresh_token || row.refresh_token;
+    await saveOnedriveTokens({
+      access_token: json.access_token,
+      refresh_token: refresh,
+      expires_at: new Date(Date.now() + json.expires_in * 1000).toISOString(),
+      account_label: row.account_label,
+      root_item_id: row.root_item_id,
+      root_drive_id: row.root_drive_id,
+    });
+    return json.access_token;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    const fresh = await loadOnedriveTokens();
+    if (
+      shouldRetryOnedriveRefresh({
+        attempt,
+        errorMessage: message,
+        previousRefreshToken: row.refresh_token,
+        currentRefreshToken: fresh?.refresh_token,
+        currentExpiresAt: fresh?.expires_at,
+        nowMs: Date.now(),
+        minTtlMs,
+      })
+    ) {
+      return refreshOnedriveAccessTokenAttempt(options, attempt + 1);
+    }
+    throw err;
+  }
 }
 
 /** Ne jette jamais : pour le login, sans bloquer l’employé. */
