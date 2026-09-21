@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { AccesDroitsSettings } from "@/components/AccesDroitsSettings";
 import { EntrepriseSettingsPage } from "@/components/EntrepriseSettingsPage";
+import { SaisonActiveBadge } from "@/components/SaisonActiveBadge";
 
 const AUTRES: { href: string; titre: string; texte: string }[] = [
   {
@@ -32,6 +33,9 @@ export function ParametresPage() {
     <section className="space-y-8">
       <div>
         <h2 className="font-serif text-3xl text-stone-900">Paramètres</h2>
+        <div className="mt-2">
+          <SaisonActiveBadge detail />
+        </div>
         <p className="mt-1 text-sm text-stone-600">
           Société et droits d’accès. Les textes d’e-mail des devis se règlent dans Devis →
           Paramètres Devis.

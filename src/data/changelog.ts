@@ -15,6 +15,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     title: "Saisons : jour et mois seulement",
     items: [
       "Les dates Été / Hiver (début et fin) n’affichent plus d’année : uniquement le jour et le mois, puisqu’elles se répètent chaque année.",
+      "La saison en cours (Été ou Hiver) s’affiche en badge sur le planning équipe, dans Paramètres, et sur l’écran Saisons (Saison active, calcul automatique ou forcée).",
     ],
   },
   {

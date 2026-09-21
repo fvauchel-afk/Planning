@@ -53,6 +53,7 @@ import { useEmployeeRowReorder } from "@/lib/use-employee-row-reorder";
 import { useSession } from "@/lib/auth/session-context";
 import { PRIORITE_LABELS, TRANSPORT_ROW_ID, type Chantier, type Employee } from "@/lib/types";
 import { WelcomeBanner } from "@/components/WelcomeBanner";
+import { SaisonActiveBadge } from "@/components/SaisonActiveBadge";
 import {
   STATUT_CHANTIER_COLORS,
   STATUT_CHANTIER_LABELS,
@@ -386,7 +387,10 @@ export function CalendarBoard() {
       <WelcomeBanner />
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="font-serif text-3xl text-stone-900">Planning équipe</h2>
+          <div className="flex flex-wrap items-center gap-3">
+            <h2 className="font-serif text-3xl text-stone-900">Planning équipe</h2>
+            <SaisonActiveBadge />
+          </div>
           <p className="mt-1 text-sm text-stone-600">
             Une ligne par personne, chaque jour en matin / après-midi (l’heure
             est écrite sur le bloc). En vue Jour, vous déposez au cran de

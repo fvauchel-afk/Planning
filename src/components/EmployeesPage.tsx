@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  activeSaisonStatus,
   defaultHoraires,
   defaultHorairesEmploye,
   dayHoursFromJour,
@@ -18,6 +17,7 @@ import { compareEmployeesByOrdre } from "@/lib/display-order";
 import { usePlanning } from "@/lib/planning-context";
 import { useDebouncedPatch } from "@/lib/form-live";
 import { formatSaveError } from "@/lib/supabase/errors";
+import { SaisonActiveBadge, saisonActiveCopy } from "@/components/SaisonActiveBadge";
 import {
   JOURS_OUVRES,
   JOUR_OUVRE_LABELS,
@@ -461,17 +461,10 @@ export function EmployeesPage() {
           </button>
         </div>
         {(() => {
-          const status = activeSaisonStatus(snapshot);
-          const nom = status.kind === "ete" ? "Été" : "Hiver";
-          const source =
-            status.source === "auto"
-              ? "calcul automatique"
-              : "forcée manuellement";
+          const { source } = saisonActiveCopy(snapshot);
           return (
             <div className="space-y-2 border-t border-stone-200 pt-3">
-              <p className="text-sm font-medium text-stone-900">
-                Saison active : {nom} ({source})
-              </p>
+              <SaisonActiveBadge detail />
               <p className="text-xs text-stone-600">
                 Les dates ci-dessus restent le calcul par défaut. Une bascule
                 manuelle s’applique partout (planning, heures) jusqu’à nouvel
@@ -496,7 +489,7 @@ export function EmployeesPage() {
                 </button>
                 <button
                   type="button"
-                  disabled={savingSaisonForcee || status.source === "auto"}
+                  disabled={savingSaisonForcee || source === "auto"}
                   className="rounded border border-stone-300 px-3 py-2 text-sm disabled:opacity-60"
                   onClick={() => void onForceSaison(null)}
                 >
