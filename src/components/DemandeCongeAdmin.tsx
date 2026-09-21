@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { AbsenceImpactEditor } from "@/components/AbsenceImpactEditor";
 import { ConflictModal } from "@/components/ConflictModal";
+import { ModalFrame } from "@/components/ModalFrame";
 import { formatLongDate } from "@/lib/dates";
 import {
   absenceInputFromDemande,
@@ -199,8 +200,13 @@ export function DemandeCongeAdmin({
       </div>
 
       {review && payload && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/50 p-4">
-          <div className="max-h-[90vh] w-full max-w-xl overflow-auto rounded-xl bg-white p-5 shadow-xl">
+        <ModalFrame
+          onClose={() => {
+            setReview(false);
+            setConflict(null);
+          }}
+          maxWidthClass="max-w-xl"
+        >
             <h3 className="font-serif text-2xl text-stone-900">
               Accepter la demande de congé
             </h3>
@@ -248,8 +254,7 @@ export function DemandeCongeAdmin({
                 Annuler
               </button>
             </div>
-          </div>
-        </div>
+        </ModalFrame>
       )}
 
       {conflict && (

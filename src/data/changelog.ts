@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-21-modale-croix",
+    title: "Fenêtres : une croix pour quitter",
+    items: [
+      "Toutes les fenêtres (Modifier le chantier, fiche phase, absences, bon de commande, réception, conflits…) ont une petite croix en haut à droite, toujours visible sans faire défiler.",
+      "Le bouton Fermer / Annuler en bas reste là ; la croix sert juste à sortir tout de suite.",
+    ],
+  },
+  {
     id: "2026-09-21-phase-jai-fini",
     title: "Fiche phase : bouton « J’ai fini »",
     items: [

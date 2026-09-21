@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { BonCommandeModal } from "@/components/BonCommandeModal";
 import { FormNotice } from "@/components/FormNotice";
+import { ModalFrame } from "@/components/ModalFrame";
 import { PlanLeoChantierLink } from "@/components/PlanLeoChantierLink";
 import { SousTraitantSelect } from "@/components/SousTraitantSelect";
 import { FournituresEditor } from "@/components/FournituresEditor";
@@ -844,11 +845,12 @@ export function ChantierEditModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/50 p-4">
-      <form
-        onSubmit={(event) => void onSubmit(event)}
-        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white p-5 shadow-xl"
-      >
+    <>
+    <ModalFrame
+      as="form"
+      onClose={dismissForm}
+      onSubmit={(event) => void onSubmit(event)}
+    >
         <h3 className="font-serif text-xl text-stone-900">Modifier le chantier</h3>
         <p className="mt-1 text-sm text-stone-500">
           {STATUT_CHANTIER_LABELS[info.statut]}
@@ -1544,13 +1546,13 @@ export function ChantierEditModal({
             {deleting ? "Suppression…" : "Supprimer ce chantier"}
           </button>
         </div>
-      </form>
+    </ModalFrame>
       {bonCommande ? (
         <BonCommandeModal
           chantierId={chantier.id}
           onClose={() => setBonCommande(false)}
         />
       ) : null}
-    </div>
+    </>
   );
 }

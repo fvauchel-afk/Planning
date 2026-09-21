@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { ConflictModal } from "@/components/ConflictModal";
 import { FormNotice } from "@/components/FormNotice";
+import { ModalFrame } from "@/components/ModalFrame";
 import { AbsenceImpactEditor } from "@/components/AbsenceImpactEditor";
 import {
   candidatesForChoices,
@@ -109,8 +110,8 @@ export function AbsenceImprevueModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/50 p-4">
-      <div className="max-h-[90vh] w-full max-w-xl overflow-auto rounded-xl bg-white p-5 shadow-xl">
+    <>
+    <ModalFrame onClose={onClose} maxWidthClass="max-w-xl">
         <h3 className="font-serif text-2xl text-stone-900">Absence imprévue</h3>
         <p className="mt-1 text-sm text-stone-600">{employee.nom}</p>
 
@@ -245,7 +246,7 @@ export function AbsenceImprevueModal({
             </div>
           </div>
         )}
-      </div>
+    </ModalFrame>
 
       {conflict && (
         <ConflictModal
@@ -265,6 +266,6 @@ export function AbsenceImprevueModal({
           onCancel={() => setConflict(null)}
         />
       )}
-    </div>
+    </>
   );
 }

@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { AbsenceImpactEditor } from "@/components/AbsenceImpactEditor";
 import { FormNotice } from "@/components/FormNotice";
 import { ConflictModal } from "@/components/ConflictModal";
+import { ModalFrame } from "@/components/ModalFrame";
 import { formatLongDate } from "@/lib/dates";
 import { compareEmployeesByOrdre } from "@/lib/display-order";
 import {
@@ -738,8 +739,15 @@ export function AbsencesPage() {
       </form>
 
       {reviewPayload && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/50 p-4">
-          <div className="max-h-[90vh] w-full max-w-xl overflow-auto rounded-xl bg-white p-5 shadow-xl">
+        <ModalFrame
+          onClose={() => {
+            setReviewPayload(null);
+            setChoices({});
+            setConflict(null);
+            setError(null);
+          }}
+          maxWidthClass="max-w-xl"
+        >
             <h3 className="font-serif text-2xl text-stone-900">
               Conflit avec des chantiers planifiés
             </h3>
@@ -785,8 +793,7 @@ export function AbsencesPage() {
                 Annuler l’absence
               </button>
             </div>
-          </div>
-        </div>
+        </ModalFrame>
       )}
 
       {conflict && (

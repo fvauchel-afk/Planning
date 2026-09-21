@@ -5,6 +5,7 @@ import { BonCommandeModal } from "@/components/BonCommandeModal";
 import { FormNotice } from "@/components/FormNotice";
 import { ReceptionModal } from "@/components/ReceptionModal";
 import { ConflictModal } from "@/components/ConflictModal";
+import { ModalFrame } from "@/components/ModalFrame";
 import { LaunchValidateButton } from "@/components/LaunchValidateButton";
 import { canGenerateBonCommande } from "@/lib/bon-commande/active-phase";
 import { idsEqual } from "@/lib/auth/ids";
@@ -208,8 +209,8 @@ export function PhaseFicheModal({
     : null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/50 p-4">
-      <div className="max-h-[90vh] w-full max-w-lg overflow-auto rounded-xl bg-white p-5 shadow-xl">
+    <>
+    <ModalFrame onClose={onClose}>
         {mode === "fiche" ? (
           <>
             <h3 className="font-serif text-xl text-stone-900">
@@ -515,7 +516,7 @@ export function PhaseFicheModal({
             </div>
           </form>
         )}
-      </div>
+    </ModalFrame>
 
       {pending && (
         <ConflictModal
@@ -548,6 +549,6 @@ export function PhaseFicheModal({
           onClose={() => setReceptionOpen(false)}
         />
       ) : null}
-    </div>
+    </>
   );
 }

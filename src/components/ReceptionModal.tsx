@@ -5,6 +5,7 @@ import SignatureCanvas from "react-signature-canvas";
 import { usePlanning } from "@/lib/planning-context";
 import { planningApiPost } from "@/lib/planning/api";
 import { PdfPreview } from "@/components/PdfPreview";
+import { ModalFrame } from "@/components/ModalFrame";
 import { PHASE_LABELS } from "@/lib/types";
 
 type Preview = {
@@ -124,8 +125,7 @@ export function ReceptionModal({
   if (!phase) return null;
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-stone-900/50 p-4">
-      <div className="max-h-[92vh] w-full max-w-2xl overflow-auto rounded-xl bg-white p-5 shadow-xl">
+    <ModalFrame onClose={onClose} maxWidthClass="max-w-2xl" zClass="z-[60]">
         <h3 className="font-serif text-xl text-stone-900">
           {isLivraison ? "Bon de livraison" : "Réception de chantier"}
         </h3>
@@ -249,7 +249,6 @@ export function ReceptionModal({
             </div>
           </>
         )}
-      </div>
-    </div>
+    </ModalFrame>
   );
 }
