@@ -1909,7 +1909,7 @@ function runDragShiftSelfCheck() {
         duree_estimee_heures: 6.5,
         date_debut: "2026-09-22",
         date_fin: "2026-09-22",
-        heure_debut: "07:30",
+        heure_debut: "06:30",
         employe_id: "emp-a",
         statut: "a_faire",
         urgent: false,
@@ -1921,7 +1921,7 @@ function runDragShiftSelfCheck() {
         duree_estimee_heures: 4,
         date_debut: "2026-09-23",
         date_fin: "2026-09-23",
-        heure_debut: "07:30",
+        heure_debut: "06:30",
         employe_id: "emp-a",
         statut: "a_faire",
         urgent: false,
@@ -1933,8 +1933,8 @@ function runDragShiftSelfCheck() {
     fromRowId: "emp-a",
     toRowId: "emp-a",
     chantierId: "ch-early",
-    grab: { date: "2026-09-22", half: 0, startMin: 7 * 60 + 30 },
-    drop: { date: "2026-09-22", half: 0, startMin: 8 * 60 },
+    grab: { date: "2026-09-22", half: 0, startMin: 6 * 60 + 30 },
+    drop: { date: "2026-09-22", half: 0, startMin: 7 * 60 },
   });
   if (slackMove.blocked) {
     throw new Error(
@@ -1945,9 +1945,9 @@ function runDragShiftSelfCheck() {
     throw new Error("drag-shift: slack — le lendemain ne doit pas bouger");
   }
   const nextPatch = slackMove.patches.find((patch) => patch.id === "ph-early");
-  if (!nextPatch || nextPatch.heure_debut !== "08:00") {
+  if (!nextPatch || nextPatch.heure_debut !== "07:00") {
     throw new Error(
-      "drag-shift: Vue Jour doit cranter l’heure de début (08:00)",
+      "drag-shift: Vue Jour doit cranter l’heure de début (07:00)",
     );
   }
   if (
@@ -1964,8 +1964,8 @@ function runDragShiftSelfCheck() {
     fromRowId: "emp-a",
     toRowId: "emp-a",
     chantierId: "ch-early",
-    grab: { date: "2026-09-22", half: 0, startMin: 7 * 60 + 30 },
-    drop: { date: "2026-09-22", half: 0, startMin: 8 * 60 + 30 },
+    grab: { date: "2026-09-22", half: 0, startMin: 6 * 60 + 30 },
+    drop: { date: "2026-09-22", half: 0, startMin: 7 * 60 + 30 },
   });
   if (slackOneHour.blocked) {
     throw new Error(
@@ -1982,12 +1982,12 @@ function runDragShiftSelfCheck() {
   );
   if (
     !earlyAfterHour ||
-    earlyAfterHour.heure_debut !== "08:30" ||
+    earlyAfterHour.heure_debut !== "07:30" ||
     earlyAfterHour.date_debut !== "2026-09-22" ||
     earlyAfterHour.date_fin !== "2026-09-22"
   ) {
     throw new Error(
-      "drag-shift: slack 1 h — le bloc reste le mardi, début 08:30",
+      "drag-shift: slack 1 h — le bloc reste le mardi, début 07:30",
     );
   }
 

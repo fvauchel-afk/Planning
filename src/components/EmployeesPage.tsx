@@ -557,8 +557,10 @@ export function EmployeesPage() {
           <div className="space-y-2">
             <p className="text-sm font-medium text-stone-900">Préréglage horaires</p>
             <p className="text-xs text-stone-600">
-              Remplit été et hiver d’un coup. Vous pouvez ensuite modifier chaque
-              case.
+              35 h et 39 h posent les horaires de référence (été et hiver
+              différents : embauche plus tôt et débauche plus tôt en été). 28 h
+              reste le même en été et en hiver. Vous pouvez ensuite modifier
+              chaque case.
             </p>
             <div className="flex flex-wrap gap-2">
               {HORAIRE_PRESETS.map((preset) => (

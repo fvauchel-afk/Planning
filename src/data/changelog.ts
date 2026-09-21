@@ -11,6 +11,15 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-21-horaires-35-39",
+    title: "Horaires 35 h et 39 h : été et hiver",
+    items: [
+      "Sur un employé, le bouton 35 h/semaine pose l’été 6h30–15h00 (lun–jeu) et l’hiver 7h30–16h00, vendredi matin 7h00–12h00, samedi vide (35 h).",
+      "Le bouton 39 h/semaine pose l’été 6h30–16h00 et l’hiver 7h30–17h00, même vendredi matin (39 h). Les horaires déjà enregistrés d’un salarié ne bougent pas tant que vous ne cliquez pas le bouton.",
+      "L’ouverture du planning ne plante plus (écran blanc) : le contrôle interne du glisser-déposer suit les nouveaux horaires d’été (fin 15 h, pas 16 h).",
+    ],
+  },
+  {
     id: "2026-09-21-onedrive-toujours-connecte",
     title: "OneDrive : alerte dès l’entrée, plus de faux « expiré »",
     items: [

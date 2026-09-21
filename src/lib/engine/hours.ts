@@ -50,18 +50,13 @@ function stockSaison(kind: "ete" | "hiver"): HorairesSaisonEmploye {
   return (cachedDefaultHiver ??= defaultHorairesSaisonEmploye("hiver"));
 }
 
-export function defaultHorairesSaisonEmploye(
-  kind: "ete" | "hiver",
+const PRESET_FRIDAY = jourSemaine("07:00", "12:00", "", "");
+
+function saisonFromWeekAndFriday(
+  week: HorairesJour,
+  friday: HorairesJour,
   options?: { skipWednesday?: boolean },
 ): HorairesSaisonEmploye {
-  const week =
-    kind === "ete"
-      ? jourSemaine("07:30", "12:00", "13:00", "16:00")
-      : jourSemaine("08:00", "12:00", "13:00", "17:00");
-  const friday =
-    kind === "ete"
-      ? jourSemaine("07:30", "12:00", "", "")
-      : jourSemaine("08:00", "12:00", "", "");
   const jours: Record<string, HorairesJour> = {};
   for (const day of JOURS_OUVRES) {
     if (day === 6 || (options?.skipWednesday && day === 3)) {
@@ -75,6 +70,18 @@ export function defaultHorairesSaisonEmploye(
   return { jours };
 }
 
+/** Base 35 h : été 06:30–15:00, hiver 07:30–16:00 (lun–jeu), vendredi matin 07:00–12:00. */
+export function defaultHorairesSaisonEmploye(
+  kind: "ete" | "hiver",
+  options?: { skipWednesday?: boolean },
+): HorairesSaisonEmploye {
+  const week =
+    kind === "ete"
+      ? jourSemaine("06:30", "12:00", "13:00", "15:00")
+      : jourSemaine("07:30", "12:00", "13:00", "16:00");
+  return saisonFromWeekAndFriday(week, PRESET_FRIDAY, options);
+}
+
 export function defaultHorairesEmploye(options?: {
   skipWednesday?: boolean;
 }): HorairesEmploye {
@@ -85,28 +92,12 @@ export function defaultHorairesEmploye(options?: {
 }
 
 export const HORAIRE_PRESETS = [
-  { id: "28", label: "28 h/semaine", weekDebouche: "14:15" },
-  { id: "35", label: "35 h/semaine", weekDebouche: "16:00" },
-  { id: "39", label: "39 h/semaine", weekDebouche: "17:00" },
+  { id: "28", label: "28 h/semaine" },
+  { id: "35", label: "35 h/semaine" },
+  { id: "39", label: "39 h/semaine" },
 ] as const;
 
 export type HorairePresetId = (typeof HORAIRE_PRESETS)[number]["id"];
-
-function saisonFromWeekDebouche(weekDebouche: string): HorairesSaisonEmploye {
-  const week = jourSemaine("07:30", "12:00", "13:00", weekDebouche);
-  const friday = jourSemaine("07:00", "12:00", "", "");
-  const jours: Record<string, HorairesJour> = {};
-  for (const day of JOURS_OUVRES) {
-    if (day === 6) {
-      jours[String(day)] = emptyHorairesJour();
-    } else if (day === 5) {
-      jours[String(day)] = { ...friday };
-    } else {
-      jours[String(day)] = { ...week };
-    }
-  }
-  return { jours };
-}
 
 function cloneSaisonJours(jours: Record<string, HorairesJour>): Record<string, HorairesJour> {
   const next: Record<string, HorairesJour> = {};
@@ -117,12 +108,39 @@ function cloneSaisonJours(jours: Record<string, HorairesJour>): Record<string, H
   return next;
 }
 
+function cloneSaison(saison: HorairesSaisonEmploye): HorairesSaisonEmploye {
+  return { jours: cloneSaisonJours(saison.jours) };
+}
+
 export function horairesFromPreset(id: HorairePresetId): HorairesEmploye {
-  const preset = HORAIRE_PRESETS.find((item) => item.id === id);
-  const saison = saisonFromWeekDebouche(preset?.weekDebouche ?? "16:00");
+  if (id === "28") {
+    const saison = saisonFromWeekAndFriday(
+      jourSemaine("07:30", "12:00", "13:00", "14:15"),
+      PRESET_FRIDAY,
+    );
+    return { ete: cloneSaison(saison), hiver: cloneSaison(saison) };
+  }
+  if (id === "39") {
+    return {
+      ete: saisonFromWeekAndFriday(
+        jourSemaine("06:30", "12:00", "13:00", "16:00"),
+        PRESET_FRIDAY,
+      ),
+      hiver: saisonFromWeekAndFriday(
+        jourSemaine("07:30", "12:00", "13:00", "17:00"),
+        PRESET_FRIDAY,
+      ),
+    };
+  }
   return {
-    ete: { jours: cloneSaisonJours(saison.jours) },
-    hiver: { jours: cloneSaisonJours(saison.jours) },
+    ete: saisonFromWeekAndFriday(
+      jourSemaine("06:30", "12:00", "13:00", "15:00"),
+      PRESET_FRIDAY,
+    ),
+    hiver: saisonFromWeekAndFriday(
+      jourSemaine("07:30", "12:00", "13:00", "16:00"),
+      PRESET_FRIDAY,
+    ),
   };
 }
 
@@ -161,6 +179,24 @@ function runHorairePresetSelfCheck() {
     if (saturday?.embauche || saturday?.pause_debut) {
       throw new Error(`horaires: samedi du préréglage ${id} h doit être vide`);
     }
+  }
+  const h35 = horairesFromPreset("35");
+  if (
+    h35.ete.jours["1"]?.embauche !== "06:30" ||
+    h35.ete.jours["1"]?.debouche !== "15:00" ||
+    h35.hiver.jours["1"]?.embauche !== "07:30" ||
+    h35.hiver.jours["1"]?.debouche !== "16:00"
+  ) {
+    throw new Error("horaires: 35 h été 06:30–15:00, hiver 07:30–16:00");
+  }
+  const h39 = horairesFromPreset("39");
+  if (
+    h39.ete.jours["1"]?.embauche !== "06:30" ||
+    h39.ete.jours["1"]?.debouche !== "16:00" ||
+    h39.hiver.jours["1"]?.embauche !== "07:30" ||
+    h39.hiver.jours["1"]?.debouche !== "17:00"
+  ) {
+    throw new Error("horaires: 39 h été 06:30–16:00, hiver 07:30–17:00");
   }
 }
 runHorairePresetSelfCheck();
