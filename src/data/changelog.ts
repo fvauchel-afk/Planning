@@ -11,6 +11,13 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-21-push-denied-dismiss",
+    title: "Notifications bloquées : un clic pour fermer",
+    items: [
+      "Le bandeau « Les notifications sont bloquées dans le navigateur… » se ferme dès que vous appuyez dessus, et ne revient plus tant que vous n’avez pas changé les réglages du site.",
+    ],
+  },
+  {
     id: "2026-09-21-nav-reunion-demandes",
     title: "Menu : Demandes, Réunion et Commande ensemble",
     items: [
