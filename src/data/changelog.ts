@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-21-onedrive-rattrapage",
+    title: "OneDrive : rattrapage à la reconnexion",
+    items: [
+      "Après « Connecter OneDrive », le planning crée les dossiers chantiers manquants (ceux nés pendant la coupure) et recopie les devis pas encore sur OneDrive.",
+      "Le bouton « Connecter OneDrive » reste accessible à tout admin (case Admin dans Accès et droits), pas seulement à Jonathan.",
+    ],
+  },
+  {
     id: "2026-09-21-saisons-jj-mm",
     title: "Saisons : jour et mois seulement",
     items: [
