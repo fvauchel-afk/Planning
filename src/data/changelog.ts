@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-21-poseurs-plus-auto",
+    title: "Pose : +1 ou +2 poseurs libres",
+    items: [
+      "Dans Nouveau chantier, sous les cases des poseurs, vous pouvez cocher +1 poseur ou +2 poseurs : ce sont des personnes libres, choisies toutes seules au moment de caler la pose, sans les nommer maintenant.",
+      "Vous pouvez combiner : Raphaël coché + « +1 » donne Raphaël plus un autre poseur libre. Sans aucune case, le premier disponible est toujours pris tout seul. Chaque poseur a sa ligne sur le planning.",
+    ],
+  },
+  {
     id: "2026-09-21-saisons-jj-mm",
     title: "Saisons : jour et mois seulement",
     items: [

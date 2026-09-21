@@ -20,6 +20,7 @@ import {
 } from "@/lib/engine/earliest-date";
 import { generatePlanSolutions, propositionFromSolutions } from "@/lib/engine/plan-solutions";
 import { applyPhaseChainOnCreate, firstWorkingOnOrBefore, missingRequiredAssignee } from "@/lib/engine/phase-chain";
+import { extraPoseurIdsAfterChain } from "@/lib/engine/poseurs-auto";
 import { withExtraPoseurs } from "@/lib/engine/create-phases";
 import { moisToToleranceJours } from "@/lib/priorite";
 import { EmployeePhaseSelect } from "@/components/EmployeePhaseSelect";
@@ -137,6 +138,7 @@ export function ChantierForm() {
   const [employeLivraison, setEmployeLivraison] = useState("");
   const [employeFabrication, setEmployeFabrication] = useState("");
   const [poseurIds, setPoseurIds] = useState<string[]>([]);
+  const [poseursAuto, setPoseursAuto] = useState<0 | 1 | 2>(0);
   const [delaiLaquage, setDelaiLaquage] = useState("5");
   const [dateLaquageDebut, setDateLaquageDebut] = useState("");
   const [dateLaquageFin, setDateLaquageFin] = useState("");
@@ -399,12 +401,13 @@ export function ChantierForm() {
         })),
       })),
     };
+    const chained = applyPhaseChainOnCreate(
+      snapshot,
+      ensureChantierDatesOnCreate(snapshot, input),
+    );
     const prepared = withExtraPoseurs(
-      applyPhaseChainOnCreate(
-        snapshot,
-        ensureChantierDatesOnCreate(snapshot, input),
-      ),
-      poseurIds.slice(1),
+      chained,
+      extraPoseurIdsAfterChain(snapshot, chained, poseurIds, poseursAuto),
     );
     if (urgent && dateFin && dateDebut) {
       let lastEnd = "";
@@ -902,8 +905,9 @@ export function ChantierForm() {
             <div className="mt-3 space-y-2">
               <span className="mb-1 block font-medium">Poseurs</span>
               <p className="text-xs text-stone-600">
-                Cochez un ou plusieurs poseurs. Si vous n’en choisissez aucun,
-                le premier disponible est pris tout seul.
+                Cochez un ou plusieurs poseurs, et/ou +1 / +2 poseurs libres à
+                déterminer. Si vous ne cochez rien, le premier disponible est
+                pris tout seul.
               </p>
               <div className="flex flex-col gap-1">
                 {poseCandidates.map((employee) => {
@@ -935,6 +939,26 @@ export function ChantierForm() {
                     </label>
                   );
                 })}
+                <label className="inline-flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={poseursAuto === 1}
+                    onChange={() =>
+                      setPoseursAuto((current) => (current === 1 ? 0 : 1))
+                    }
+                  />
+                  <span>+1 poseur (libre à déterminer)</span>
+                </label>
+                <label className="inline-flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={poseursAuto === 2}
+                    onChange={() =>
+                      setPoseursAuto((current) => (current === 2 ? 0 : 2))
+                    }
+                  />
+                  <span>+2 poseurs (libres à déterminer)</span>
+                </label>
               </div>
               {poseDateDebut && suggestedPoseurs.length === 0 ? (
                 <p className="text-xs text-amber-800">
