@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-21-commandes-backfill",
+    title: "Commande : aussi les plans déjà validés",
+    items: [
+      "Les chantiers qui avaient déjà « Plan validé » (y compris sans fournitures ni OneDrive) apparaissent dans l’onglet Commande, à faire, pour que l’admin complète.",
+      "Les anciennes Demandes « Commande » restent en historique en bas de l’onglet, sans être converties.",
+    ],
+  },
+  {
     id: "2026-09-21-poseurs-plus-edit",
     title: "Pose : +1 / +2 aussi sur un chantier déjà créé",
     items: [
