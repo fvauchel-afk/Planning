@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-21-admin-oui-non",
+    title: "Administratif : Oui / Non comme les autres phases",
+    items: [
+      "À la création et dans Modifier le chantier, Administratif a un Oui / Non, comme la pose, la fabrication, le thermolaquage et la livraison.",
+      "Oui cale la phase en tête de chaîne (demi-journée par défaut si aucune durée). Non la retire, comme pour les autres étapes.",
+    ],
+  },
+  {
     id: "2026-09-21-onedrive-toujours-connecte",
     title: "OneDrive : alerte dès l’entrée, plus de faux « expiré »",
     items: [
