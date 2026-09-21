@@ -1,6 +1,7 @@
 "use client";
 
 import { MobileShell } from "@/components/MobileShell";
+import { PiecesJointesListe } from "@/components/PiecesJointesListe";
 import { formatLongDate } from "@/lib/dates";
 import { idsEqual } from "@/lib/auth/ids";
 import { usePlanning } from "@/lib/planning-context";
@@ -78,6 +79,7 @@ export function MesCongesPage() {
                     {demande.motif_precision.trim()}
                   </p>
                 ) : null}
+                <PiecesJointesListe pieces={demande.photos} />
                 {demande.statut === "refusee" && demande.motif_refus?.trim() ? (
                   <p className="mt-2 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-900">
                     Motif : {demande.motif_refus.trim()}

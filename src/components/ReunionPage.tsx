@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { PiecesJointesListe } from "@/components/PiecesJointesListe";
 import { usePlanning } from "@/lib/planning-context";
 import { demandeEstOuverte, isReunionDirectionDemande } from "@/lib/demandes";
 import type { Demande } from "@/lib/types";
@@ -106,6 +107,7 @@ export function ReunionPage() {
                         Déposé le {formatWhen(demande.date_creation)} par{" "}
                         {nomAuteur(demande.employe_id)}
                       </span>
+                      <PiecesJointesListe pieces={demande.photos} />
                     </span>
                   </label>
                 </li>

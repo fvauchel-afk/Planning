@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-21-demandes-pieces-jointes",
+    title: "Demandes : photo ou fichier joint",
+    items: [
+      "Dans la bulle, chaque catégorie (commande, suggestions, congé, réunion de direction) permet de prendre une photo, d’en choisir une dans la galerie, ou de joindre un fichier (PDF, image…).",
+      "Les pièces jointes s’affichent ensuite dans Demandes, Réunion et Mes congés.",
+    ],
+  },
+  {
     id: "2026-09-21-nav-onglets",
     title: "Menu : Synthèse, Devis, Planning, Réunion",
     items: [
