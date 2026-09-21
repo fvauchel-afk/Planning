@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-21-creer-depuis-cases",
+    title: "Planning : créer un chantier depuis des cases vides",
+    items: [
+      "Un clic sur une case vide (matin ou après-midi) ouvre une petite fenêtre : nom du client et durées. L’adresse, le plan et le reste se complètent plus tard sur la fiche chantier.",
+      "La phase calée suit la ligne : fabricant → Fabrication, poseur → Pose. Ctrl+clic (Cmd sur Mac) ajoute d’autres cases, y compris sur plusieurs salariés, comme pour les blocs choisis.",
+    ],
+  },
+  {
     id: "2026-09-21-blocs-choisis",
     title: "Planning : déplacer des blocs choisis sur du libre",
     items: [
