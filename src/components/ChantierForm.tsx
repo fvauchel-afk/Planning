@@ -813,16 +813,22 @@ export function ChantierForm() {
         </label>
         <fieldset className="md:col-span-2 rounded-lg border border-violet-200 bg-violet-50/40 p-3">
           <legend className="px-1 text-sm font-medium text-stone-800">
-            Dates du chantier
+            Dates du chantier (toute la chaîne)
           </legend>
           <p className="text-xs text-stone-600">
-            Laissez le début vide pour un calage automatique au plus tôt.
-            En urgent, une date de fin sert de deadline (calage à rebours).
-            Les durées se choisissent plus bas, par phase.
+            Le début est le premier jour de la première phase : Administratif
+            s’il a une durée plus bas, sinon Fabrication, sinon Pose. Les
+            phases suivantes (thermolaquage, livraison, pose) se calent à la
+            suite. Laissez le début vide pour un calage automatique au plus tôt.
+            En urgent, la date de fin est le dernier jour de la dernière phase
+            (souvent la Pose) : le planning se cale à rebours. Les durées se
+            choisissent plus bas, par phase.
           </p>
           <div className="mt-2 grid gap-3 sm:grid-cols-2">
             <label className="block text-sm">
-              <span className="mb-1 block font-medium">Début</span>
+              <span className="mb-1 block font-medium">
+                Début (1re phase)
+              </span>
               <input
                 type="date"
                 value={dateDebut}
@@ -832,7 +838,9 @@ export function ChantierForm() {
             </label>
             {urgent ? (
               <label className="block text-sm">
-                <span className="mb-1 block font-medium">Fin (deadline)</span>
+                <span className="mb-1 block font-medium">
+                  Fin (deadline, dernière phase)
+                </span>
                 <input
                   type="date"
                   value={dateFin}
