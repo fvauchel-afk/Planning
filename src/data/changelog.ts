@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-21-dates-chantier-chaine",
+    title: "Dates du chantier : toute la chaîne",
+    items: [
+      "À la création, Début est le premier jour de la première phase (Administratif s’il a une durée, sinon Fabrication, sinon Pose). En urgent, la Fin est le dernier jour de la dernière phase (souvent la Pose).",
+      "Dans Modifier le chantier, les dates planifiées sont aussi le premier et le dernier jour de toute la chaîne, pas seulement la Pose.",
+    ],
+  },
+  {
     id: "2026-09-21-demandes-pieces-jointes",
     title: "Demandes : photo ou fichier joint",
     items: [

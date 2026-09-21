@@ -335,8 +335,9 @@ export type NewChantierInput = {
   lien_dossier_onedrive: string | null;
   priorite: Priorite;
   tolerance_deplacement_jours?: number | null;
-  /** Fenêtre saisie à la création (recopiée sur les phases sans date). */
+  /** Premier jour de la chaîne (1re phase planifiée). */
   date_debut?: string | null;
+  /** En urgent : dernier jour de la chaîne (deadline, dernière phase). */
   date_fin?: string | null;
   dates_estimatives?: boolean;
   avec_fabrication?: boolean;

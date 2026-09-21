@@ -1349,13 +1349,18 @@ export function ChantierEditModal({
 
           <fieldset className="rounded-lg border border-amber-200 bg-amber-50/50 p-3">
             <legend className="px-1 text-sm font-medium text-stone-800">
-              Dates planifiées
+              Dates planifiées (toute la chaîne)
               {datesEstimatives ? (
                 <span className="ml-2 rounded border border-dashed border-violet-400 bg-violet-50 px-1.5 py-px text-[10px] font-semibold uppercase tracking-wide text-violet-800">
                   Estimatif
                 </span>
               ) : null}
             </legend>
+            <p className="mt-1 text-xs text-stone-600">
+              Premier et dernier jour, toutes phases confondues (Administratif
+              → Fabrication → Thermolaquage → Livraison → Pose). Ce n’est pas
+              seulement la Pose : décaler le début déplace toute la chaîne.
+            </p>
             {isPlanned && !visibleOnGrid ? (
               <p className="mt-1 text-xs text-red-800">
                 Des dates sont enregistrées mais aucun créneau n’apparaît sur le
@@ -1364,7 +1369,7 @@ export function ChantierEditModal({
               </p>
             ) : null}
             <label className="mt-2 block text-sm">
-              <span className="mb-1 block">Date de début</span>
+              <span className="mb-1 block">Début (1re phase)</span>
               <input
                 type="date"
                 value={planDate}
@@ -1373,7 +1378,7 @@ export function ChantierEditModal({
               />
             </label>
             <label className="mt-2 block text-sm">
-              <span className="mb-1 block">Date de fin</span>
+              <span className="mb-1 block">Fin (dernière phase)</span>
               <input
                 type="date"
                 value={planEnd}
