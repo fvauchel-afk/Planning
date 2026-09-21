@@ -3,11 +3,11 @@ export type AdminNavLink = {
   label: string;
   /** false = pas de prefetch Next (OneDrive). */
   prefetch?: boolean;
+  reunionOnly?: boolean;
 };
 
 export type AdminNavItem = AdminNavLink & {
   children?: AdminNavLink[];
-  reunionOnly?: boolean;
 };
 
 export const ADMIN_NAV: AdminNavItem[] = [
@@ -18,7 +18,14 @@ export const ADMIN_NAV: AdminNavItem[] = [
     label: "Planning",
     children: [{ href: "/chantiers", label: "Chantiers" }],
   },
-  { href: "/reunion", label: "Réunion", reunionOnly: true },
+  {
+    href: "/demandes",
+    label: "Demandes",
+    children: [
+      { href: "/reunion", label: "Réunion", reunionOnly: true },
+      { href: "/commandes", label: "Commande" },
+    ],
+  },
   { href: "/signalements", label: "Signalements" },
   {
     href: "/parametres",
@@ -31,9 +38,7 @@ export const ADMIN_NAV: AdminNavItem[] = [
     ],
   },
   { href: "/plan", label: "Plan" },
-  { href: "/commandes", label: "Commande" },
   { href: "/absences", label: "Absences" },
-  { href: "/demandes", label: "Demandes" },
   { href: "/moi", label: "Mon planning" },
 ];
 
@@ -48,7 +53,16 @@ export function itemActive(item: AdminNavItem, currentPath: string): boolean {
 }
 
 export function adminNavForSession(canManageReunion: boolean): AdminNavItem[] {
-  return ADMIN_NAV.filter((item) => !item.reunionOnly || canManageReunion);
+  return ADMIN_NAV.filter((item) => !item.reunionOnly || canManageReunion).map(
+    (item) => {
+      const children = (item.children ?? []).filter(
+        (child) => !child.reunionOnly || canManageReunion,
+      );
+      return children.length === (item.children ?? []).length
+        ? item
+        : { ...item, children };
+    },
+  );
 }
 
 export function sectionWithChildren(
@@ -68,13 +82,11 @@ function runAdminNavSelfCheck() {
     "Synthèse",
     "Devis",
     "Planning",
-    "Réunion",
+    "Demandes",
     "Signalements",
     "Paramètres",
     "Plan",
-    "Commande",
     "Absences",
-    "Demandes",
     "Mon planning",
   ];
   if (labels.join("|") !== expected.join("|")) {
@@ -83,6 +95,11 @@ function runAdminNavSelfCheck() {
   const planning = ADMIN_NAV.find((item) => item.href === "/");
   if (planning?.children?.[0]?.href !== "/chantiers") {
     throw new Error("admin-nav: Chantiers doit être sous Planning");
+  }
+  const demandes = ADMIN_NAV.find((item) => item.href === "/demandes");
+  const demandeChildren = (demandes?.children ?? []).map((item) => item.href);
+  if (demandeChildren.join("|") !== "/reunion|/commandes") {
+    throw new Error("admin-nav: Réunion et Commande sous Demandes");
   }
   const params = ADMIN_NAV.find((item) => item.href === "/parametres");
   const childHrefs = (params?.children ?? []).map((item) => item.href);
@@ -98,8 +115,23 @@ function runAdminNavSelfCheck() {
   if (itemActive(planning!, "/plan")) {
     throw new Error("admin-nav: Plan n’est pas un sous-onglet Planning");
   }
+  if (itemActive(demandes!, "/commandes") !== true) {
+    throw new Error("admin-nav: /commandes doit activer Demandes");
+  }
+  if (itemActive(demandes!, "/reunion") !== true) {
+    throw new Error("admin-nav: /reunion doit activer Demandes");
+  }
   if (adminNavForSession(false).some((item) => item.reunionOnly)) {
     throw new Error("admin-nav: Réunion masquée sans droit");
+  }
+  const withoutReunion = adminNavForSession(false).find(
+    (item) => item.href === "/demandes",
+  );
+  if ((withoutReunion?.children ?? []).some((item) => item.href === "/reunion")) {
+    throw new Error("admin-nav: Réunion masquée dans les sous-onglets sans droit");
+  }
+  if (!(withoutReunion?.children ?? []).some((item) => item.href === "/commandes")) {
+    throw new Error("admin-nav: Commande reste visible sous Demandes");
   }
 }
 runAdminNavSelfCheck();
