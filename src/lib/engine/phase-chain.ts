@@ -115,11 +115,14 @@ export function pickEmployeeForPhase(
   debut: string | null,
   fin: string | null,
   preferredId?: string | null,
+  excludeIds?: Iterable<string>,
 ): string | null {
   if (type === "logistique") return null;
+  const excluded = new Set(excludeIds);
   const preferred = snapshot.employees.find((item) => item.id === preferredId);
   if (
     preferred &&
+    !excluded.has(preferred.id) &&
     employeeCanTakePhase(preferred, type) &&
     employeeAvailableOnRange(snapshot, preferred, debut, fin)
   ) {
@@ -128,16 +131,56 @@ export function pickEmployeeForPhase(
   const available = snapshot.employees
     .filter(
       (employee) =>
+        !excluded.has(employee.id) &&
         employeeCanTakePhase(employee, type) &&
         employeeAvailableOnRange(snapshot, employee, debut, fin),
     )
     .sort(compareEmployeesByOrdre);
   if (available[0]) return available[0].id;
-  if (preferred && employeeCanTakePhase(preferred, type)) return preferred.id;
+  if (
+    preferred &&
+    !excluded.has(preferred.id) &&
+    employeeCanTakePhase(preferred, type)
+  ) {
+    return preferred.id;
+  }
   const withRole = snapshot.employees
-    .filter((employee) => employeeCanTakePhase(employee, type))
+    .filter(
+      (employee) =>
+        !excluded.has(employee.id) && employeeCanTakePhase(employee, type),
+    )
     .sort(compareEmployeesByOrdre);
   return withRole[0]?.id ?? null;
+}
+
+/** Combien de poseurs auto à ajouter en plus de la 1re phase pose (déjà remplie). */
+export function extraAutoPoseurCount(
+  namedCount: number,
+  extraAuto: number,
+): number {
+  const extra = Math.max(0, Math.min(2, Math.floor(extraAuto) || 0));
+  if (namedCount <= 0) return Math.max(0, extra - 1);
+  return extra;
+}
+
+export function pickDistinctEmployeesForPhase(
+  snapshot: PlanningSnapshot,
+  type: TypePhase,
+  debut: string | null,
+  fin: string | null,
+  count: number,
+  excludeIds?: Iterable<string>,
+): string[] {
+  const taken = new Set(excludeIds);
+  const ids: string[] = [];
+  const want = Math.max(0, count);
+  for (let i = 0; i < want; i += 1) {
+    const id = pickEmployeeForPhase(snapshot, type, debut, fin, null, taken);
+    if (!id) break;
+    ids.push(id);
+    taken.add(id);
+  }
+  return ids;
 }
 
 export function missingRequiredAssignee(
@@ -1210,6 +1253,39 @@ function runPhaseChainSelfCheck() {
     demandes: [],
     horaires: [],
   };
+  const extraAuto = pickDistinctEmployeesForPhase(
+    {
+      ...snapshot,
+      employees: [
+        {
+          id: "emp-alexis",
+          nom: "Alexis",
+          roles: ["fabrication", "pose"],
+          actif: true,
+        },
+        {
+          id: "emp-romain",
+          nom: "Romain",
+          roles: ["fabrication", "pose"],
+          actif: true,
+        },
+      ],
+    },
+    "pose",
+    "2026-09-21",
+    "2026-09-21",
+    1,
+    ["emp-alexis"],
+  );
+  if (extraAuto[0] !== "emp-romain") {
+    throw new Error("phase-chain: +1 poseur auto prend le suivant libre");
+  }
+  if (extraAutoPoseurCount(0, 0) !== 0 || extraAutoPoseurCount(0, 1) !== 0) {
+    throw new Error("phase-chain: sans nom, +0/+1 = une seule pose auto");
+  }
+  if (extraAutoPoseurCount(0, 2) !== 1 || extraAutoPoseurCount(1, 1) !== 1) {
+    throw new Error("phase-chain: +2 sans nom / +1 avec un nommé");
+  }
   const basePhase = {
     duree_estimee_heures: 8,
     date_debut: null as string | null,
