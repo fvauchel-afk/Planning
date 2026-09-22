@@ -1,4 +1,9 @@
 import {
+  creneauPersistFields,
+  formatCreneauCourt,
+  validateAbsenceCreneau,
+} from "@/lib/absence-creneau";
+import {
   CATEGORIES_DEMANDE,
   STATUTS_DEMANDE,
   TYPES_ABSENCE,
@@ -71,14 +76,18 @@ export function syntheseMessageConge(input: {
   date_debut: string;
   date_fin: string;
   motif_precision?: string | null;
+  creneau?: NewDemandeInput["creneau"];
+  duree_heures?: number | null;
 }): string {
   const type = ABSENCE_LABELS[input.type_absence] ?? input.type_absence;
   const dates =
     input.date_fin === input.date_debut
       ? input.date_debut
       : `${input.date_debut} → ${input.date_fin}`;
+  const slot = formatCreneauCourt(input);
+  const when = slot ? `${dates} · ${slot}` : dates;
   const extra = input.motif_precision?.trim();
-  return extra ? `${type} · ${dates}\n${extra}` : `${type} · ${dates}`;
+  return extra ? `${type} · ${when}\n${extra}` : `${type} · ${when}`;
 }
 
 export function absenceInputFromDemande(
@@ -89,6 +98,11 @@ export function absenceInputFromDemande(
   const debut = demande.date_debut?.slice(0, 10) ?? "";
   const fin = demande.date_fin?.slice(0, 10) ?? "";
   if (!type || !debut || !fin) return null;
+  const creneau = creneauPersistFields({
+    creneau: demande.creneau,
+    duree_heures: demande.duree_heures,
+    type,
+  });
   return {
     employe_id: demande.employe_id,
     type,
@@ -96,6 +110,8 @@ export function absenceInputFromDemande(
     date_fin: fin,
     motif_precision:
       type === "autre" ? demande.motif_precision?.trim() || null : null,
+    creneau: creneau.creneau,
+    duree_heures: creneau.duree_heures,
   };
 }
 
@@ -113,7 +129,11 @@ export function validateDemandeCongeInput(input: NewDemandeInput): string | null
   if (input.type_absence === "autre" && !input.motif_precision?.trim()) {
     return "Précisez le motif pour une absence de type « Autre ».";
   }
-  return null;
+  return validateAbsenceCreneau({
+    creneau: input.creneau,
+    duree_heures: input.duree_heures,
+    type: input.type_absence,
+  });
 }
 
 function runDemandesSelfCheck() {
@@ -168,6 +188,18 @@ function runDemandesSelfCheck() {
     })
   ) {
     throw new Error("demandes: un congé daté sans commentaire doit être valide");
+  }
+  if (
+    !validateDemandeCongeInput({
+      categorie: "conge",
+      message: "",
+      date_debut: "2026-09-17",
+      date_fin: "2026-09-18",
+      type_absence: "conge",
+      creneau: "heures",
+    })
+  ) {
+    throw new Error("demandes: des heures sans durée doivent être refusées");
   }
 }
 

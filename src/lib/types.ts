@@ -36,6 +36,14 @@ export const TYPES_ABSENCE = [
 ] as const;
 export type TypeAbsence = (typeof TYPES_ABSENCE)[number];
 
+export const CRENEAUX_ABSENCE = [
+  "journee",
+  "matin",
+  "apres_midi",
+  "heures",
+] as const;
+export type CreneauAbsence = (typeof CRENEAUX_ABSENCE)[number];
+
 export const JOURS_OUVRES = [1, 2, 3, 4, 5, 6] as const;
 export type JourOuvre = (typeof JOURS_OUVRES)[number];
 
@@ -149,6 +157,8 @@ export type Absence = {
   date_fin: string;
   type: TypeAbsence;
   motif_precision?: string | null;
+  creneau?: CreneauAbsence | null;
+  duree_heures?: number | null;
 };
 
 export const STATUTS_SIGNALEMENT = ["en_attente", "valide", "rejete"] as const;
@@ -298,6 +308,8 @@ export type Demande = {
   motif_refus?: string | null;
   absence_id?: string | null;
   photos?: PieceJointe[];
+  creneau?: CreneauAbsence | null;
+  duree_heures?: number | null;
 };
 
 export type NewDemandeInput = {
@@ -309,6 +321,8 @@ export type NewDemandeInput = {
   type_absence?: TypeAbsence;
   motif_precision?: string | null;
   photos?: PieceJointe[];
+  creneau?: CreneauAbsence;
+  duree_heures?: number | null;
 };
 
 export type DemandeUpdateInput = {
@@ -454,6 +468,8 @@ export type NewAbsenceInput = {
   date_fin: string;
   type: TypeAbsence;
   motif_precision?: string | null;
+  creneau?: CreneauAbsence;
+  duree_heures?: number | null;
 };
 
 export type AbsenceUpdateInput = NewAbsenceInput & { id: string };
@@ -524,12 +540,25 @@ export const ABSENCE_LABELS: Record<TypeAbsence, string> = {
 };
 
 export function absenceLabel(
-  absence: Pick<Absence, "type" | "motif_precision">,
+  absence: Pick<Absence, "type" | "motif_precision"> &
+    Partial<Pick<Absence, "creneau" | "duree_heures">>,
 ): string {
+  let base = ABSENCE_LABELS[absence.type] ?? absence.type;
   if (absence.type === "autre" && absence.motif_precision?.trim()) {
-    return `Autre — ${absence.motif_precision.trim()}`;
+    base = `Autre — ${absence.motif_precision.trim()}`;
   }
-  return ABSENCE_LABELS[absence.type] ?? absence.type;
+  const creneau = absence.creneau;
+  if (!creneau || creneau === "journee") return base;
+  if (creneau === "matin") return `${base} · matin`;
+  if (creneau === "apres_midi") return `${base} · après-midi`;
+  const hours = Number(absence.duree_heures);
+  if (Number.isFinite(hours) && hours > 0) {
+    const label = Number.isInteger(hours)
+      ? `${hours}`
+      : String(hours).replace(".", ",");
+    return `${base} · ${label} h`;
+  }
+  return `${base} · heures`;
 }
 
 export const SIGNALEMENT_LABELS: Record<StatutSignalement, string> = {

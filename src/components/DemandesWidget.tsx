@@ -6,6 +6,8 @@ import { useSession } from "@/lib/auth/session-context";
 import { usePlanning } from "@/lib/planning-context";
 import { toISODate } from "@/lib/dates";
 import { categoriesDemandeCourantes, syntheseMessageConge, validateDemandeCongeInput } from "@/lib/demandes";
+import { AbsenceCreneauFields } from "@/components/AbsenceCreneauFields";
+import type { CreneauAbsence } from "@/lib/absence-creneau";
 import { PieceJointePicker } from "@/components/PieceJointePicker";
 import { FormNotice } from "@/components/FormNotice";
 import type { PieceJointe } from "@/lib/pieces-jointes";
@@ -28,6 +30,8 @@ export function DemandesWidget() {
   const [dateDebut, setDateDebut] = useState(today);
   const [dateFin, setDateFin] = useState(today);
   const [typeAbsence, setTypeAbsence] = useState<TypeAbsence>("conge");
+  const [creneau, setCreneau] = useState<CreneauAbsence>("journee");
+  const [dureeHeures, setDureeHeures] = useState("2");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
@@ -56,7 +60,8 @@ export function DemandesWidget() {
   const isConge = categorie === "conge";
   const canSend = isConge
     ? Boolean(dateDebut && dateFin && typeAbsence) &&
-      !(typeAbsence === "autre" && !message.trim())
+      !(typeAbsence === "autre" && !message.trim()) &&
+      !(creneau === "heures" && !(Number(dureeHeures) > 0))
     : Boolean(message.trim());
 
   async function send() {
@@ -78,6 +83,8 @@ export function DemandesWidget() {
           date_fin: dateFin,
           type_absence: typeAbsence,
           motif_precision: message.trim() || null,
+          creneau,
+          duree_heures: creneau === "heures" ? Number(dureeHeures) : null,
         };
         const invalid = validateDemandeCongeInput(input);
         if (invalid) {
@@ -91,6 +98,8 @@ export function DemandesWidget() {
             date_debut: dateDebut,
             date_fin: dateFin,
             motif_precision: message.trim() || null,
+            creneau,
+            duree_heures: creneau === "heures" ? Number(dureeHeures) : null,
           }),
           photos: pieces,
         });
@@ -205,6 +214,19 @@ export function DemandesWidget() {
                     ))}
                   </select>
                 </label>
+                <AbsenceCreneauFields
+                  name="demande-creneau"
+                  creneau={creneau}
+                  dureeHeures={dureeHeures}
+                  onCreneau={(value) => {
+                    setCreneau(value);
+                    setSent(false);
+                  }}
+                  onDureeHeures={(value) => {
+                    setDureeHeures(value);
+                    setSent(false);
+                  }}
+                />
                 <label className="block text-sm">
                   <span className="mb-1 block text-stone-600">
                     Commentaire {typeAbsence === "autre" ? "" : "(optionnel)"}

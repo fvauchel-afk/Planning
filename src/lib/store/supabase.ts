@@ -16,6 +16,11 @@ import {
 import { phasesForCreate } from "@/lib/engine/create-phases";
 import { compareEmployeesByOrdre, ordreAffichageFromNom } from "@/lib/display-order";
 import { defaultHoraires, normalizeHoraire, normalizeHorairesEmploye, parseSaisonForcee } from "@/lib/engine/hours";
+import {
+  creneauPersistFields,
+  parseCreneauAbsence,
+  parseDureeHeures,
+} from "@/lib/absence-creneau";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
   asIsoDate,
@@ -316,6 +321,12 @@ async function fetchSupabaseSnapshotOnce(): Promise<PlanningSnapshot> {
       date_debut: asIsoDate(absence.date_debut) ?? absence.date_debut,
       date_fin: asIsoDate(absence.date_fin) ?? absence.date_fin,
       motif_precision: absence.motif_precision ?? null,
+      creneau: parseCreneauAbsence(
+        (absence as Absence & { creneau?: unknown }).creneau,
+      ),
+      duree_heures: parseDureeHeures(
+        (absence as Absence & { duree_heures?: unknown }).duree_heures,
+      ),
     })),
     signalements: signalementRows.map((row) => {
       const item = row as Signalement;
@@ -365,6 +376,8 @@ async function fetchSupabaseSnapshotOnce(): Promise<PlanningSnapshot> {
           absence_id:
             typeof raw.absence_id === "string" ? raw.absence_id : null,
           photos: parsePiecesJointes(raw.photos),
+          creneau: parseCreneauAbsence(raw.creneau),
+          duree_heures: parseDureeHeures(raw.duree_heures),
         };
       })
       .sort(
@@ -1233,24 +1246,46 @@ export async function supabaseCreateAbsence(
   input: NewAbsenceInput,
 ): Promise<Absence> {
   const supabase = createSupabaseServerClient();
-  const { data, error } = await supabase
-    .from("absences")
-    .insert({
-      employe_id: input.employe_id,
-      date_debut: input.date_debut,
-      date_fin: input.date_fin,
-      type: input.type,
-      motif_precision:
-        input.type === "autre" ? input.motif_precision?.trim() || null : null,
-    })
-    .select("*")
-    .single();
-  if (error) throw wrapSupabaseError(error);
+  const creneau = creneauPersistFields(input);
+  const payload = {
+    employe_id: input.employe_id,
+    date_debut: input.date_debut,
+    date_fin: input.date_fin,
+    type: input.type,
+    motif_precision:
+      input.type === "autre" ? input.motif_precision?.trim() || null : null,
+    creneau: creneau.creneau,
+    duree_heures: creneau.duree_heures,
+  };
+  let result = await supabase.from("absences").insert(payload).select("*").single();
+  if (
+    result.error &&
+    (isMissingColumnError(result.error, "creneau") ||
+      isMissingColumnError(result.error, "duree_heures"))
+  ) {
+    const withoutCreneau = {
+      employe_id: payload.employe_id,
+      date_debut: payload.date_debut,
+      date_fin: payload.date_fin,
+      type: payload.type,
+      motif_precision: payload.motif_precision,
+    };
+    result = await supabase.from("absences").insert(withoutCreneau).select("*").single();
+  }
+  if (result.error) throw wrapSupabaseError(result.error);
+  const data = result.data as Absence;
   return {
-    ...(data as Absence),
-    date_debut: asIsoDate((data as Absence).date_debut) ?? input.date_debut,
-    date_fin: asIsoDate((data as Absence).date_fin) ?? input.date_fin,
-    motif_precision: (data as Absence).motif_precision ?? null,
+    ...data,
+    date_debut: asIsoDate(data.date_debut) ?? input.date_debut,
+    date_fin: asIsoDate(data.date_fin) ?? input.date_fin,
+    motif_precision: data.motif_precision ?? null,
+    creneau: parseCreneauAbsence(
+      (data as Absence & { creneau?: unknown }).creneau ?? creneau.creneau,
+    ),
+    duree_heures: parseDureeHeures(
+      (data as Absence & { duree_heures?: unknown }).duree_heures ??
+        creneau.duree_heures,
+    ),
   };
 }
 
@@ -1264,17 +1299,36 @@ export async function supabaseUpdateAbsence(
   input: AbsenceUpdateInput,
 ): Promise<void> {
   const supabase = createSupabaseServerClient();
-  const { error } = await supabase
-    .from("absences")
-    .update({
-      employe_id: input.employe_id,
-      date_debut: input.date_debut,
-      date_fin: input.date_fin,
-      type: input.type,
-      motif_precision:
-        input.type === "autre" ? input.motif_precision?.trim() || null : null,
-    })
-    .eq("id", input.id);
+  const creneau = creneauPersistFields(input);
+  const payload = {
+    employe_id: input.employe_id,
+    date_debut: input.date_debut,
+    date_fin: input.date_fin,
+    type: input.type,
+    motif_precision:
+      input.type === "autre" ? input.motif_precision?.trim() || null : null,
+    creneau: creneau.creneau,
+    duree_heures: creneau.duree_heures,
+  };
+  let error = (
+    await supabase.from("absences").update(payload).eq("id", input.id)
+  ).error;
+  if (
+    error &&
+    (isMissingColumnError(error, "creneau") ||
+      isMissingColumnError(error, "duree_heures"))
+  ) {
+    const withoutCreneau = {
+      employe_id: payload.employe_id,
+      date_debut: payload.date_debut,
+      date_fin: payload.date_fin,
+      type: payload.type,
+      motif_precision: payload.motif_precision,
+    };
+    error = (
+      await supabase.from("absences").update(withoutCreneau).eq("id", input.id)
+    ).error;
+  }
   if (error) throw wrapSupabaseError(error);
 }
 
@@ -1432,8 +1486,36 @@ export async function supabaseCreateDemande(
     type_absence: input.type_absence ?? null,
     motif_precision: input.motif_precision?.trim() || null,
     photos: parsePiecesJointes(input.photos),
+    creneau:
+      input.categorie === "conge"
+        ? creneauPersistFields({
+            creneau: input.creneau,
+            duree_heures: input.duree_heures,
+            type: input.type_absence,
+          }).creneau
+        : null,
+    duree_heures:
+      input.categorie === "conge"
+        ? creneauPersistFields({
+            creneau: input.creneau,
+            duree_heures: input.duree_heures,
+            type: input.type_absence,
+          }).duree_heures
+        : null,
   };
   let error = (await supabase.from("demandes").insert(payload)).error;
+  if (
+    error &&
+    (isMissingColumnError(error, "creneau") ||
+      isMissingColumnError(error, "duree_heures"))
+  ) {
+    const withoutCreneau = { ...payload };
+    delete (withoutCreneau as { creneau?: unknown }).creneau;
+    delete (withoutCreneau as { duree_heures?: unknown }).duree_heures;
+    const retryCreneau = await supabase.from("demandes").insert(withoutCreneau);
+    if (!retryCreneau.error) return;
+    error = retryCreneau.error;
+  }
   if (error && isMissingColumnError(error, "photos")) {
     const withoutPhotos = { ...payload };
     delete (withoutPhotos as { photos?: unknown }).photos;

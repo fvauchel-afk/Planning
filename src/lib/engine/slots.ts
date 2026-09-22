@@ -1,4 +1,5 @@
 import { addDays, isSunday, toISODate } from "@/lib/dates";
+import { hoursTakenOnHalf, isFullDayAbsenceBlock } from "@/lib/absence-creneau";
 import {
   LOGISTIQUE_ROW_ID,
   isVirtualPlanningRow,
@@ -6,6 +7,7 @@ import {
   type TypePhase,
 } from "@/lib/types";
 import {
+  contractHoursForSlot,
   employeeWorksOnDate,
   formatClock,
   hoursForSlot,
@@ -134,13 +136,23 @@ export function isEmployeeAbsent(
   snapshot: PlanningSnapshot,
   employeeId: string,
   date: string,
+  half?: Half,
 ): boolean {
-  return snapshot.absences.some(
+  const absences = snapshot.absences.filter(
     (absence) =>
       absence.employe_id === employeeId &&
       date >= absence.date_debut &&
       date <= absence.date_fin,
   );
+  if (absences.length === 0) return false;
+  const morning = contractHoursForSlot(snapshot, employeeId, date, 0);
+  const afternoon = contractHoursForSlot(snapshot, employeeId, date, 1);
+  if (half === undefined) {
+    return isFullDayAbsenceBlock(absences, date, morning, afternoon);
+  }
+  const contract = half === 0 ? morning : afternoon;
+  if (contract <= 0) return false;
+  return hoursTakenOnHalf(absences, date, half, morning, afternoon) >= contract - 0.0001;
 }
 
 /**
@@ -170,7 +182,7 @@ export function isSlotBlockedForRow(
   if (isVirtualPlanningRow(rowId)) {
     return half !== undefined && hoursForSlot(snapshot, rowId, date, half) <= 0;
   }
-  if (isEmployeeAbsent(snapshot, rowId, date)) return true;
+  if (half === undefined && isEmployeeAbsent(snapshot, rowId, date)) return true;
   const employee = snapshot.employees.find((item) => item.id === rowId);
   if (!employeeWorksOnDate(snapshot, employee, date)) {
     return true;

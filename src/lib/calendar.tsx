@@ -14,6 +14,8 @@ import {
 } from "@/lib/types";
 import { colorForChantier } from "@/lib/colors";
 import { dateInRange, formatOvertimeHours } from "@/lib/dates";
+import { hoursTakenOnHalf } from "@/lib/absence-creneau";
+import { contractHoursForSlot } from "@/lib/engine/hours";
 import {
   phaseIsEstimative,
   phaseAwaitingChantierLance,
@@ -260,15 +262,23 @@ export function slotsForPhase(
 }
 
 export function absencesForCell(
-  absences: Absence[],
+  snapshot: PlanningSnapshot,
   employeeId: string | null,
   iso: string,
+  half?: 0 | 1,
 ): Absence[] {
   if (!employeeId) return [];
-  return absences.filter(
+  const covering = snapshot.absences.filter(
     (absence) =>
       absence.employe_id === employeeId &&
       dateInRange(iso, absence.date_debut, absence.date_fin),
+  );
+  if (half === undefined) return covering;
+  const morning = contractHoursForSlot(snapshot, employeeId, iso, 0);
+  const afternoon = contractHoursForSlot(snapshot, employeeId, iso, 1);
+  return covering.filter(
+    (absence) =>
+      hoursTakenOnHalf([absence], iso, half, morning, afternoon) > 0.0001,
   );
 }
 

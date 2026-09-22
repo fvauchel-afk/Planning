@@ -7,6 +7,11 @@ import {
 import { phasesForCreate } from "@/lib/engine/create-phases";
 import { ordreAffichageFromNom } from "@/lib/display-order";
 import { defaultHoraires, normalizeHoraire, normalizeHorairesEmploye, parseSaisonForcee } from "@/lib/engine/hours";
+import {
+  creneauPersistFields,
+  parseCreneauAbsence,
+  parseDureeHeures,
+} from "@/lib/absence-creneau";
 import { normalizePhasesForPlanning } from "@/lib/engine/normalize-phases";
 import { createSeedSnapshot } from "@/lib/seed";
 import type {
@@ -99,6 +104,8 @@ export function loadLocalSnapshot(): PlanningSnapshot {
       absences: (parsed.absences ?? []).map((absence) => ({
         ...absence,
         motif_precision: absence.motif_precision ?? null,
+        creneau: parseCreneauAbsence(absence.creneau),
+        duree_heures: parseDureeHeures(absence.duree_heures),
       })),
       receptions: parsed.receptions ?? [],
       demandes: (parsed.demandes ?? []).map((row) => ({
@@ -117,6 +124,8 @@ export function loadLocalSnapshot(): PlanningSnapshot {
         motif_refus: row.motif_refus ?? null,
         absence_id: row.absence_id ?? null,
         photos: parsePiecesJointes(row.photos),
+        creneau: parseCreneauAbsence(row.creneau),
+        duree_heures: parseDureeHeures(row.duree_heures),
       })),
       commandes: (parsed.commandes ?? []).map((row) => ({
         ...row,
@@ -353,6 +362,7 @@ export function localCreateAbsence(
   input: NewAbsenceInput,
 ): PlanningSnapshot {
   const next = clone(snapshot);
+  const creneau = creneauPersistFields(input);
   next.absences.push({
     id: newId(),
     employe_id: input.employe_id,
@@ -361,6 +371,8 @@ export function localCreateAbsence(
     type: input.type,
     motif_precision:
       input.type === "autre" ? input.motif_precision?.trim() || null : null,
+    creneau: creneau.creneau,
+    duree_heures: creneau.duree_heures,
   });
   saveLocalSnapshot(next);
   return next;
@@ -391,6 +403,7 @@ export function localUpdateAbsence(
           type: input.type,
           motif_precision:
             input.type === "autre" ? input.motif_precision?.trim() || null : null,
+          ...creneauPersistFields(input),
         }
       : absence,
   );
@@ -552,6 +565,22 @@ export function localCreateDemande(
     motif_refus: null,
     absence_id: null,
     photos: parsePiecesJointes(input.photos),
+    creneau:
+      input.categorie === "conge"
+        ? creneauPersistFields({
+            creneau: input.creneau,
+            duree_heures: input.duree_heures,
+            type: input.type_absence,
+          }).creneau
+        : null,
+    duree_heures:
+      input.categorie === "conge"
+        ? creneauPersistFields({
+            creneau: input.creneau,
+            duree_heures: input.duree_heures,
+            type: input.type_absence,
+          }).duree_heures
+        : null,
   };
   next.demandes = [row, ...(next.demandes ?? [])];
   saveLocalSnapshot(next);

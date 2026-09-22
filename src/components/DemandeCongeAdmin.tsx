@@ -20,6 +20,7 @@ import { applyRecordedAbsence } from "@/lib/planning/apply-recorded-absence";
 import { matchingRecordedAbsence } from "@/lib/signalements";
 import { formatSaveError } from "@/lib/supabase/errors";
 import { ABSENCE_LABELS, absenceLabel, type Demande } from "@/lib/types";
+import { formatCreneauCourt } from "@/lib/absence-creneau";
 import { usePlanning } from "@/lib/planning-context";
 
 export function DemandeCongeAdmin({
@@ -58,6 +59,7 @@ export function DemandeCongeAdmin({
             payload.employe_id,
             payload.date_debut,
             payload.date_fin,
+            payload,
           )
         : [],
     [payload, snapshot],
@@ -291,6 +293,7 @@ export function DemandeCongeDetails({ demande }: { demande: Demande }) {
       {demande.date_fin && demande.date_fin !== demande.date_debut
         ? ` → ${formatLongDate(demande.date_fin)}`
         : ""}
+      {formatCreneauCourt(demande) ? ` · ${formatCreneauCourt(demande)}` : ""}
       {demande.motif_precision?.trim()
         ? ` — ${demande.motif_precision.trim()}`
         : ""}

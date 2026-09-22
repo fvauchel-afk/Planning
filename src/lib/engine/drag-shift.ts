@@ -5,7 +5,6 @@ import {
   rebuiltSlotsForStart,
 } from "@/lib/engine/hour-grid";
 import {
-  isEmployeeAbsent,
   isSlotBlockedForRow,
   isSousTraitancePlanningRow,
   slotsFromExistingPhase,
@@ -84,11 +83,7 @@ function isWorkHalf(
   date: string,
   half: Half,
 ): boolean {
-  if (hoursForSlot(snapshot, rowId, date, half) <= 0) return false;
-  if (!isVirtualPlanningRow(rowId) && isEmployeeAbsent(snapshot, rowId, date)) {
-    return false;
-  }
-  return true;
+  return hoursForSlot(snapshot, rowId, date, half) > 0;
 }
 
 function hasWorkGap(

@@ -1,3 +1,7 @@
+import {
+  creneauPersistFields,
+  formatCreneauCourt,
+} from "@/lib/absence-creneau";
 import type { Displacement } from "@/lib/engine/planner";
 import type { DelayPlanResult } from "@/lib/engine/delay";
 import {
@@ -162,8 +166,15 @@ export function propositionFromDelay(
   };
 }
 
-export function absencePeriodNote(payload: Pick<NewAbsenceInput, "date_debut" | "date_fin">): string {
-  return `Absence du ${payload.date_debut} au ${payload.date_fin}`;
+export function absencePeriodNote(
+  payload: Pick<
+    NewAbsenceInput,
+    "date_debut" | "date_fin" | "creneau" | "duree_heures" | "type"
+  >,
+): string {
+  const slot = formatCreneauCourt(payload);
+  const dates = `Absence du ${payload.date_debut} au ${payload.date_fin}`;
+  return slot ? `${dates} (${slot})` : dates;
 }
 
 export function matchingRecordedAbsence(
@@ -171,14 +182,19 @@ export function matchingRecordedAbsence(
   payload: NewAbsenceInput,
   ignoreAbsenceId?: string,
 ): Absence | undefined {
-  return snapshot.absences.find(
-    (item) =>
-      item.id !== ignoreAbsenceId &&
-      item.employe_id === payload.employe_id &&
-      item.date_debut.slice(0, 10) === payload.date_debut &&
-      item.date_fin.slice(0, 10) === payload.date_fin &&
-      item.type === payload.type,
-  );
+  const creneau = creneauPersistFields(payload);
+  return snapshot.absences.find((item) => {
+    if (item.id === ignoreAbsenceId) return false;
+    if (item.employe_id !== payload.employe_id) return false;
+    if (item.date_debut.slice(0, 10) !== payload.date_debut) return false;
+    if (item.date_fin.slice(0, 10) !== payload.date_fin) return false;
+    if (item.type !== payload.type) return false;
+    const existing = creneauPersistFields(item);
+    return (
+      existing.creneau === creneau.creneau &&
+      (existing.duree_heures ?? null) === (creneau.duree_heures ?? null)
+    );
+  });
 }
 
 export function similarAbsenceSignalement(

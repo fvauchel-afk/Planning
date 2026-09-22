@@ -60,6 +60,8 @@ export function absenceCascadeFingerprint(absence: Absence | undefined): string 
     employe_id: absence.employe_id,
     date_debut: absence.date_debut.slice(0, 10),
     date_fin: absence.date_fin.slice(0, 10),
+    creneau: absence.creneau ?? "journee",
+    duree_heures: absence.duree_heures ?? null,
   });
 }
 

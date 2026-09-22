@@ -41,6 +41,14 @@ import {
 } from "@/lib/signalements";
 import { formatSaveError } from "@/lib/supabase/errors";
 import {
+  creneauPersistFields,
+  formatCreneauTable,
+  parseCreneauAbsence,
+  validateAbsenceCreneau,
+  type CreneauAbsence,
+} from "@/lib/absence-creneau";
+import { AbsenceCreneauFields } from "@/components/AbsenceCreneauFields";
+import {
   ABSENCE_LABELS,
   TYPES_ABSENCE,
   absenceLabel,
@@ -67,6 +75,8 @@ export function AbsencesPage() {
   const [type, setType] = useState<TypeAbsence>("conge");
   const [dateDebut, setDateDebut] = useState("");
   const [dateFin, setDateFin] = useState("");
+  const [creneau, setCreneau] = useState<CreneauAbsence>("journee");
+  const [dureeHeures, setDureeHeures] = useState("2");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [motifPrecision, setMotifPrecision] = useState("");
@@ -120,6 +130,7 @@ export function AbsencesPage() {
             reviewPayload.employe_id,
             reviewPayload.date_debut,
             reviewPayload.date_fin,
+            reviewPayload,
           )
         : [],
     [reviewPayload, snapshot],
@@ -155,6 +166,8 @@ export function AbsencesPage() {
     setType("conge");
     setDateDebut("");
     setDateFin("");
+    setCreneau("journee");
+    setDureeHeures("2");
     setMotifPrecision("");
     setApplyToTeam(false);
     setError(null);
@@ -173,6 +186,10 @@ export function AbsencesPage() {
     setType(absence.type);
     setDateDebut(absence.date_debut.slice(0, 10));
     setDateFin(absence.date_fin.slice(0, 10));
+    setCreneau(parseCreneauAbsence(absence.creneau));
+    setDureeHeures(
+      absence.duree_heures != null ? String(absence.duree_heures) : "2",
+    );
     setMotifPrecision(absence.motif_precision ?? "");
     setError(null);
     setNotice(null);
@@ -241,6 +258,10 @@ export function AbsencesPage() {
       setEmployeId(remote.employe_id);
       setDateDebut(remote.date_debut.slice(0, 10));
       setDateFin(remote.date_fin.slice(0, 10));
+      setCreneau(parseCreneauAbsence(remote.creneau));
+      setDureeHeures(
+        remote.duree_heures != null ? String(remote.duree_heures) : "2",
+      );
       cascadeBaseline.current = absenceCascadeFingerprint(remote);
     }
   }, [snapshot, editingId]);
@@ -268,13 +289,29 @@ export function AbsencesPage() {
       setError("Précisez le motif pour une absence de type « Autre ».");
       return null;
     }
+    const creneauInvalid = validateAbsenceCreneau({
+      creneau,
+      duree_heures: Number(dureeHeures),
+      type,
+    });
+    if (creneauInvalid) {
+      setError(creneauInvalid);
+      return null;
+    }
     setError(null);
+    const slot = creneauPersistFields({
+      creneau,
+      duree_heures: Number(dureeHeures),
+      type,
+    });
     return {
       employe_id: applyToTeam ? "" : employeId,
       type,
       date_debut: dateDebut,
       date_fin: dateFin,
       motif_precision: type === "autre" ? motifPrecision.trim() : null,
+      creneau: slot.creneau,
+      duree_heures: slot.duree_heures,
     };
   }
 
@@ -309,6 +346,7 @@ export function AbsencesPage() {
           payload.employe_id,
           payload.date_debut,
           payload.date_fin,
+          payload,
         );
         if (overlap.length === 0) continue;
         const nextChoices = defaultAbsenceChoices(snap, overlap, {});
@@ -393,6 +431,7 @@ export function AbsencesPage() {
         payload.employe_id,
         payload.date_debut,
         payload.date_fin,
+        payload,
       );
       if (needsPlacementConflict) {
         const pendingSimilar = similarPendingAbsenceSignalement(
@@ -489,6 +528,10 @@ export function AbsencesPage() {
             setEmployeId(remote.employe_id);
             setDateDebut(remote.date_debut.slice(0, 10));
             setDateFin(remote.date_fin.slice(0, 10));
+            setCreneau(parseCreneauAbsence(remote.creneau));
+            setDureeHeures(
+              remote.duree_heures != null ? String(remote.duree_heures) : "2",
+            );
             cascadeBaseline.current = remoteFp;
           }
         }
@@ -500,6 +543,7 @@ export function AbsencesPage() {
       payload.employe_id,
       payload.date_debut,
       payload.date_fin,
+      payload,
     );
     if (overlap.length > 0) {
       setReviewPayload(payload);
@@ -534,13 +578,14 @@ export function AbsencesPage() {
                 <th className="px-3 py-2 font-medium">Type</th>
                 <th className="px-3 py-2 font-medium">Début</th>
                 <th className="px-3 py-2 font-medium">Fin</th>
+                <th className="px-3 py-2 font-medium">Créneau</th>
                 <th className="px-3 py-2" />
               </tr>
             </thead>
             <tbody>
               {listedAbsences.length === 0 && (
                 <tr>
-                  <td className="px-3 py-4 text-stone-500" colSpan={5}>
+                  <td className="px-3 py-4 text-stone-500" colSpan={6}>
                     Aucune absence enregistrée.
                   </td>
                 </tr>
@@ -560,6 +605,7 @@ export function AbsencesPage() {
                     {formatLongDate(absence.date_debut)}
                   </td>
                   <td className="px-3 py-2">{formatLongDate(absence.date_fin)}</td>
+                  <td className="px-3 py-2">{formatCreneauTable(absence)}</td>
                   <td className="px-3 py-2 text-right">
                     <button
                       type="button"
@@ -629,6 +675,7 @@ export function AbsencesPage() {
               const value = event.target.value as TypeAbsence;
               setType(value);
               if (value !== "ferie_entreprise") setApplyToTeam(false);
+              else setCreneau("journee");
               dirtySimple.current.add("type");
               if (editingId) {
                 live.schedule({
@@ -714,6 +761,20 @@ export function AbsencesPage() {
             className="w-full rounded border border-stone-300 px-3 py-2"
           />
         </label>
+        <AbsenceCreneauFields
+          name="admin-absence-creneau"
+          hidden={type === "ferie_entreprise"}
+          creneau={creneau}
+          dureeHeures={dureeHeures}
+          onCreneau={(value) => {
+            markAbsenceCascade();
+            setCreneau(value);
+          }}
+          onDureeHeures={(value) => {
+            markAbsenceCascade();
+            setDureeHeures(value);
+          }}
+        />
         <div className="flex gap-2">
           <button
             type="submit"

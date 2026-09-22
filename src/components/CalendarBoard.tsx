@@ -249,9 +249,10 @@ export function CalendarBoard() {
       }
       const row = rows.find((item) => item.id === cell.rowId);
       const absences = absencesForCell(
-        snapshot.absences,
+        snapshot,
         row?.employee?.id ?? null,
         cell.date,
+        cell.half,
       );
       const slotOff = hoursForSlot(snapshot, cell.rowId, cell.date, cell.half) <= 0;
       if (session?.isAdmin && row?.employee && absences.length === 0 && !slotOff) {
@@ -902,14 +903,15 @@ export function CalendarBoard() {
                     )}
                   </th>
                   {days.flatMap((iso) => {
-                    const absences = absencesForCell(
-                      snapshot.absences,
-                      row.employee?.id ?? null,
-                      iso,
-                    );
                     const compact = view === "overview";
                     return (["matin", "apres_midi"] as const).map((slot) => {
                       const half = halfFromLabel(slot);
+                      const absences = absencesForCell(
+                        snapshot,
+                        row.employee?.id ?? null,
+                        iso,
+                        half,
+                      );
                       const slotOff =
                         hoursForSlot(snapshot, row.id, iso, half) <= 0;
                       const cellAssignments = assignmentsForCell(
@@ -1236,7 +1238,7 @@ function DayDetail({
         </div>
         {rows.map((row) => {
           const absences = absencesForCell(
-            snapshot.absences,
+            snapshot,
             row.employee?.id ?? null,
             iso,
           );

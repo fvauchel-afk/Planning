@@ -1,3 +1,7 @@
+import {
+  hoursTakenOnHalf,
+  remainingHoursOnHalf,
+} from "@/lib/absence-creneau";
 import { addDays, addWorkingDays, isoWeekday, isSunday, toISODate } from "@/lib/dates";
 import {
   JOURS_OUVRES,
@@ -422,7 +426,6 @@ export type WorkWindow = {
 type HoursRuntime = {
   employeeById: Map<string, Employee>;
   holidays: { start: string; end: string }[];
-  offByEmployee: Map<string, { start: string; end: string }[]>;
   saisons: HoraireSaison[];
   saisonForcee: "ete" | "hiver" | null;
   saisonByMd: Map<string, HoraireSaison>;
@@ -437,23 +440,16 @@ function runtimeFor(snapshot: PlanningSnapshot): HoursRuntime {
   const cached = hoursRuntime.get(snapshot);
   if (cached) return cached;
   const holidays: HoursRuntime["holidays"] = [];
-  const offByEmployee = new Map<string, { start: string; end: string }[]>();
   for (const absence of snapshot.absences) {
-    const span = { start: absence.date_debut, end: absence.date_fin };
     if (absence.type === "ferie_entreprise") {
-      holidays.push(span);
-      continue;
+      holidays.push({ start: absence.date_debut, end: absence.date_fin });
     }
-    const list = offByEmployee.get(absence.employe_id) ?? [];
-    list.push(span);
-    offByEmployee.set(absence.employe_id, list);
   }
   const next: HoursRuntime = {
     employeeById: new Map(
       snapshot.employees.map((employee) => [employee.id, employee]),
     ),
     holidays,
-    offByEmployee,
     saisons: [...horairesOf(snapshot)].sort((a, b) => a.ordre - b.ordre),
     saisonForcee: parseSaisonForcee(snapshot.saison_forcee),
     saisonByMd: new Map(),
@@ -469,16 +465,6 @@ function isHolidayDate(runtime: HoursRuntime, date: string): boolean {
   return runtime.holidays.some(
     (span) => date >= span.start && date <= span.end,
   );
-}
-
-function isOffDate(
-  runtime: HoursRuntime,
-  employeeId: string,
-  date: string,
-): boolean {
-  const list = runtime.offByEmployee.get(employeeId);
-  if (!list) return false;
-  return list.some((span) => date >= span.start && date <= span.end);
 }
 
 function horairesOfEmployee(
@@ -560,6 +546,36 @@ function logisticsHalfHours(
   return hoursFromJour(jour, half);
 }
 
+export function contractHoursForSlot(
+  snapshot: PlanningSnapshot,
+  rowId: string,
+  date: string,
+  half: 0 | 1,
+): number {
+  const runtime = runtimeFor(snapshot);
+  if (isSunday(date) || isHolidayDate(runtime, date)) return 0;
+  if (isCompanyHoursRow(rowId)) {
+    return logisticsHalfHours(snapshot, date, half);
+  }
+  const employee = runtime.employeeById.get(rowId);
+  if (!employee?.actif) return 0;
+  return hoursFromJour(jourForEmployee(snapshot, employee, date), half);
+}
+
+function employeeAbsencesOnDate(
+  snapshot: PlanningSnapshot,
+  employeeId: string,
+  date: string,
+) {
+  return snapshot.absences.filter(
+    (absence) =>
+      absence.employe_id === employeeId &&
+      absence.type !== "ferie_entreprise" &&
+      date >= absence.date_debut &&
+      date <= absence.date_fin,
+  );
+}
+
 export function hoursForSlot(
   snapshot: PlanningSnapshot,
   rowId: string,
@@ -570,16 +586,18 @@ export function hoursForSlot(
   const key = `${rowId}|${date}|${half}`;
   const cached = runtime.hours.get(key);
   if (cached !== undefined) return cached;
-  let hours = 0;
-  if (!isSunday(date) && !isHolidayDate(runtime, date)) {
-    if (isCompanyHoursRow(rowId)) {
-      hours = logisticsHalfHours(snapshot, date, half);
-    } else {
-      const employee = runtime.employeeById.get(rowId);
-      if (employee?.actif) {
-        hours = hoursFromJour(jourForEmployee(snapshot, employee, date), half);
-      }
-    }
+  let hours = contractHoursForSlot(snapshot, rowId, date, half);
+  if (hours > 0 && !isCompanyHoursRow(rowId)) {
+    const morning = contractHoursForSlot(snapshot, rowId, date, 0);
+    const afternoon = contractHoursForSlot(snapshot, rowId, date, 1);
+    const taken = hoursTakenOnHalf(
+      employeeAbsencesOnDate(snapshot, rowId, date),
+      date,
+      half,
+      morning,
+      afternoon,
+    );
+    hours = Math.max(0, Math.round((hours - taken) * 100) / 100);
   }
   runtime.hours.set(key, hours);
   return hours;
@@ -598,10 +616,6 @@ export function workWindowsForRow(
     runtime.windows.set(key, []);
     return [];
   }
-  if (!isCompanyHoursRow(rowId) && isOffDate(runtime, rowId, date)) {
-    runtime.windows.set(key, []);
-    return [];
-  }
   const employee = runtime.employeeById.get(rowId);
   if (!isCompanyHoursRow(rowId) && !employee) {
     runtime.windows.set(key, []);
@@ -617,22 +631,60 @@ export function workWindowsForRow(
   const morningEnd = minutesFromTime(jour.pause_debut);
   const afternoonStart = minutesFromTime(jour.pause_reprise);
   const afternoonEnd = minutesFromTime(jour.debouche);
+  const morningHours = hoursFromJour(jour, 0);
+  const afternoonHours = hoursFromJour(jour, 1);
+  const absences = isCompanyHoursRow(rowId)
+    ? []
+    : employeeAbsencesOnDate(snapshot, rowId, date);
+  const remainingMorning = remainingHoursOnHalf(
+    absences,
+    date,
+    0,
+    morningHours,
+    afternoonHours,
+  );
+  const remainingAfternoon = remainingHoursOnHalf(
+    absences,
+    date,
+    1,
+    morningHours,
+    afternoonHours,
+  );
   const windows: WorkWindow[] = [];
-  if (morningStart != null && morningEnd != null && morningEnd > morningStart) {
-    windows.push({ start: morningStart, end: morningEnd, half: 0 });
+  if (
+    morningStart != null &&
+    morningEnd != null &&
+    morningEnd > morningStart &&
+    remainingMorning > 0
+  ) {
+    const duration = morningEnd - morningStart;
+    const keep = Math.round(remainingMorning * 60);
+    const start = keep < duration ? morningEnd - keep : morningStart;
+    windows.push({ start, end: morningEnd, half: 0 });
   }
   if (
     afternoonStart != null &&
     afternoonEnd != null &&
-    afternoonEnd > afternoonStart
+    afternoonEnd > afternoonStart &&
+    remainingAfternoon > 0
   ) {
-    windows.push({ start: afternoonStart, end: afternoonEnd, half: 1 });
+    const duration = afternoonEnd - afternoonStart;
+    const keep = Math.round(remainingAfternoon * 60);
+    const start = keep < duration ? afternoonEnd - keep : afternoonStart;
+    windows.push({ start, end: afternoonEnd, half: 1 });
   }
   if (windows.length === 0) {
     const start = minutesFromTime(jour.embauche);
     const end = minutesFromTime(jour.debouche);
-    if (start != null && end != null && end > start) {
-      windows.push({ start, end, half: 0 });
+    const remaining = remainingMorning + remainingAfternoon;
+    if (start != null && end != null && end > start && remaining > 0) {
+      const duration = end - start;
+      const keep = Math.round(remaining * 60);
+      windows.push({
+        start: keep < duration ? end - keep : start,
+        end,
+        half: 0,
+      });
     }
   }
   runtime.windows.set(key, windows);
@@ -667,7 +719,6 @@ export function hoursAvailableOnRowDate(
 ): number {
   const runtime = runtimeFor(snapshot);
   if (isSunday(date) || isHolidayDate(runtime, date)) return 0;
-  if (!isCompanyHoursRow(rowId) && isOffDate(runtime, rowId, date)) return 0;
   const hours =
     hoursForSlot(snapshot, rowId, date, 0) +
     hoursForSlot(snapshot, rowId, date, 1);
@@ -740,7 +791,6 @@ export function capacityHoursForWeek(
     if (ids && !ids.has(employee.id)) continue;
     for (let i = 0; i < 7; i += 1) {
       const date = addDays(weekStart, i);
-      if (isOffDate(runtimeFor(snapshot), employee.id, date)) continue;
       hours += dayCapacityHours(snapshot, employee, date);
     }
   }
@@ -821,6 +871,29 @@ function runFridayHoursRangeSelfCheck() {
   if (end !== "2026-09-21") {
     throw new Error(
       `horaires: 32 h à partir du mardi 15 sept. doivent finir le lundi 21, reçu ${end}`,
+    );
+  }
+  const withMorningOff: PlanningSnapshot = {
+    ...snapshot,
+    absences: [
+      {
+        id: "off-matin",
+        employe_id: "alexis",
+        date_debut: "2026-09-15",
+        date_fin: "2026-09-15",
+        type: "conge",
+        creneau: "matin",
+      },
+    ],
+  };
+  const morning = hoursForSlot(withMorningOff, "alexis", "2026-09-15", 0);
+  const afternoon = hoursForSlot(withMorningOff, "alexis", "2026-09-15", 1);
+  if (morning !== 0) {
+    throw new Error(`horaires: congé matin doit vider le matin, reçu ${morning}`);
+  }
+  if (afternoon <= 0) {
+    throw new Error(
+      `horaires: congé matin doit laisser l’après-midi, reçu ${afternoon}`,
     );
   }
 }

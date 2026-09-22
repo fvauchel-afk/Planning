@@ -884,6 +884,8 @@ export function planAbsenceCascade(
     date_debut: string;
     date_fin: string;
     type: PlanningSnapshot["absences"][number]["type"];
+    creneau?: PlanningSnapshot["absences"][number]["creneau"];
+    duree_heures?: number | null;
   },
   options?: { ignoreAbsenceId?: string },
 ): DelayPlanResult {
@@ -909,6 +911,8 @@ export function planAbsenceCascade(
         date_debut: pendingAbsence.date_debut,
         date_fin: pendingAbsence.date_fin,
         type: pendingAbsence.type,
+        creneau: pendingAbsence.creneau ?? "journee",
+        duree_heures: pendingAbsence.duree_heures ?? null,
       },
     ],
   };
