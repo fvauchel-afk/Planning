@@ -124,6 +124,8 @@ export function buildAdministratifChantierInput(
     lien_dossier_onedrive: null,
     priorite: "pas_presse",
     dates_estimatives: true,
+    avec_administratif: true,
+    avec_fabrication: false,
     avec_pose: false,
     avec_thermolaquage: false,
     avec_livraison: false,

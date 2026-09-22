@@ -45,6 +45,7 @@ export function chantierCascadeFingerprint(
   return JSON.stringify({
     phases,
     pose: opt.avecPose,
+    admin: opt.avecAdministratif,
     fab: opt.avecFabrication,
     thermo: opt.avecThermolaquage,
     liv: opt.avecLivraison,
