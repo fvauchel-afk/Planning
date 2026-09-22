@@ -35,6 +35,7 @@ import {
   missingGridAssignee,
   planChantierOptionEdits,
   planChantierDurationEdits,
+  planRecaleAfterAssignees,
 } from "@/lib/engine/phase-chain";
 import { EmployeePhaseSelect } from "@/components/EmployeePhaseSelect";
 import { ConflictModal } from "@/components/ConflictModal";
@@ -498,19 +499,35 @@ export function ChantierEditModal({
         },
       ];
     });
+    const changedAssigneeIds = assigneePatches
+      .filter((patch) => {
+        const phase = afterOptions.phases.find((item) => item.id === patch.id);
+        return (phase?.employe_id || "") !== (patch.employe_id || "");
+      })
+      .map((patch) => patch.id);
     const afterAssignees = previewPhaseEdits(afterOptions, {
       patches: assigneePatches,
     });
-    const durationEdits = planChantierDurationEdits(
+    const recaleEdits = planRecaleAfterAssignees(
       afterAssignees,
+      chantier.id,
+      changedAssigneeIds,
+      Number(delaiLaquage || 5),
+    );
+    const afterRecale = previewPhaseEdits(afterAssignees, recaleEdits);
+    const durationEdits = planChantierDurationEdits(
+      afterRecale,
       chantier.id,
       parsedHoursByPhaseId(),
       Number(delaiLaquage || 5),
     );
     const merged = mergePhaseEdits(
-      mergePhaseEdits(mergePhaseEdits(dateEdits, optionEdits), {
-        patches: assigneePatches,
-      }),
+      mergePhaseEdits(
+        mergePhaseEdits(mergePhaseEdits(dateEdits, optionEdits), {
+          patches: assigneePatches,
+        }),
+        recaleEdits,
+      ),
       durationEdits,
     );
     const afterMerged = previewPhaseEdits(source, merged);
@@ -1413,7 +1430,8 @@ export function ChantierEditModal({
                 Durée de chaque phase en heures, ou par menu en jours ouvrés
                 (0,5 à 15). Le fabricant et les poseurs se choisissent ici, par
                 élément. Changer une personne garde le même nombre de jours et
-                recalcule les heures selon son contrat. Changer une durée recale
+                recalcule les heures selon son contrat, puis recale thermolaquage,
+                livraison et pose de cet élément. Changer une durée recale aussi
                 les phases suivantes.
               </p>
               <div className="mt-3 space-y-3">
