@@ -54,12 +54,14 @@ export function PhaseDureeFields({
   hours,
   snapshot,
   employeeId,
+  fromDate,
   onHoursChange,
   ariaLabel,
 }: {
   hours: string;
   snapshot: PlanningSnapshot;
   employeeId: string | null | undefined;
+  fromDate?: string | null;
   onHoursChange: (hours: string) => void;
   ariaLabel: string;
 }) {
@@ -67,6 +69,7 @@ export function PhaseDureeFields({
     snapshot,
     employeeId,
     Number(hours || 0),
+    fromDate,
   );
   return (
     <div className="flex flex-wrap items-center gap-1">
@@ -85,7 +88,9 @@ export function PhaseDureeFields({
         allowEmpty
         aria-label={`${ariaLabel} (jours)`}
         onChange={(jours) =>
-          onHoursChange(String(hoursFromDayPreset(snapshot, employeeId, jours)))
+          onHoursChange(
+            String(hoursFromDayPreset(snapshot, employeeId, jours, fromDate)),
+          )
         }
       />
     </div>

@@ -1,4 +1,9 @@
-import type { NewChantierInput, TypePhase } from "@/lib/types";
+import {
+  daysFromPhaseHours,
+  hoursFromDayPreset,
+} from "@/lib/engine/duree-presets";
+import { pickDistinctEmployeesForPhase } from "@/lib/engine/phase-chain";
+import type { NewChantierInput, PlanningSnapshot, TypePhase } from "@/lib/types";
 
 /** Une phase par type, sauf la pose : plusieurs poseurs = plusieurs phases pose. */
 export function phasesForCreate<T extends { type_phase: TypePhase }>(
@@ -48,6 +53,98 @@ export function withExtraPoseurs(
   };
 }
 
+/** Poseurs nommés dans le tableau Élément ; les heures suivent le contrat, à jours constants. */
+export function withPoseursPerElement(
+  snapshot: PlanningSnapshot,
+  input: NewChantierInput,
+  poseurIdsByElement: string[][],
+  fromDate?: string | null,
+): NewChantierInput {
+  if (!input.avec_pose) return input;
+  return {
+    ...input,
+    elements: input.elements.map((element, index) => {
+      const ids = (poseurIdsByElement[index] ?? []).filter(Boolean);
+      const pose = element.phases.find((phase) => phase.type_phase === "pose");
+      const rawHours = Number(pose?.duree_estimee_heures) || 0;
+      const primary = ids[0] ?? pose?.employe_id ?? null;
+      const extras = ids.slice(1);
+      const days = daysFromPhaseHours(
+        snapshot,
+        pose?.employe_id ?? ids[0] ?? null,
+        rawHours,
+        fromDate || pose?.date_debut,
+      );
+      const phases = element.phases.map((phase) => {
+        if (phase.type_phase !== "pose") return phase;
+        return {
+          ...phase,
+          employe_id: primary,
+          duree_estimee_heures:
+            rawHours > 0
+              ? hoursFromDayPreset(
+                  snapshot,
+                  primary,
+                  days,
+                  fromDate || phase.date_debut,
+                )
+              : phase.duree_estimee_heures,
+        };
+      });
+      return {
+        ...element,
+        phases: expandPosePhases(phases, extras).map((phase) => {
+          if (phase.type_phase !== "pose" || rawHours <= 0) return phase;
+          return {
+            ...phase,
+            duree_estimee_heures: hoursFromDayPreset(
+              snapshot,
+              phase.employe_id,
+              days,
+              fromDate || phase.date_debut,
+            ),
+          };
+        }),
+      };
+    }),
+  };
+}
+
+/** +1 / +2 poseurs libres, en plus des nommés, sur chaque élément. */
+export function withAutoPoseursOnEachElement(
+  snapshot: PlanningSnapshot,
+  input: NewChantierInput,
+  extraAuto: number,
+): NewChantierInput {
+  const want = Math.max(0, Math.min(2, Math.floor(extraAuto) || 0));
+  if (!input.avec_pose || want === 0) return input;
+  const takenGlobal = new Set<string>();
+  return {
+    ...input,
+    elements: input.elements.map((element) => {
+      const poses = element.phases.filter((phase) => phase.type_phase === "pose");
+      const template = poses.find((phase) => phase.date_debut) ?? poses[0];
+      for (const phase of poses) {
+        if (phase.employe_id) takenGlobal.add(phase.employe_id);
+      }
+      if (!template) return element;
+      const ids = pickDistinctEmployeesForPhase(
+        snapshot,
+        "pose",
+        template.date_debut,
+        template.date_fin || template.date_debut,
+        want,
+        takenGlobal,
+      );
+      for (const id of ids) takenGlobal.add(id);
+      return {
+        ...element,
+        phases: expandPosePhases(element.phases, ids),
+      };
+    }),
+  };
+}
+
 function runCreatePhasesSelfCheck() {
   const rows = phasesForCreate([
     { type_phase: "fabrication" as const, id: "f" },
@@ -67,6 +164,46 @@ function runCreatePhasesSelfCheck() {
   );
   if (expanded.length !== 2 || expanded[1]?.employe_id !== "b") {
     throw new Error("create-phases: le 2e poseur est copié sur une phase pose");
+  }
+  const perEl = withPoseursPerElement(
+    {
+      employees: [],
+      chantiers: [],
+      elements: [],
+      phases: [],
+      absences: [],
+      signalements: [],
+      receptions: [],
+      demandes: [],
+      horaires: [],
+    },
+    {
+      nom_client: "X",
+      adresse: "",
+      lien_dossier_onedrive: null,
+      priorite: "normal",
+      avec_pose: true,
+      elements: [
+        {
+          nom_element: "Pergola",
+          phases: [
+            {
+              type_phase: "pose",
+              duree_estimee_heures: 7.5,
+              date_debut: null,
+              date_fin: null,
+              employe_id: null,
+              urgent: false,
+            },
+          ],
+        },
+      ],
+    },
+    [["a", "b"]],
+  );
+  const poses = perEl.elements[0]?.phases.filter((row) => row.type_phase === "pose");
+  if (poses?.length !== 2 || poses[0]?.employe_id !== "a" || poses[1]?.employe_id !== "b") {
+    throw new Error("create-phases: poseurs distincts par élément");
   }
 }
 runCreatePhasesSelfCheck();

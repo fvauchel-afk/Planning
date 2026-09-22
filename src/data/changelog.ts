@@ -11,6 +11,15 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-22-element-fabricant-poseurs",
+    title: "Élément : fabricant, poseurs et heures du contrat",
+    items: [
+      "Dans le tableau de chaque élément, vous choisissez le fabricant et un ou plusieurs poseurs. Le menu fabricant du haut et les cases de noms poseurs du haut ont disparu.",
+      "Les cases +1 / +2 poseurs libres restent en haut : elles s’ajoutent en plus, sur chaque élément.",
+      "Si vous changez de personne, le nombre de jours reste le même : les heures se recalculent jour par jour selon le contrat (35 h / 39 h, matin / après-midi).",
+    ],
+  },
+  {
     id: "2026-09-22-selection-blocs-etendre",
     title: "Planning : sélectionner aussi les blocs déjà posés",
     items: [
