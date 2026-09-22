@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-22-recale-chaine-salarie",
+    title: "Changer de salarié recale la suite de l’élément",
+    items: [
+      "Dans Modifier le chantier, si vous changez le fabricant (ou le poseur) d’un élément, le thermolaquage, la livraison et la pose de CET élément suivent les nouvelles dates — plus de chevauchement avec l’ancienne fabrication.",
+      "Les autres éléments du même chantier ne bougent pas. Les dates planifiées du haut ne sont réappliquées que si vous les avez vraiment modifiées.",
+    ],
+  },
+  {
     id: "2026-09-22-vue-ensemble-mois-scroll",
     title: "Planning : le mois entier, on change de période en défilant",
     items: [

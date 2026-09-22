@@ -747,6 +747,50 @@ function recaleElementChain(
   }
 }
 
+export function planRecaleAfterAssignees(
+  snapshot: PlanningSnapshot,
+  chantierId: string,
+  changedPhaseIds: Iterable<string>,
+  delayDays?: number | null,
+): { patches: PhasePatch[]; inserts: PhaseInsert[]; deleteIds: string[] } {
+  const delay = clampDelay(delayDays);
+  const patches: PhasePatch[] = [];
+  const inserts: PhaseInsert[] = [];
+  const deleteIds: string[] = [];
+  const changed = new Set(changedPhaseIds);
+  if (changed.size === 0) return { patches, inserts, deleteIds };
+  const elements = snapshot.elements.filter(
+    (element) => element.chantier_id === chantierId,
+  );
+  for (const element of elements) {
+    const siblings = snapshot.phases.filter(
+      (phase) => phase.element_id === element.id,
+    );
+    let fromType: TypePhase | null = null;
+    for (const phase of siblings) {
+      if (!changed.has(phase.id)) continue;
+      if (
+        !fromType ||
+        PHASE_ORDER.indexOf(phase.type_phase) < PHASE_ORDER.indexOf(fromType)
+      ) {
+        fromType = phase.type_phase;
+      }
+    }
+    if (fromType) {
+      recaleElementChain(
+        snapshot,
+        element.id,
+        fromType,
+        delay,
+        patches,
+        inserts,
+        deleteIds,
+      );
+    }
+  }
+  return { patches, inserts, deleteIds };
+}
+
 function cascadeAfterAssigneeChanges(
   snapshot: PlanningSnapshot,
   chantierId: string,
@@ -2066,6 +2110,66 @@ function runPhaseChainSelfCheck() {
   }
   if (logMoved.date_debut! <= fabMoved.date_fin!) {
     throw new Error("phase-chain: thermo ne doit pas chevaucher la fabrication");
+  }
+
+  const assignedOnly: PlanningSnapshot = {
+    ...cascadeBase,
+    elements: [
+      ...cascadeBase.elements,
+      { id: "el-other", chantier_id: "ch-cascade", nom_element: "Pergola" },
+    ],
+    phases: [
+      ...cascadeBase.phases.map((phase) =>
+        phase.id === "fab-cascade" ? { ...phase, employe_id: "emp-b" } : phase,
+      ),
+      {
+        id: "fab-other",
+        element_id: "el-other",
+        type_phase: "fabrication",
+        duree_estimee_heures: 8,
+        date_debut: "2026-09-14",
+        date_fin: "2026-09-14",
+        heure_debut: "07:30",
+        employe_id: "emp-a",
+        statut: "a_faire",
+        urgent: false,
+      },
+      {
+        id: "log-other",
+        element_id: "el-other",
+        type_phase: "logistique",
+        duree_estimee_heures: 40,
+        date_debut: "2026-09-15",
+        date_fin: "2026-09-19",
+        heure_debut: null,
+        employe_id: null,
+        statut: "a_faire",
+        urgent: false,
+      },
+    ],
+  };
+  const recaled = planRecaleAfterAssignees(
+    assignedOnly,
+    "ch-cascade",
+    ["fab-cascade"],
+    5,
+  );
+  const recaleFab = recaled.patches.find((item) => item.id === "fab-cascade");
+  const recaleLog = recaled.patches.find((item) => item.id === "log-cascade");
+  const recaleOtherFab = recaled.patches.find((item) => item.id === "fab-other");
+  const recaleOtherLog = recaled.patches.find((item) => item.id === "log-other");
+  if (recaleFab?.date_debut !== "2026-09-16" || recaleFab.date_fin !== "2026-09-18") {
+    throw new Error(
+      `phase-chain: recale par élément, fab Table, reçu ${recaleFab?.date_debut} → ${recaleFab?.date_fin}`,
+    );
+  }
+  if (!recaleLog?.date_debut || recaleLog.date_debut <= recaleFab.date_fin!) {
+    throw new Error(
+      `phase-chain: recale par élément, thermo Table doit suivre la fab, reçu ${recaleLog?.date_debut}`,
+    );
+  }
+  if (recaleOtherFab || recaleOtherLog) {
+    throw new Error("phase-chain: changer le fabricant de Table ne doit pas recaler Pergola");
   }
 
   const nobody = applyPhaseChainOnCreate(
