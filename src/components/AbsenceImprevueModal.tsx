@@ -13,6 +13,12 @@ import {
   type AbsencePhaseChoice,
 } from "@/lib/engine/absence-imprevue";
 import { formatLongDate, toISODate } from "@/lib/dates";
+import {
+  creneauPersistFields,
+  validateAbsenceCreneau,
+  type CreneauAbsence,
+} from "@/lib/absence-creneau";
+import { AbsenceCreneauFields } from "@/components/AbsenceCreneauFields";
 import { needsAlgoValidation, propositionFromDelay } from "@/lib/signalements";
 import { usePlanning } from "@/lib/planning-context";
 import {
@@ -37,6 +43,8 @@ export function AbsenceImprevueModal({
   const [to, setTo] = useState(today);
   const [type, setType] = useState<TypeAbsence>("maladie");
   const [motifPrecision, setMotifPrecision] = useState("");
+  const [creneau, setCreneau] = useState<CreneauAbsence>("journee");
+  const [dureeHeures, setDureeHeures] = useState("2");
   const [step, setStep] = useState<"period" | "phases">("period");
   const [choices, setChoices] = useState<Record<string, AbsencePhaseChoice>>({});
   const [error, setError] = useState<string | null>(null);
@@ -48,9 +56,13 @@ export function AbsenceImprevueModal({
   const impacted = useMemo(
     () =>
       from && to && to >= from
-        ? listImpactedPhases(snapshot, employee.id, from, to)
+        ? listImpactedPhases(snapshot, employee.id, from, to, {
+            creneau,
+            duree_heures: creneau === "heures" ? Number(dureeHeures) : null,
+            type,
+          })
         : [],
-    [employee.id, from, snapshot, to],
+    [employee.id, from, snapshot, to, creneau, dureeHeures, type],
   );
 
   const candidates = useMemo(
@@ -71,15 +83,31 @@ export function AbsenceImprevueModal({
       setError("Précisez le motif pour une absence de type « Autre ».");
       return;
     }
+    const creneauInvalid = validateAbsenceCreneau({
+      creneau,
+      duree_heures: Number(dureeHeures),
+      type,
+    });
+    if (creneauInvalid) {
+      setError(creneauInvalid);
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
+      const slot = creneauPersistFields({
+        creneau,
+        duree_heures: Number(dureeHeures),
+        type,
+      });
       const absence = {
         employe_id: employee.id,
         date_debut: from,
         date_fin: to,
         type,
         motif_precision: type === "autre" ? motifPrecision.trim() : null,
+        creneau: slot.creneau,
+        duree_heures: slot.duree_heures,
       };
       const plan = planAbsenceImprevue(snapshot, absence, choices);
       if (plan.status === "conflict" && !forceConflict) {
@@ -164,6 +192,13 @@ export function AbsenceImprevueModal({
                 />
               </label>
             )}
+            <AbsenceCreneauFields
+              name="imprevue-creneau"
+              creneau={creneau}
+              dureeHeures={dureeHeures}
+              onCreneau={setCreneau}
+              onDureeHeures={setDureeHeures}
+            />
             <p className="text-xs text-stone-500">
               Par défaut : aujourd’hui uniquement. Élargissez les dates si
               l’absence dure plusieurs jours.
@@ -182,6 +217,15 @@ export function AbsenceImprevueModal({
                     setError(
                       "Précisez le motif pour une absence de type « Autre ».",
                     );
+                    return;
+                  }
+                  const creneauInvalid = validateAbsenceCreneau({
+                    creneau,
+                    duree_heures: Number(dureeHeures),
+                    type,
+                  });
+                  if (creneauInvalid) {
+                    setError(creneauInvalid);
                     return;
                   }
                   setError(null);

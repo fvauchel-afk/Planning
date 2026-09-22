@@ -1,8 +1,10 @@
 import { addDays, datesOverlap, startOfWeekIso } from "@/lib/dates";
+import { hoursTakenOnHalf } from "@/lib/absence-creneau";
 import {
   planAbsenceCascade,
   type DelayPlanResult,
 } from "@/lib/engine/delay";
+import { contractHoursForSlot } from "@/lib/engine/hours";
 import {
   buildOccupancy,
   isEmployeeAbsent,
@@ -39,13 +41,39 @@ export function phaseOverlapsAbsencePeriod(
   phase: PhasePlanning,
   from: string,
   to: string,
+  absence?: {
+    creneau?: NewAbsenceInput["creneau"];
+    duree_heures?: number | null;
+    type?: NewAbsenceInput["type"];
+  },
 ): boolean {
   if (!phase.date_debut || !phase.date_fin) return false;
   if (phase.statut === "termine") return false;
   if (!datesOverlap(phase.date_debut, phase.date_fin, from, to)) return false;
-  return slotsFromExistingPhase(snapshot, phase).some(
-    (slot) => slot.date >= from && slot.date <= to,
-  );
+  const employeeId = phase.employe_id;
+  if (!employeeId) return false;
+  return slotsFromExistingPhase(snapshot, phase).some((slot) => {
+    if (slot.date < from || slot.date > to) return false;
+    const morning = contractHoursForSlot(snapshot, employeeId, slot.date, 0);
+    const afternoon = contractHoursForSlot(snapshot, employeeId, slot.date, 1);
+    return (
+      hoursTakenOnHalf(
+        [
+          {
+            date_debut: from,
+            date_fin: to,
+            creneau: absence?.creneau ?? "journee",
+            duree_heures: absence?.duree_heures ?? null,
+            type: absence?.type ?? "conge",
+          },
+        ],
+        slot.date,
+        slot.half,
+        morning,
+        afternoon,
+      ) > 0.0001
+    );
+  });
 }
 
 export function listImpactedPhases(
@@ -53,11 +81,16 @@ export function listImpactedPhases(
   employeeId: string,
   from: string,
   to: string,
+  absence?: {
+    creneau?: NewAbsenceInput["creneau"];
+    duree_heures?: number | null;
+    type?: NewAbsenceInput["type"];
+  },
 ): ImpactedPhaseView[] {
   const rows: ImpactedPhaseView[] = [];
   for (const phase of snapshot.phases) {
     if (phase.employe_id !== employeeId) continue;
-    if (!phaseOverlapsAbsencePeriod(snapshot, phase, from, to)) continue;
+    if (!phaseOverlapsAbsencePeriod(snapshot, phase, from, to, absence)) continue;
     const element = snapshot.elements.find((item) => item.id === phase.element_id);
     const chantier = snapshot.chantiers.find(
       (item) => item.id === element?.chantier_id,
@@ -102,7 +135,7 @@ function slotsFreeForEmployee(
     if (isSlotBlockedForRow(snapshot, employeeId, slot.date, slot.half)) {
       return false;
     }
-    if (isEmployeeAbsent(snapshot, employeeId, slot.date)) return false;
+    if (isEmployeeAbsent(snapshot, employeeId, slot.date, slot.half)) return false;
     const start = slot.startMin;
     const end = slot.endMin;
     if (start != null && end != null) {
@@ -254,6 +287,7 @@ export function planAbsenceImprevue(
     absence.employe_id,
     absence.date_debut,
     absence.date_fin,
+    absence,
   );
   const candidates = candidatesForChoices(workingSnapshot, impacted, choices);
   const patches: PhasePatch[] = [];

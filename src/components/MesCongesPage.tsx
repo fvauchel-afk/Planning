@@ -3,6 +3,7 @@
 import { MobileShell } from "@/components/MobileShell";
 import { PiecesJointesListe } from "@/components/PiecesJointesListe";
 import { formatLongDate } from "@/lib/dates";
+import { formatCreneauCourt } from "@/lib/absence-creneau";
 import { idsEqual } from "@/lib/auth/ids";
 import { usePlanning } from "@/lib/planning-context";
 import { useSession } from "@/lib/auth/session-context";
@@ -72,6 +73,9 @@ export function MesCongesPage() {
                   {demande.date_fin &&
                   demande.date_fin !== demande.date_debut
                     ? ` → ${formatLongDate(demande.date_fin)}`
+                    : ""}
+                  {formatCreneauCourt(demande)
+                    ? ` · ${formatCreneauCourt(demande)}`
                     : ""}
                 </p>
                 {demande.motif_precision?.trim() ? (

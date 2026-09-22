@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-22-absence-demi-heures",
+    title: "Absences : matin, après-midi ou heures",
+    items: [
+      "Une absence peut porter sur la journée, le matin, l’après-midi, ou un nombre d’heures (comptées depuis le début de matinée).",
+      "Une fois validée, seuls ces créneaux sont bloqués : le reste de la journée reste travaillable sur le planning.",
+    ],
+  },
+  {
     id: "2026-09-22-elements-sans-chevauchement",
     title: "Nouveau chantier : plus de superposition entre éléments",
     items: [

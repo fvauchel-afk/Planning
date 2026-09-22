@@ -422,6 +422,8 @@ export async function POST(request: NextRequest) {
             date_debut: body.input.date_debut,
             date_fin: body.input.date_fin,
             motif_precision: body.input.motif_precision,
+            creneau: body.input.creneau,
+            duree_heures: body.input.duree_heures,
           });
         }
       }

@@ -49,6 +49,7 @@ export async function applyRecordedAbsence(input: {
     input.payload.employe_id,
     input.payload.date_debut,
     input.payload.date_fin,
+    input.payload,
   );
   if (needsPlacementConflict) {
     if (similarPendingAbsenceSignalement(input.snapshot, input.payload)) {
