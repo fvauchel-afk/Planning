@@ -39,6 +39,7 @@ import {
 import { EmployeePhaseSelect } from "@/components/EmployeePhaseSelect";
 import { ConflictModal } from "@/components/ConflictModal";
 import { PhaseDureeFields } from "@/components/DureeJoursSelect";
+import { hoursKeepingDayCount } from "@/lib/engine/duree-presets";
 import {
   planDurationOccupancyConflict,
   type DurationOccupancyConflict,
@@ -255,6 +256,9 @@ export function ChantierEditModal({
   const [employeLivraison, setEmployeLivraison] = useState("");
   const [employeFabrication, setEmployeFabrication] = useState("");
   const [employePose, setEmployePose] = useState("");
+  const [assigneesByPhaseId, setAssigneesByPhaseId] = useState<Record<string, string>>(
+    {},
+  );
   const [poseursAuto, setPoseursAuto] = useState<0 | 1 | 2>(0);
   const [staleCascade, setStaleCascade] = useState(false);
   const dirtySimple = useRef(new Set<string>());
@@ -333,6 +337,13 @@ export function ChantierEditModal({
     });
     setEmployeFabrication(fab?.employe_id ?? "");
     setEmployePose(pose?.employe_id ?? "");
+    const nextAssignees: Record<string, string> = {};
+    for (const phase of source.phases) {
+      const element = source.elements.find((item) => item.id === phase.element_id);
+      if (element?.chantier_id !== chantier.id) continue;
+      nextAssignees[phase.id] = phase.employe_id ?? "";
+    }
+    setAssigneesByPhaseId(nextAssignees);
     setPoseursAuto(0);
     setDatesDirty(false);
     cascadeDirty.current = false;
@@ -469,19 +480,39 @@ export function ChantierEditModal({
       avecLivraison,
       dureeLivraisonHeures: Number(dureeLivraison || 2),
       employeLivraisonId: employeLivraison || null,
-      employeFabricationId: employeFabrication || null,
-      employePoseId: employePose || null,
       delayDays: Number(delaiLaquage || 5),
       datesEstimatives,
     });
     const afterOptions = previewPhaseEdits(preview, optionEdits);
+    const assigneePatches = durationRows.flatMap((row) => {
+      const next = assigneesByPhaseId[row.phaseId];
+      if (next === undefined) return [];
+      const phase = afterOptions.phases.find((item) => item.id === row.phaseId);
+      if (!phase) return [];
+      return [
+        {
+          id: row.phaseId,
+          date_debut: phase.date_debut,
+          date_fin: phase.date_fin,
+          employe_id: next || null,
+        },
+      ];
+    });
+    const afterAssignees = previewPhaseEdits(afterOptions, {
+      patches: assigneePatches,
+    });
     const durationEdits = planChantierDurationEdits(
-      afterOptions,
+      afterAssignees,
       chantier.id,
       parsedHoursByPhaseId(),
       Number(delaiLaquage || 5),
     );
-    const merged = mergePhaseEdits(mergePhaseEdits(dateEdits, optionEdits), durationEdits);
+    const merged = mergePhaseEdits(
+      mergePhaseEdits(mergePhaseEdits(dateEdits, optionEdits), {
+        patches: assigneePatches,
+      }),
+      durationEdits,
+    );
     const afterMerged = previewPhaseEdits(source, merged);
     const extraInserts = extraPosePhaseInsertsForChantier(
       afterMerged,
@@ -547,8 +578,7 @@ export function ChantierEditModal({
     avecLivraison,
     dureeLivraison,
     employeLivraison,
-    employeFabrication,
-    employePose,
+    assigneesByPhaseId,
     poseursAuto,
     delaiLaquage,
     datesEstimatives,
@@ -1122,27 +1152,11 @@ export function ChantierEditModal({
               </label>
             </div>
             {avecPose ? (
-              <>
-              <label className="mt-3 block">
-                <span className="mb-1 block font-medium">
-                  Salarié responsable de la pose
-                </span>
-                <EmployeePhaseSelect
-                  employees={activeEmployees}
-                  type="pose"
-                  value={employePose}
-                  onChange={(id) => {
-                    markCascade();
-                    setEmployePose(id);
-                  }}
-                  emptyLabel="Auto (premier disponible)"
-                  className="w-full rounded border border-stone-300 bg-white px-3 py-2"
-                />
-              </label>
               <div className="mt-3 space-y-2">
                 <p className="text-xs text-stone-600">
-                  Ajouter un ou deux poseurs libres en plus de ceux déjà sur ce
-                  chantier, mêmes dates de pose.
+                  Les poseurs et le fabricant se choisissent dans le tableau des
+                  durées, par élément. Ici, seulement +1 / +2 poseurs libres en
+                  plus.
                 </p>
                 <label className="inline-flex items-center gap-2 text-sm">
                   <input
@@ -1167,7 +1181,6 @@ export function ChantierEditModal({
                   <span>+2 poseurs (libres à déterminer)</span>
                 </label>
               </div>
-              </>
             ) : null}
           </fieldset>
           <fieldset className="rounded-lg border border-stone-300 bg-stone-50/60 p-3 text-sm">
@@ -1198,24 +1211,6 @@ export function ChantierEditModal({
                 Non
               </label>
             </div>
-            {avecFabrication ? (
-              <label className="mt-3 block">
-                <span className="mb-1 block font-medium">
-                  Salarié responsable de la fabrication
-                </span>
-                <EmployeePhaseSelect
-                  employees={activeEmployees}
-                  type="fabrication"
-                  value={employeFabrication}
-                  onChange={(id) => {
-                    markCascade();
-                    setEmployeFabrication(id);
-                  }}
-                  emptyLabel="Auto (premier disponible)"
-                  className="w-full rounded border border-stone-300 bg-white px-3 py-2"
-                />
-              </label>
-            ) : null}
           </fieldset>
           <fieldset className="rounded-lg border border-stone-300 bg-stone-50/60 p-3 text-sm">
             <legend className="px-1 font-medium text-stone-800">
@@ -1416,7 +1411,10 @@ export function ChantierEditModal({
               </legend>
               <p className="mt-1 text-xs text-stone-600">
                 Durée de chaque phase en heures, ou par menu en jours ouvrés
-                (0,5 à 15). Changer une durée recale les phases suivantes.
+                (0,5 à 15). Le fabricant et les poseurs se choisissent ici, par
+                élément. Changer une personne garde le même nombre de jours et
+                recalcule les heures selon son contrat. Changer une durée recale
+                les phases suivantes.
               </p>
               <div className="mt-3 space-y-3">
                 {durationRows.map((row) => {
@@ -1424,18 +1422,56 @@ export function ChantierEditModal({
                     row.type === "livraison"
                       ? dureeLivraison
                       : (phaseHours[row.phaseId] ?? "");
+                  const assignee =
+                    assigneesByPhaseId[row.phaseId] ?? row.employeId ?? "";
                   return (
                     <div key={row.phaseId}>
                       <span className="mb-1 block font-medium">{row.label}</span>
+                      <div className="flex flex-wrap items-end gap-2">
                       <PhaseDureeFields
                         hours={value}
                         snapshot={snapshot}
-                        employeeId={row.employeId}
+                        employeeId={assignee || row.employeId}
+                        fromDate={planDate}
                         ariaLabel={`Durée — ${row.label}`}
                         onHoursChange={(hours) =>
                           setHoursForPhase(row.phaseId, row.type, hours)
                         }
                       />
+                      {row.type === "logistique" ? (
+                        <span className="text-xs text-stone-500">Thermolaquage</span>
+                      ) : (
+                        <EmployeePhaseSelect
+                          employees={activeEmployees}
+                          type={row.type}
+                          value={assignee}
+                          onChange={(id) => {
+                            markCascade();
+                            const previous =
+                              assigneesByPhaseId[row.phaseId] ??
+                              row.employeId ??
+                              "";
+                            setAssigneesByPhaseId((current) => ({
+                              ...current,
+                              [row.phaseId]: id,
+                            }));
+                            setHoursForPhase(
+                              row.phaseId,
+                              row.type,
+                              hoursKeepingDayCount(
+                                snapshot,
+                                previous,
+                                id,
+                                Number(value || 0),
+                                planDate,
+                              ),
+                            );
+                          }}
+                          emptyLabel="Auto / non assigné"
+                          className="rounded border border-stone-300 bg-white px-2 py-1"
+                        />
+                      )}
+                      </div>
                     </div>
                   );
                 })}

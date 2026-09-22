@@ -23,10 +23,13 @@ import {
 } from "@/lib/engine/earliest-date";
 import { generatePlanSolutions, propositionFromSolutions } from "@/lib/engine/plan-solutions";
 import { applyPhaseChainOnCreate, firstWorkingOnOrBefore, missingRequiredAssignee } from "@/lib/engine/phase-chain";
-import { extraPoseurIdsAfterChain } from "@/lib/engine/poseurs-auto";
-import { withExtraPoseurs } from "@/lib/engine/create-phases";
+import {
+  withAutoPoseursOnEachElement,
+  withPoseursPerElement,
+} from "@/lib/engine/create-phases";
+import { hoursKeepingDayCount } from "@/lib/engine/duree-presets";
 import { moisToToleranceJours } from "@/lib/priorite";
-import { EmployeePhaseSelect } from "@/components/EmployeePhaseSelect";
+import { PoseursCheckboxes } from "@/components/EmployeePhaseSelect";
 import {
   coerceSelectValue,
   employeesForPhaseSelect,
@@ -73,6 +76,7 @@ type ElementForm = {
   key: string;
   nom_element: string;
   phases: PhaseForm[];
+  poseurIds: string[];
 };
 
 function employeesForPhaseRow(
@@ -140,8 +144,6 @@ export function ChantierForm() {
   const [adresseLivraison, setAdresseLivraison] = useState("");
   const [telephoneLivraison, setTelephoneLivraison] = useState("");
   const [employeLivraison, setEmployeLivraison] = useState("");
-  const [employeFabrication, setEmployeFabrication] = useState("");
-  const [poseurIds, setPoseurIds] = useState<string[]>([]);
   const [poseursAuto, setPoseursAuto] = useState<0 | 1 | 2>(0);
   const [delaiLaquage, setDelaiLaquage] = useState("5");
   const [dateLaquageDebut, setDateLaquageDebut] = useState("");
@@ -150,7 +152,7 @@ export function ChantierForm() {
   const [couleurRal, setCouleurRal] = useState("");
   const [finition, setFinition] = useState<FinitionLaquage | "">("");
   const [elements, setElements] = useState<ElementForm[]>([
-    { key: "el-1", nom_element: "", phases: emptyPhases() },
+    { key: "el-1", nom_element: "", phases: emptyPhases(), poseurIds: [] },
   ]);
   const [saving, setSaving] = useState(false);
   const [placing, setPlacing] = useState(false);
@@ -166,11 +168,6 @@ export function ChantierForm() {
       .sort(compareEmployeesByOrdre);
   }, [snapshot.employees]);
 
-  const employePose = poseurIds[0] ?? "";
-  const poseCandidates = useMemo(
-    () => employeesForPhaseSelect(employeesByRole, "pose", employePose),
-    [employeesByRole, employePose],
-  );
   const poseDateDebut = dateDebut;
   const poseHours = Number(
     elements
@@ -179,28 +176,17 @@ export function ChantierForm() {
   );
   const poseDateFin = dateDebut
     ? poseHours > 0
-      ? rangeEndFromHours(snapshot, employePose || null, dateDebut, poseHours)
+      ? rangeEndFromHours(
+          snapshot,
+          elements[0]?.poseurIds[0] ||
+            elements[0]?.phases.find((phase) => phase.type_phase === "pose")
+              ?.employe_id ||
+            null,
+          dateDebut,
+          poseHours,
+        )
       : dateDebut
     : "";
-  const suggestedPoseurs = useMemo(() => {
-    if (!poseDateDebut) return [];
-    return poseCandidates.filter((employee) =>
-      employeeAvailableOnRange(
-        snapshot,
-        employee,
-        poseDateDebut,
-        poseDateFin || poseDateDebut,
-      ),
-    );
-  }, [poseCandidates, poseDateDebut, poseDateFin, snapshot]);
-
-  function togglePoseur(id: string) {
-    setPoseurIds((current) =>
-      current.includes(id)
-        ? current.filter((item) => item !== id)
-        : [...current, id],
-    );
-  }
 
   function updateElement(key: string, patch: Partial<ElementForm>) {
     setElements((current) =>
@@ -235,11 +221,10 @@ export function ChantierForm() {
     return null;
   }
 
-  function employeeIdForPhaseHours(phase: PhaseForm): string {
-    if (phase.type_phase === "fabrication") {
-      return employeFabrication || phase.employe_id;
+  function employeeIdForPhaseHours(element: ElementForm, phase: PhaseForm): string {
+    if (phase.type_phase === "pose") {
+      return element.poseurIds[0] || phase.employe_id;
     }
-    if (phase.type_phase === "pose") return employePose || phase.employe_id;
     if (phase.type_phase === "livraison") {
       return employeLivraison || phase.employe_id;
     }
@@ -268,7 +253,7 @@ export function ChantierForm() {
           hours > 0
             ? rangeEndFromHours(
                 snapshot,
-                employeeIdForPhaseHours(phase) || null,
+                employeeIdForPhaseHours(element, phase) || null,
                 debut,
                 hours,
               )
@@ -392,26 +377,27 @@ export function ChantierForm() {
               ? null
               : phase.type_phase === "livraison" && avecLivraison
                 ? employeLivraison
-                : phase.type_phase === "fabrication" &&
-                    avecFabrication &&
-                    employeFabrication
-                  ? employeFabrication
-                  : phase.type_phase === "pose" && avecPose && employePose
-                    ? employePose
-                    : phase.employe_id || null,
+                : phase.employe_id || null,
           urgent: urgent || phase.urgent,
           heures_supplementaires_par_jour:
             phase.heures_supplementaires_par_jour || 0,
         })),
       })),
     };
+    const named = withPoseursPerElement(
+      snapshot,
+      input,
+      namedElements.map((element) => element.poseurIds),
+      dateDebut || null,
+    );
     const chained = applyPhaseChainOnCreate(
       snapshot,
-      ensureChantierDatesOnCreate(snapshot, input),
+      ensureChantierDatesOnCreate(snapshot, named),
     );
-    const prepared = withExtraPoseurs(
+    const prepared = withAutoPoseursOnEachElement(
+      snapshot,
       chained,
-      extraPoseurIdsAfterChain(snapshot, chained, poseurIds, poseursAuto),
+      poseursAuto,
     );
     if (urgent && dateFin && dateDebut) {
       let lastEnd = "";
@@ -943,42 +929,12 @@ export function ChantierForm() {
           </div>
           {avecPose ? (
             <div className="mt-3 space-y-2">
-              <span className="mb-1 block font-medium">Poseurs</span>
               <p className="text-xs text-stone-600">
-                Cochez un ou plusieurs poseurs, et/ou +1 / +2 poseurs libres à
-                déterminer. Si vous ne cochez rien, le premier disponible est
-                pris tout seul.
+                Les poseurs nommés se cochent dans le tableau de chaque
+                élément. Ici, seulement +1 / +2 poseurs libres en plus, sur
+                chaque élément.
               </p>
               <div className="flex flex-col gap-1">
-                {poseCandidates.map((employee) => {
-                  const suggested = suggestedPoseurs.some(
-                    (item) => item.id === employee.id,
-                  );
-                  return (
-                    <label
-                      key={employee.id}
-                      className="inline-flex items-center gap-2 text-sm"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={poseurIds.includes(employee.id)}
-                        onChange={() => togglePoseur(employee.id)}
-                      />
-                      <span>{employee.nom}</span>
-                      {poseDateDebut ? (
-                        <span
-                          className={
-                            suggested
-                              ? "text-xs text-emerald-700"
-                              : "text-xs text-stone-400"
-                          }
-                        >
-                          {suggested ? "libre sur les dates de pose" : "pas dispo ce jour-là"}
-                        </span>
-                      ) : null}
-                    </label>
-                  );
-                })}
                 <label className="inline-flex items-center gap-2 text-sm">
                   <input
                     type="checkbox"
@@ -1000,12 +956,6 @@ export function ChantierForm() {
                   <span>+2 poseurs (libres à déterminer)</span>
                 </label>
               </div>
-              {poseDateDebut && suggestedPoseurs.length === 0 ? (
-                <p className="text-xs text-amber-800">
-                  Aucun poseur n’est libre sur ces dates. Vous pouvez quand
-                  même en cocher un.
-                </p>
-              ) : null}
             </div>
           ) : null}
         </fieldset>
@@ -1035,21 +985,6 @@ export function ChantierForm() {
               Non
             </label>
           </div>
-          {avecFabrication ? (
-            <label className="mt-3 block">
-              <span className="mb-1 block font-medium">
-                Salarié responsable de la fabrication
-              </span>
-              <EmployeePhaseSelect
-                employees={employeesByRole}
-                type="fabrication"
-                value={employeFabrication}
-                onChange={setEmployeFabrication}
-                emptyLabel="Auto (premier disponible)"
-                className="w-full rounded border border-stone-300 bg-white px-3 py-2"
-              />
-            </label>
-          ) : null}
         </fieldset>
         <fieldset className="rounded-lg border border-stone-300 bg-stone-50/60 p-3 text-sm md:col-span-2">
           <legend className="px-1 font-medium text-stone-800">
@@ -1314,7 +1249,8 @@ export function ChantierForm() {
                         <PhaseDureeFields
                           hours={phase.duree_estimee_heures}
                           snapshot={snapshot}
-                          employeeId={employeeIdForPhaseHours(phase)}
+                          employeeId={employeeIdForPhaseHours(element, phase)}
+                          fromDate={dateDebut || phase.date_debut}
                           ariaLabel={`Durée — ${PHASE_LABELS[phase.type_phase]}`}
                           onHoursChange={(hours) =>
                             setPhaseHoursValue(
@@ -1328,6 +1264,30 @@ export function ChantierForm() {
                       <td className="py-2 pr-2">
                         {phase.type_phase === "logistique" ? (
                           <span className="text-stone-500">Thermolaquage</span>
+                        ) : phase.type_phase === "pose" ? (
+                          <PoseursCheckboxes
+                            employees={employeesByRole}
+                            selectedIds={element.poseurIds}
+                            snapshot={snapshot}
+                            from={poseDateDebut || phase.date_debut}
+                            to={poseDateFin || phase.date_fin}
+                            onChange={(ids) => {
+                              const previous =
+                                element.poseurIds[0] || phase.employe_id;
+                              const next = ids[0] || "";
+                              updateElement(element.key, { poseurIds: ids });
+                              updatePhase(element.key, "pose", {
+                                employe_id: next,
+                                duree_estimee_heures: hoursKeepingDayCount(
+                                  snapshot,
+                                  previous,
+                                  next,
+                                  Number(phase.duree_estimee_heures || 0),
+                                  dateDebut || phase.date_debut,
+                                ),
+                              });
+                            }}
+                          />
                         ) : (
                           <select
                             autoComplete="off"
@@ -1336,11 +1296,19 @@ export function ChantierForm() {
                               employeesByRole,
                               phase,
                             )}
-                            onChange={(event) =>
+                            onChange={(event) => {
+                              const next = event.target.value;
                               updatePhase(element.key, phase.type_phase, {
-                                employe_id: event.target.value,
-                              })
-                            }
+                                employe_id: next,
+                                duree_estimee_heures: hoursKeepingDayCount(
+                                  snapshot,
+                                  phase.employe_id,
+                                  next,
+                                  Number(phase.duree_estimee_heures || 0),
+                                  dateDebut || phase.date_debut,
+                                ),
+                              });
+                            }}
                             className="rounded border border-stone-300 px-2 py-1"
                           >
                             <option value="">Auto / non assigné</option>
@@ -1372,6 +1340,7 @@ export function ChantierForm() {
                 key: `el-${current.length + 1}-${Date.now()}`,
                 nom_element: "",
                 phases: emptyPhases(),
+                poseurIds: [],
               },
             ])
           }
