@@ -159,6 +159,19 @@ function firstOpenOnOrAfter(
   return date;
 }
 
+function lastOpenOnOrBefore(
+  snapshot: PlanningSnapshot,
+  rowId: string,
+  iso: string,
+): string {
+  let date = iso;
+  for (let i = 0; i < SEARCH_DAYS; i += 1) {
+    if (!isSlotBlockedForRow(snapshot, rowId, date)) return date;
+    date = addDays(date, -1);
+  }
+  return date;
+}
+
 function addOpenDays(
   snapshot: PlanningSnapshot,
   rowId: string,
@@ -296,11 +309,28 @@ function placePhase(
   return { debut: openStart, fin };
 }
 
+function advanceOriginDates(
+  snapshot: PlanningSnapshot,
+  origin: PhasePlanning,
+  workingDays: number,
+): Dated {
+  const shrunkFin = addWorkingDays(origin.date_fin!, -workingDays);
+  if (shrunkFin >= origin.date_debut!) {
+    return { debut: origin.date_debut!, fin: shrunkFin };
+  }
+  const rowId = rowIdForPhase(origin.type_phase, origin.employe_id);
+  const rawStart = addWorkingDays(origin.date_debut!, -workingDays);
+  const start = rowId ? lastOpenOnOrBefore(snapshot, rowId, rawStart) : rawStart;
+  return placePhase(snapshot, origin, start);
+}
+
 function packCascade(
   snapshot: PlanningSnapshot,
   origin: PhasePlanning,
   originDates: Dated,
   relocatable: Set<string>,
+  direction: 1 | -1 = 1,
+  workingDays = 0,
 ): { dates: Map<string, Dated>; blocked: boolean } {
   const dates = new Map<string, Dated>();
   for (const phase of datedPhases(snapshot)) {
@@ -345,21 +375,39 @@ function packCascade(
             (prevPhase.id === origin.id || phaseDatesMoved(prevPhase, dates)),
         );
         let start = current.debut;
-        if (
-          !isVirtualPlanningRow(rowId) &&
-          prevMoved &&
-          prev &&
-          datesOverlap(prev.debut, prev.fin, current.debut, current.fin)
-        ) {
-          start = maxDate(start, nextOpenDay(snapshot, rowId, prev.fin));
-        }
-        if (logisticsPredecessorMoved(snapshot, phase, dates, origin)) {
-          const logistics = minStartForPhase(snapshot, phase, dates, rowId);
-          if (logistics && logistics > start) {
-            start = logistics;
+        if (direction < 0) {
+          const pullFollowers =
+            laterType(phase, origin) ||
+            (prevMoved &&
+              !isVirtualPlanningRow(rowId) &&
+              prev &&
+              datesOverlap(prev.debut, prev.fin, current.debut, current.fin));
+          if (pullFollowers && workingDays > 0) {
+            start = addWorkingDays(current.debut, -workingDays);
           }
+          if (prev && !isVirtualPlanningRow(rowId)) {
+            start = maxDate(start, nextOpenDay(snapshot, rowId, prev.fin));
+          }
+          const logistics = minStartForPhase(snapshot, phase, dates, rowId);
+          if (logistics) start = maxDate(start, logistics);
+          if (start >= current.debut) continue;
+        } else {
+          if (
+            !isVirtualPlanningRow(rowId) &&
+            prevMoved &&
+            prev &&
+            datesOverlap(prev.debut, prev.fin, current.debut, current.fin)
+          ) {
+            start = maxDate(start, nextOpenDay(snapshot, rowId, prev.fin));
+          }
+          if (logisticsPredecessorMoved(snapshot, phase, dates, origin)) {
+            const logistics = minStartForPhase(snapshot, phase, dates, rowId);
+            if (logistics && logistics > start) {
+              start = logistics;
+            }
+          }
+          if (start === current.debut) continue;
         }
-        if (start === current.debut) continue;
         const placed = placePhase(snapshot, phase, start);
         if (current.debut === placed.debut && current.fin === placed.fin) continue;
         const originChantier = chantierOf(snapshot, origin);
@@ -626,6 +674,8 @@ function planMoveOriginStart(
     originForPack,
     originDates,
     relocatableForScope(work, originForPack, scope),
+    workingDays < 0 ? -1 : 1,
+    Math.abs(workingDays),
   );
   return attachLinkedPoseDelay(
     snapshot,
@@ -785,8 +835,10 @@ export function planDelayCascade(
       debut: originForPack.date_debut!,
       fin: originForPack.date_fin!,
     };
+  } else if (direction < 0) {
+    originDates = advanceOriginDates(snapshot, origin, workingDays);
   } else {
-    let originFin = addWorkingDays(origin.date_fin, direction * workingDays);
+    let originFin = addWorkingDays(origin.date_fin, workingDays);
     if (originFin < origin.date_debut) originFin = origin.date_debut;
     originDates = { debut: origin.date_debut, fin: originFin };
   }
@@ -796,6 +848,8 @@ export function planDelayCascade(
     originForPack,
     originDates,
     relocatableForScope(work, originForPack, scope),
+    direction,
+    workingDays,
   );
   const result = attachLinkedPoseDelay(
     snapshot,
@@ -803,10 +857,12 @@ export function planDelayCascade(
     resultFromPacked(snapshot, origin, packed),
   );
   if (result.status === "ok") {
-    const verb = direction < 0 ? "avancée" : "décalage";
     return {
       ...result,
-      message: `${result.patches.length} phase(s) décalée(s) au minimum (${verb}, aval bloqué seulement).`,
+      message:
+        direction < 0
+          ? `${result.patches.length} phase(s) rapprochée(s) (avance, délai logistique 10–11 j. respecté).`
+          : `${result.patches.length} phase(s) décalée(s) au minimum (décalage, aval bloqué seulement).`,
     };
   }
   return result;
@@ -1025,6 +1081,31 @@ function runDelayCascadeSelfCheck() {
   }
   if (!adminIds.includes("admin-a")) {
     throw new Error("delay-cascade: la phase admin en retard doit être dans la proposition");
+  }
+
+  const advance = planDelayCascade(snapshot, "fab-a", -1);
+  const advanceIds = new Set(advance.patches.map((item) => item.id));
+  const advancedFab = advance.patches.find((item) => item.id === "fab-a");
+  if (!advancedFab?.date_debut || advancedFab.date_debut >= "2026-09-14") {
+    throw new Error(
+      `delay-cascade: une avance doit rapprocher la phase, reçu ${advancedFab?.date_debut ?? "vide"}`,
+    );
+  }
+  if (advanceIds.has("fab-c") || advanceIds.has("log-c") || advanceIds.has("pose-c")) {
+    throw new Error("delay-cascade: une avance ne doit pas pousser les autres chantiers plus tard");
+  }
+  const advancedLog = advance.patches.find((item) => item.id === "log-a");
+  if (advancedLog && advancedLog.date_debut && advancedLog.date_debut > "2026-09-15") {
+    throw new Error("delay-cascade: une avance ne doit pas reculer la logistique du même élément");
+  }
+  const advancedPose = advance.patches.find((item) => item.id === "pose-a");
+  if (advancedPose?.date_debut && advancedPose.date_debut > "2026-10-05") {
+    throw new Error("delay-cascade: une avance ne doit pas reculer la pose");
+  }
+  if (advancedPose?.date_debut && advancedPose.date_debut < "2026-09-25") {
+    throw new Error(
+      "delay-cascade: une avance ne doit pas casser le délai logistique incompressible",
+    );
   }
 }
 

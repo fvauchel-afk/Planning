@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-16-avance-rapproche",
+    title: "Avance : les dates se rapprochent vraiment",
+    items: [
+      "Signaler une avance ne fait plus comme un retard : les phases suivantes sont rapprochées, pas poussées plus tard.",
+      "Le délai de thermolaquage (10 à 11 jours ouvrés) reste un plancher : une pose ne peut pas remonter en dessous.",
+    ],
+  },
+  {
     id: "2026-09-16-cascade-retard-minimale",
     title: "Retard : décalage au plus juste",
     items: [
