@@ -5,7 +5,7 @@ import {
   hashEmployeePin,
 } from "@/lib/auth/pin-verify";
 import { chantierHasEstimativeDates, chantierIdForPhase, phaseIdsStartedToday, withConfirmedPhases } from "@/lib/dates-estimatives";
-import { parseProposition } from "@/lib/signalements";
+import { parseProposition, parseStatutSignalement } from "@/lib/signalements";
 import { phaseTypeForRoles } from "@/lib/chantier-status";
 import { normalizePhasesForPlanning } from "@/lib/engine/normalize-phases";
 import {
@@ -117,6 +117,39 @@ export async function fetchSupabaseSnapshot(): Promise<PlanningSnapshot> {
   return inflightSnapshot;
 }
 
+async function fetchSignalementRows(
+  supabase: ReturnType<typeof createSupabaseServerClient>,
+): Promise<Signalement[]> {
+  const full = await supabase
+    .from("signalements")
+    .select("*")
+    .order("date_creation", { ascending: false });
+  if (!full.error) return (full.data ?? []) as Signalement[];
+
+  if (isMissingSchemaError(full.error)) return [];
+
+  if (isMissingColumnError(full.error, "date_creation")) {
+    const unordered = await supabase.from("signalements").select("*");
+    if (!unordered.error) return (unordered.data ?? []) as Signalement[];
+    if (isMissingSchemaError(unordered.error)) return [];
+    throw wrapSupabaseError(unordered.error);
+  }
+
+  if (isMissingColumnError(full.error, "proposition")) {
+    const slim = await supabase
+      .from("signalements")
+      .select(
+        "id, employe_id, phase_id, retard_demi_journees, note, statut, date_creation, sens, origine",
+      )
+      .order("date_creation", { ascending: false });
+    if (!slim.error) return (slim.data ?? []) as Signalement[];
+    if (isMissingSchemaError(slim.error)) return [];
+    throw wrapSupabaseError(slim.error);
+  }
+
+  throw wrapSupabaseError(full.error);
+}
+
 async function fetchSupabaseSnapshotOnce(): Promise<PlanningSnapshot> {
   const supabase = createSupabaseServerClient();
   let employeeRows: EmployeeRow[] | null = null;
@@ -181,9 +214,7 @@ async function fetchSupabaseSnapshotOnce(): Promise<PlanningSnapshot> {
   }
 
   const extra = await Promise.all([
-    supabase.from("signalements").select("*").order("date_creation", {
-      ascending: false,
-    }),
+    fetchSignalementRows(supabase),
     supabase.from("receptions_chantier").select("*").order("date_signature", {
       ascending: false,
     }),
@@ -198,13 +229,7 @@ async function fetchSupabaseSnapshotOnce(): Promise<PlanningSnapshot> {
   ]);
   const [signalements, receptions, demandes, commandes, sousTraitants, reglages] = extra;
 
-  const signalementRows = isMissingSchemaError(signalements.error)
-    ? []
-    : signalements.error
-      ? (() => {
-          throw wrapSupabaseError(signalements.error);
-        })()
-      : ((signalements.data ?? []) as Signalement[]);
+  const signalementRows = signalements;
 
   const snapshot: PlanningSnapshot = {
     employees: (employeeRows ?? [])
@@ -294,16 +319,25 @@ async function fetchSupabaseSnapshotOnce(): Promise<PlanningSnapshot> {
     })),
     signalements: signalementRows.map((row) => {
       const item = row as Signalement;
+      let proposition: ReturnType<typeof parseProposition> = null;
+      try {
+        proposition = parseProposition(
+          (row as { proposition?: unknown }).proposition,
+        );
+      } catch {
+        proposition = null;
+      }
       return {
-        ...item,
+        id: String(item.id),
+        employe_id: String(item.employe_id),
         phase_id: item.phase_id || null,
-        retard_demi_journees: Number(item.retard_demi_journees),
+        retard_demi_journees: Number(item.retard_demi_journees) || 0,
+        note: item.note ?? "",
+        statut: parseStatutSignalement(item.statut),
         date_creation: item.date_creation,
         sens: item.sens === "avance" ? "avance" : "retard",
         origine: item.origine === "decalage_admin" ? "decalage_admin" : "salarie",
-        proposition: parseProposition(
-          (row as { proposition?: unknown }).proposition,
-        ),
+        proposition,
       };
     }),
     receptions: optionalTable<ReceptionChantier>(receptions).map((row) => ({

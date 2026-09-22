@@ -9,7 +9,9 @@ import { allSolutionsOf } from "@/lib/engine/plan-solutions";
 import { formatLongDate } from "@/lib/dates";
 import {
   isAdministratifIdleSuggestion,
+  pendingSignalements,
   propositionFromDelay,
+  signalementEstEnAttente,
 } from "@/lib/signalements";
 import { usePlanning } from "@/lib/planning-context";
 import type { PlanningSolution } from "@/lib/types";
@@ -21,11 +23,9 @@ export function SignalementsPage() {
     result: DelayPlanResult;
   } | null>(null);
   const [chosen, setChosen] = useState<Record<string, PlanningSolution>>({});
-  const pendingItems = (snapshot.signalements ?? []).filter(
-    (item) => item.statut === "en_attente",
-  );
+  const pendingItems = pendingSignalements(snapshot);
   const done = (snapshot.signalements ?? []).filter(
-    (item) => item.statut !== "en_attente",
+    (item) => !signalementEstEnAttente(item.statut),
   );
 
   function describe(phaseId: string | null) {
@@ -117,14 +117,17 @@ export function SignalementsPage() {
               item.sens === "avance"
                 ? -item.retard_demi_journees
                 : item.retard_demi_journees;
-            const preview =
-              item.proposition ??
-              (item.phase_id
-                ? propositionFromDelay(
-                    snapshot,
-                    planDelayCascade(snapshot, item.phase_id, signed),
-                  )
-                : null);
+            let preview = item.proposition ?? null;
+            if (!preview && item.phase_id) {
+              try {
+                preview = propositionFromDelay(
+                  snapshot,
+                  planDelayCascade(snapshot, item.phase_id, signed),
+                );
+              } catch {
+                preview = null;
+              }
+            }
             return (
               <article
                 key={item.id}

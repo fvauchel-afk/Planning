@@ -325,6 +325,7 @@ export async function POST(request: NextRequest) {
         }
       }
       await supabaseCreateSignalement(input);
+      invalidateSupabaseSnapshotCache();
       if ((input.statut ?? "en_attente") === "en_attente") {
         const snapshot = await fetchSupabaseSnapshot();
         const auteur =
