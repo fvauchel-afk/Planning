@@ -11,6 +11,15 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-22-selection-glisse-insert",
+    title: "Planning : glisser pour sélectionner, déposer au milieu d’un chantier",
+    items: [
+      "Un glissé qui part d’un bloc sélectionne tout ce que vous survolez (plus seulement les cases vides).",
+      "Pour déplacer : glissez à nouveau depuis un bloc déjà sélectionné, ou double-cliquez un bloc. Un clic sans bouger ouvre toujours la fiche.",
+      "Si vous déposez le groupe au milieu d’un autre chantier, celui-ci s’ouvre et sa suite est reculée, comme quand on déplace un chantier entier.",
+    ],
+  },
+  {
     id: "2026-09-22-absence-demi-heures",
     title: "Absences : matin, après-midi ou heures",
     items: [
