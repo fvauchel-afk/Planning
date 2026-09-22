@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-22-conflit-bas-nouveau-chantier",
+    title: "Nouveau chantier : le conflit de placement en bas de page",
+    items: [
+      "Après une erreur d’enregistrement, le bandeau rouge, le message « Placement trouvé à la suite » et le panneau de conflit (utiliser le créneau, couper en deux, urgent…) s’affichent en bas du formulaire, juste au-dessus de Placer automatiquement et Enregistrer.",
+      "Plus besoin de remonter en haut de la page pour les voir. La page descend toute seule jusqu’à ce bloc quand il apparaît.",
+    ],
+  },
+  {
     id: "2026-09-22-absence-demi-heures",
     title: "Absences : matin, après-midi ou heures",
     items: [

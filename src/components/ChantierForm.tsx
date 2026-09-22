@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ConflictModal } from "@/components/ConflictModal";
 import { FormNotice } from "@/components/FormNotice";
 import { compareEmployeesByOrdre } from "@/lib/display-order";
@@ -162,6 +162,15 @@ export function ChantierForm() {
   const [conflict, setConflict] = useState<PlanResult | null>(null);
   const [pendingInput, setPendingInput] = useState<NewChantierInput | null>(null);
   const [slotConflict, setSlotConflict] = useState<SlotConflict | null>(null);
+  const placementNoticeRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!error && !info && !slotConflict) return;
+    placementNoticeRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "nearest",
+    });
+  }, [error, info, slotConflict]);
 
   const employeesByRole = useMemo(() => {
     return snapshot.employees
@@ -732,53 +741,6 @@ export function ChantierForm() {
           </p>
         ) : null}
       </div>
-
-      {error ? <FormNotice>{error}</FormNotice> : null}
-      {info ? <FormNotice tone="info">{info}</FormNotice> : null}
-      {slotConflict && (
-        <PlacementConflictPanel
-          key={`${slotConflict.elementIndex}-${slotConflict.type_phase}-${slotConflict.date_debut}`}
-          conflict={slotConflict}
-          onUseSlot={() => {
-            if (!slotConflict.nextFree) return;
-            applySlotToForm(slotConflict.type_phase, slotConflict.elementIndex, {
-              date_debut: slotConflict.nextFree.date_debut,
-              date_fin: slotConflict.nextFree.date_fin,
-              heures_supplementaires_par_jour: 0,
-            });
-            setSlotConflict(null);
-            setInfo(
-              `Dates mises à jour : ${slotConflict.nextFree.date_debut} → ${slotConflict.nextFree.date_fin}. Relancez le placement ou enregistrez.`,
-            );
-          }}
-          onReassign={(employeeId, dates) => {
-            applySlotToForm(slotConflict.type_phase, slotConflict.elementIndex, {
-              employe_id: employeeId,
-              heures_supplementaires_par_jour: 0,
-              ...(dates
-                ? { date_debut: dates.date_debut, date_fin: dates.date_fin }
-                : {}),
-            });
-            setSlotConflict(null);
-            setInfo(
-              "Personne et dates mises à jour. Relancez le placement ou enregistrez.",
-            );
-          }}
-          onOvertime={(fit) => {
-            applySlotToForm(slotConflict.type_phase, slotConflict.elementIndex, {
-              date_debut: fit.date_debut,
-              date_fin: fit.date_fin,
-              heures_supplementaires_par_jour: fit.extraHoursPerDay,
-            });
-            setSlotConflict(null);
-            setInfo(
-              `Phase calée sur ${fit.date_debut} → ${fit.date_fin} avec ${fit.label}. Relancez le placement ou enregistrez.`,
-            );
-          }}
-          onMarkUrgent={() => void markUrgentAndPlace()}
-          onSplitInsert={() => void splitInsertHere()}
-        />
-      )}
 
       <div className="grid gap-4 rounded-lg border border-stone-300 bg-white p-4 md:grid-cols-2">
         <label className="block text-sm">
@@ -1391,6 +1353,55 @@ export function ChantierForm() {
         >
           + Ajouter un élément
         </button>
+      </div>
+
+      <div ref={placementNoticeRef} className="space-y-3">
+        {error ? <FormNotice>{error}</FormNotice> : null}
+        {info ? <FormNotice tone="info">{info}</FormNotice> : null}
+        {slotConflict && (
+          <PlacementConflictPanel
+            key={`${slotConflict.elementIndex}-${slotConflict.type_phase}-${slotConflict.date_debut}`}
+            conflict={slotConflict}
+            onUseSlot={() => {
+              if (!slotConflict.nextFree) return;
+              applySlotToForm(slotConflict.type_phase, slotConflict.elementIndex, {
+                date_debut: slotConflict.nextFree.date_debut,
+                date_fin: slotConflict.nextFree.date_fin,
+                heures_supplementaires_par_jour: 0,
+              });
+              setSlotConflict(null);
+              setInfo(
+                `Dates mises à jour : ${slotConflict.nextFree.date_debut} → ${slotConflict.nextFree.date_fin}. Relancez le placement ou enregistrez.`,
+              );
+            }}
+            onReassign={(employeeId, dates) => {
+              applySlotToForm(slotConflict.type_phase, slotConflict.elementIndex, {
+                employe_id: employeeId,
+                heures_supplementaires_par_jour: 0,
+                ...(dates
+                  ? { date_debut: dates.date_debut, date_fin: dates.date_fin }
+                  : {}),
+              });
+              setSlotConflict(null);
+              setInfo(
+                "Personne et dates mises à jour. Relancez le placement ou enregistrez.",
+              );
+            }}
+            onOvertime={(fit) => {
+              applySlotToForm(slotConflict.type_phase, slotConflict.elementIndex, {
+                date_debut: fit.date_debut,
+                date_fin: fit.date_fin,
+                heures_supplementaires_par_jour: fit.extraHoursPerDay,
+              });
+              setSlotConflict(null);
+              setInfo(
+                `Phase calée sur ${fit.date_debut} → ${fit.date_fin} avec ${fit.label}. Relancez le placement ou enregistrez.`,
+              );
+            }}
+            onMarkUrgent={() => void markUrgentAndPlace()}
+            onSplitInsert={() => void splitInsertHere()}
+          />
+        )}
       </div>
 
       <div className="flex flex-wrap gap-2">
