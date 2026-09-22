@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-22-selection-blocs-etendre",
+    title: "Planning : sélectionner aussi les blocs déjà posés",
+    items: [
+      "Ctrl+clic (Cmd sur Mac) sur une case vide marche toujours pour créer un chantier, et maintenant aussi sur un bloc déjà posé pour le cocher.",
+      "Vous pouvez aussi cliquer-glisser un rectangle de cases, ou Maj+clic pour étendre depuis la dernière case. Échap annule la sélection.",
+    ],
+  },
+  {
     id: "2026-09-21-poseurs-lies",
     title: "Poseurs d’un même élément : toujours ensemble",
     items: [
