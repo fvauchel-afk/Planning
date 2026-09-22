@@ -64,7 +64,6 @@ import {
   type Employee,
 } from "@/lib/types";
 import {
-  emptyCellKey,
   type EmptyCellPick,
 } from "@/lib/engine/create-from-selection";
 import { WelcomeBanner } from "@/components/WelcomeBanner";
@@ -145,10 +144,7 @@ export function CalendarBoard() {
   const [editingChantier, setEditingChantier] = useState<Chantier | null>(null);
   const [emptyPicks, setEmptyPicks] = useState<EmptyCellPick[]>([]);
   const [createFromSelection, setCreateFromSelection] = useState(false);
-  const emptyPickKeys = useMemo(
-    () => new Set(emptyPicks.map(emptyCellKey)),
-    [emptyPicks],
-  );
+
 
   useEffect(() => {
     if (reopen?.kind !== "chantier") return;
@@ -816,7 +812,6 @@ export function CalendarBoard() {
           dragPreview={dragPreview}
           dragScope={dragScope}
           selectedKeys={selectedKeys}
-          emptyPickKeys={emptyPickKeys}
           rowHandleProps={rowHandleProps}
           focusCell={focusCell}
           onSelectDay={setCursorIso}
@@ -1222,7 +1217,6 @@ function DayDetail({
   dragPreview,
   dragScope,
   selectedKeys,
-  emptyPickKeys,
   rowHandleProps,
   focusCell,
   onSelectDay,
@@ -1247,7 +1241,6 @@ function DayDetail({
   dragPreview: { cells: Set<string>; blocked: boolean } | null;
   dragScope: DragScope;
   selectedKeys: Set<string>;
-  emptyPickKeys: Set<string>;
   rowHandleProps: ReturnType<typeof useEmployeeRowReorder>["rowHandleProps"];
   focusCell: { rowId: string; date: string; half: 0 | 1 } | null;
   onSelectDay: (iso: string) => void;
@@ -1590,9 +1583,11 @@ function DayDetail({
                                 ) {
                                   return;
                                 }
-                                allowDrag
-                                  ? onChipDragEnd(event, assignment.phase.id)
-                                  : onOpenPhase(assignment.phase.id);
+                                if (allowDrag) {
+                                  onChipDragEnd(event, assignment.phase.id);
+                                  return;
+                                }
+                                onOpenPhase(assignment.phase.id);
                               }}
                               onPointerCancel={(event) => {
                                 if (allowDrag) {
