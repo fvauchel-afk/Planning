@@ -332,13 +332,25 @@ function fromSlots(
   };
 }
 
-function chantierNames(snapshot: PlanningSnapshot, ids: string[]): string {
+function chantierNames(
+  snapshot: PlanningSnapshot,
+  ids: string[],
+  incomingElements?: { nom_element: string }[],
+): string {
   return ids
-    .map(
-      (id) =>
+    .map((id) => {
+      if (id.startsWith("incoming-")) {
+        const index = Number(id.slice("incoming-".length));
+        const nom = incomingElements?.[index]?.nom_element?.trim();
+        return nom
+          ? `l’élément « ${nom} » (même chantier)`
+          : "un autre élément du même chantier";
+      }
+      return (
         snapshot.chantiers.find((chantier) => chantier.id === id)?.nom_client ??
-        "un chantier existant",
-    )
+        "un chantier existant"
+      );
+    })
     .join(", ");
 }
 
@@ -646,7 +658,7 @@ function placeChantierOnOccupancy(
         });
         if (blocking.length > 0) {
           const who = employeeName(snapshot, resolved.employeId);
-          const occupiedBy = chantierNames(snapshot, blocking);
+          const occupiedBy = chantierNames(snapshot, blocking, input.elements);
           const next = nextContiguousFreeWindow(
             occupancy,
             snapshot,
@@ -1253,9 +1265,12 @@ export function inspectManualSlotConflict(
         heure_debut: phase.heure_debut,
       });
       const owners = overlappingOwners(occupancy, slots);
-      if (owners.length === 0) continue;
+      if (owners.length === 0) {
+        occupySlots(occupancy, slots, `incoming-${elementIndex}`);
+        continue;
+      }
       const who = employeeName(snapshot, resolved.employeId);
-      const occupiedBy = chantierNames(snapshot, owners);
+      const occupiedBy = chantierNames(snapshot, owners, input.elements);
       const nextFree = nextContiguousFreeWindow(
         occupancy,
         snapshot,
@@ -1512,6 +1527,48 @@ function runNextFreeWindowSelfCheck() {
   );
   if (!clashHours) {
     throw new Error("planner: 08:00–12:00 et 09:00–11:00 doivent être en conflit");
+  }
+
+  const multi: NewChantierInput = {
+    nom_client: "Dossier",
+    adresse: "",
+    lien_dossier_onedrive: null,
+    priorite: "normal",
+    elements: [
+      {
+        nom_element: "Table",
+        phases: [
+          {
+            type_phase: "fabrication",
+            duree_estimee_heures: 16,
+            date_debut: "2026-09-21",
+            date_fin: "2026-09-22",
+            employe_id: "jon",
+            urgent: false,
+          },
+        ],
+      },
+      {
+        nom_element: "Pergola",
+        phases: [
+          {
+            type_phase: "fabrication",
+            duree_estimee_heures: 16,
+            date_debut: "2026-09-21",
+            date_fin: "2026-09-22",
+            employe_id: "jon",
+            urgent: false,
+          },
+        ],
+      },
+    ],
+  };
+  const sibling = inspectManualSlotConflict(snapshot, multi);
+  if (!sibling || sibling.elementIndex !== 1) {
+    throw new Error("planner: deux éléments sur le même salarié et les mêmes dates doivent entrer en conflit");
+  }
+  if (!sibling.message.includes("Table") && !sibling.message.includes("même chantier")) {
+    throw new Error(`planner: le conflit intra-chantier doit citer l’autre élément, reçu ${sibling.message}`);
   }
 }
 
