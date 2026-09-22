@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-22-sans-selecteur-decaler",
+    title: "Planning : plus de choix Chantier entier / Cette phase",
+    items: [
+      "Le bandeau à côté de Vue d’ensemble / Semaine / Jour ne propose plus « Chantier entier » ni « Cette phase ».",
+      "On glisse comme avec les blocs choisis : vers une case vide, seuls les blocs concernés bougent. Ctrl+clic pour en prendre plusieurs. Un clic sur une case vide crée toujours un chantier.",
+    ],
+  },
+  {
     id: "2026-09-21-poseurs-lies",
     title: "Poseurs d’un même élément : toujours ensemble",
     items: [

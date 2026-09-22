@@ -9,7 +9,6 @@ import {
   assignmentClockLabel,
   assignmentsForCell,
   assignmentsForDay,
-  uniqueAssignmentsByChantier,
   firstChantierOccurrence,
   planningRows,
   rowHoursInDays,
@@ -42,10 +41,7 @@ import {
 } from "@/lib/dates";
 import { formatClock, formatHoursLabel, hoursForSlot, workWindowsForRow } from "@/lib/engine/hours";
 import {
-  shiftChantierBlockByMinutes,
   shiftIndependentHalves,
-  shiftOrMoveChantierBlock,
-  shiftPhaseDay,
   type IndependentHalf,
   type OccupiedHalf,
 } from "@/lib/engine/drag-shift";
@@ -77,7 +73,7 @@ import {
 import { phaseAwaitingChantierLance } from "@/lib/dates-estimatives";
 
 type ViewMode = "overview" | "week" | "day";
-type DragScope = "chantier" | "phase" | "libre";
+type DragScope = "libre";
 
 function halfSelectKey(
   rowId: string,
@@ -134,7 +130,7 @@ export function CalendarBoard() {
   const { reopen, clearReopen } = useFormDraftReopen();
   const { session } = useSession();
   const [view, setView] = useState<ViewMode>("overview");
-  const [dragScope, setDragScope] = useState<DragScope>("chantier");
+  const dragScope: DragScope = "libre";
   const [selectedHalves, setSelectedHalves] = useState<IndependentHalf[]>([]);
   const [todayIso, setTodayIso] = useState(() => toISODate(new Date()));
   const [cursorIso, setCursorIso] = useState(todayIso);
@@ -297,52 +293,15 @@ export function CalendarBoard() {
   function computeMove(
     drag: NonNullable<typeof dragRef.current>,
     drop: OccupiedHalf & { rowId: string; startMin?: number },
-    phaseMode: boolean,
   ) {
-    if (drag.scope === "libre") {
-      return shiftIndependentHalves({
-        snapshot,
-        fromRowId: drag.rowId,
-        toRowId: drop.rowId,
-        phaseId: drag.phaseId,
-        grab: { date: drag.grab.date, half: drag.grab.half },
-        drop: { date: drop.date, half: drop.half },
-        selected: drag.selected,
-      });
-    }
-    if (phaseMode) {
-      return shiftPhaseDay({
-        snapshot,
-        fromRowId: drag.rowId,
-        toRowId: drop.rowId,
-        phaseId: drag.phaseId,
-        grab: { date: drag.grab.date, half: drag.grab.half },
-        drop: { date: drop.date, half: drop.half },
-      });
-    }
-    if (view === "day" && drag.startMin != null && drop.startMin != null) {
-      return shiftChantierBlockByMinutes({
-        snapshot,
-        fromRowId: drag.rowId,
-        toRowId: drop.rowId,
-        chantierId: drag.chantierId,
-        grab: { ...drag.grab, startMin: drag.startMin },
-        drop: {
-          date: drop.date,
-          half: drop.half,
-          startMin: drop.startMin,
-        },
-        phaseId: undefined,
-      });
-    }
-    return shiftOrMoveChantierBlock({
+    return shiftIndependentHalves({
       snapshot,
       fromRowId: drag.rowId,
       toRowId: drop.rowId,
-      chantierId: drag.chantierId,
-      grab: drag.grab,
-      drop: { date: drop.date, half: drop.half },
       phaseId: drag.phaseId,
+      grab: { date: drag.grab.date, half: drag.grab.half },
+      drop: { date: drop.date, half: drop.half },
+      selected: drag.selected,
     });
   }
 
@@ -357,7 +316,7 @@ export function CalendarBoard() {
       setDragPreview({ cells: new Set(), blocked: false });
       return;
     }
-    const result = computeMove(drag, drop, drag.scope === "phase");
+    const result = computeMove(drag, drop);
     const keys = new Set<string>();
     for (const cell of result.preview) {
       keys.add(`${cell.rowId}|${cell.date}|${cell.half}`);
@@ -482,7 +441,7 @@ export function CalendarBoard() {
         ? planDayDropFromPoint(clientX, clientY)
         : planCellFromPoint(clientX, clientY);
     if (!drop || savingDrag.current) return;
-    const result = computeMove(drag, drop, drag.scope === "phase");
+    const result = computeMove(drag, drop);
     if (result.blocked) {
       setDragError(
         drag.scope === "libre"
@@ -539,17 +498,11 @@ export function CalendarBoard() {
             est écrite sur le bloc). En vue Jour, vous déposez au cran de
             30 minutes ; un trou en fin de journée reste vide. Le thermolaquage sous-traité et les livraisons ont chacun leur ligne.
             Les livraisons restent aussi sur la ligne du salarié responsable.
-            Glissez un chantier vers une autre date ou vers un autre salarié,
-            y compris en vue Jour. Les blocs collés sur
-            la ligne d’arrivée reculent ou avancent pour laisser la place.
-            Vous pouvez aussi déposer un chantier au milieu d’un autre : le
-            début reste en place, la suite reprend juste après.
-            Avec « Cette phase », vous glissez un seul jour de l’étape
-            (pose, fabrication…) : les jours avant et après restent en place,
-            un creux vide reste à l’ancienne date. À l’arrivée, ce jour se
-            cale dans un trou libre ou saute un autre chantier.
-            Un dépôt sur une absence ou un créneau hors horaire
-            à 0 h (vendredi après-midi en 35 h, week-end) est annulé.
+            Glissez un ou plusieurs blocs vers une case vide, y compris en vue
+            Jour. Seuls ces blocs bougent — pas toute la suite du chantier, et
+            pas de saut automatique vers le prochain trou. Un dépôt sur une
+            case déjà prise, une absence ou un créneau hors horaire à 0 h
+            (vendredi après-midi en 35 h, week-end) est annulé.
             Glissez une ligne de salarié (clic gauche maintenu sur le nom)
             pour changer l’ordre d’affichage, enregistré pour tout le monde.
             {usingSupabase
@@ -583,31 +536,6 @@ export function CalendarBoard() {
               </button>
             ))}
           </div>
-          <div className="inline-flex rounded-md border border-stone-300 bg-white p-0.5">
-            {(
-              [
-                ["chantier", "Chantier entier"],
-                ["phase", "Cette phase"],
-                ["libre", "Blocs choisis"],
-              ] as const
-            ).map(([id, label]) => (
-              <button
-                key={id}
-                type="button"
-                onClick={() => {
-                  setDragScope(id);
-                  if (id !== "libre") setSelectedHalves([]);
-                }}
-                className={`rounded px-3 py-1.5 text-sm ${
-                  dragScope === id
-                    ? "bg-stone-900 text-white"
-                    : "text-stone-700 hover:bg-stone-100"
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
           <div className="inline-flex items-center gap-1">
             <PeriodArrow
               direction={-1}
@@ -633,16 +561,14 @@ export function CalendarBoard() {
         </div>
       </div>
 
-      {dragScope === "libre" ? (
-        <p className="rounded border border-stone-200 bg-stone-50 px-3 py-2 text-sm text-stone-700">
-          Ctrl+clic (Cmd sur Mac) pour cocher plusieurs blocs, puis glisser vers
-          une case <strong>vide</strong>. Seuls ces blocs bougent — pas toute la
-          suite du chantier, et pas de saut automatique vers le prochain trou.
-          {selectedHalves.length > 0
-            ? ` ${selectedHalves.length} bloc${selectedHalves.length > 1 ? "s" : ""} choisi${selectedHalves.length > 1 ? "s" : ""}.`
-            : ""}
-        </p>
-      ) : null}
+      <p className="rounded border border-stone-200 bg-stone-50 px-3 py-2 text-sm text-stone-700">
+        Ctrl+clic (Cmd sur Mac) pour cocher plusieurs blocs, puis glisser vers
+        une case <strong>vide</strong>. Seuls ces blocs bougent — pas toute la
+        suite du chantier, et pas de saut automatique vers le prochain trou.
+        {selectedHalves.length > 0
+          ? ` ${selectedHalves.length} bloc${selectedHalves.length > 1 ? "s" : ""} choisi${selectedHalves.length > 1 ? "s" : ""}.`
+          : ""}
+      </p>
       {dragError ? <FormNotice>{dragError}</FormNotice> : null}
       {error ? <FormNotice>{error}</FormNotice> : null}
       {session?.isAdmin && emptyPicks.length > 0 ? (
@@ -937,10 +863,7 @@ export function CalendarBoard() {
                           iso,
                           slot,
                         );
-                      const assignments =
-                        dragScope === "phase" || dragScope === "libre"
-                          ? cellAssignments
-                          : uniqueAssignmentsByChantier(cellAssignments);
+                      const assignments = cellAssignments;
                       const cellKey = `${row.id}|${iso}|${half}`;
                       const dropTarget = dragPreview?.cells.has(cellKey);
                       const emptySelected = emptyPickKeys.has(cellKey);
@@ -1230,10 +1153,7 @@ function DayDetail({
           );
           const windows = workWindowsForRow(snapshot, row.id, iso);
           const dayAssignments = assignmentsForDay(snapshot, row.id, iso);
-          const assignments =
-            dragScope === "phase" || dragScope === "libre"
-              ? dayAssignments
-              : uniqueAssignmentsByChantier(dayAssignments);
+          const assignments = dayAssignments;
           const dayStart = windows[0]?.start ?? 7 * 60;
           const dayEnd = windows[windows.length - 1]?.end ?? 17 * 60;
           const span = Math.max(1, dayEnd - dayStart);
