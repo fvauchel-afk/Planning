@@ -11,6 +11,15 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-22-admin-oui-non",
+    title: "Administratif : Oui ou Non comme les autres phases",
+    items: [
+      "À la création et dans Modifier, Administratif a les boutons Oui / Non, comme Pose ou Fabrication.",
+      "Oui : la phase se cale en premier (une demi-journée si vous ne mettez pas de durée). La personne se choisit dans le tableau de chaque élément, comme le fabricant.",
+      "Non : plus de phase Administratif. Un chantier déjà créé sans dates admin reste en Non tant que vous ne passez pas à Oui.",
+    ],
+  },
+  {
     id: "2026-09-20-leo-coupe-dessus",
     title: "Plan portail : vue de dessus et coupe",
     items: [

@@ -116,6 +116,7 @@ function durationRowsForChantier(
   snapshot: PlanningSnapshot,
   chantierId: string,
   flags: {
+    avecAdministratif: boolean;
     avecFabrication: boolean;
     avecPose: boolean;
     avecLivraison: boolean;
@@ -140,6 +141,7 @@ function durationRowsForChantier(
       (phase) => phase.element_id === element.id,
     );
     for (const type of DURATION_TYPES) {
+      if (type === "administratif" && !flags.avecAdministratif) continue;
       if (type === "fabrication" && !flags.avecFabrication) continue;
       if (type === "pose" && !flags.avecPose) continue;
       if (type === "livraison" && !flags.avecLivraison) continue;
@@ -229,6 +231,9 @@ export function ChantierEditModal({
     [snapshot, chantier.id],
   );
   const [avecPose, setAvecPose] = useState(currentOptions.avecPose);
+  const [avecAdministratif, setAvecAdministratif] = useState(
+    currentOptions.avecAdministratif,
+  );
   const [avecFabrication, setAvecFabrication] = useState(
     currentOptions.avecFabrication,
   );
@@ -307,6 +312,7 @@ export function ChantierEditModal({
       source.chantiers.find((item) => item.id === chantier.id) ?? chantier;
     setDatesEstimatives(chantierHasEstimativeDates(source, chantier.id));
     setAvecPose(options.avecPose);
+    setAvecAdministratif(options.avecAdministratif);
     setAvecFabrication(options.avecFabrication);
     setAvecThermolaquage(options.avecThermolaquage);
     setAvecLivraison(options.avecLivraison);
@@ -355,6 +361,7 @@ export function ChantierEditModal({
   function applyChantierDraft(draft: ChantierCascadeDraft) {
     setDatesEstimatives(draft.datesEstimatives);
     setAvecPose(draft.avecPose);
+    setAvecAdministratif(draft.avecAdministratif ?? false);
     setAvecFabrication(draft.avecFabrication ?? true);
     setAvecThermolaquage(draft.avecThermolaquage);
     setAvecLivraison(draft.avecLivraison);
@@ -444,11 +451,12 @@ export function ChantierEditModal({
   const durationRows = useMemo(
     () =>
       durationRowsForChantier(snapshot, chantier.id, {
+        avecAdministratif,
         avecFabrication,
         avecPose,
         avecLivraison,
       }),
-    [snapshot, chantier.id, avecFabrication, avecPose, avecLivraison],
+    [snapshot, chantier.id, avecAdministratif, avecFabrication, avecPose, avecLivraison],
   );
 
   function parsedHoursByPhaseId(): Record<string, number> {
@@ -474,6 +482,7 @@ export function ChantierEditModal({
         : {};
     const preview = previewPhaseEdits(source, dateEdits);
     const optionEdits = planChantierOptionEdits(preview, chantier.id, {
+      avecAdministratif,
       avecFabrication,
       avecPose,
       avecThermolaquage,
@@ -573,6 +582,7 @@ export function ChantierEditModal({
     planDate,
     planEnd,
     avecPose,
+    avecAdministratif,
     avecFabrication,
     avecThermolaquage,
     avecLivraison,
@@ -603,6 +613,7 @@ export function ChantierEditModal({
       planEmployeeId,
       datesEstimatives,
       avecPose,
+      avecAdministratif,
       avecFabrication,
       avecThermolaquage,
       avecLivraison,
@@ -622,6 +633,7 @@ export function ChantierEditModal({
     planEmployeeId,
     datesEstimatives,
     avecPose,
+    avecAdministratif,
     avecFabrication,
     avecThermolaquage,
     avecLivraison,
@@ -777,6 +789,9 @@ export function ChantierEditModal({
       }
       if (hadCascadeEdits) {
         const removed: string[] = [];
+        if (currentOptions.avecAdministratif && !avecAdministratif) {
+          removed.push("Administratif");
+        }
         if (currentOptions.avecFabrication && !avecFabrication) {
           removed.push("Fabrication");
         }
@@ -1121,6 +1136,41 @@ export function ChantierEditModal({
             )}
           </fieldset>
 
+          <fieldset className="rounded-lg border border-stone-300 bg-stone-50/60 p-3 text-sm">
+            <legend className="px-1 font-medium text-stone-800">Administratif</legend>
+            <div className="mt-1 flex flex-wrap gap-4">
+              <label className="inline-flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="edit-avec-admin"
+                  checked={avecAdministratif}
+                  onChange={() => {
+                    markCascade();
+                    setAvecAdministratif(true);
+                  }}
+                />
+                Oui
+              </label>
+              <label className="inline-flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="edit-avec-admin"
+                  checked={!avecAdministratif}
+                  onChange={() => {
+                    markCascade();
+                    setAvecAdministratif(false);
+                  }}
+                />
+                Non
+              </label>
+            </div>
+            {avecAdministratif ? (
+              <p className="mt-3 text-xs text-stone-600">
+                La personne se choisit dans le tableau des durées, par élément.
+                Sans durée, une demi-journée est calée en tête de chaîne.
+              </p>
+            ) : null}
+          </fieldset>
           <fieldset className="rounded-lg border border-stone-300 bg-stone-50/60 p-3 text-sm">
             <legend className="px-1 font-medium text-stone-800">
               Installation / Pose
