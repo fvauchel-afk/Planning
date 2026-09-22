@@ -112,6 +112,9 @@ function phaseOf(phases: PhaseInput[], type: PhaseInput["type_phase"]): PhaseInp
 
 const ASSIGN_REQUIRED: TypePhase[] = ["fabrication", "pose", "livraison"];
 
+/** Demi-journée par défaut si Administratif est à Oui sans durée. */
+const DEFAULT_ADMIN_HOURS = 4;
+
 export function pickEmployeeForPhase(
   snapshot: PlanningSnapshot,
   type: TypePhase,
@@ -197,6 +200,9 @@ export function missingRequiredAssignee(
       if (phase.type_phase === "fabrication" && input.avec_fabrication === false) {
         continue;
       }
+      if (phase.type_phase === "administratif" && input.avec_administratif !== true) {
+        continue;
+      }
       if (phase.type_phase === "livraison" && !input.avec_livraison) continue;
       if (phase.employe_id) continue;
       return `Aucun salarié n’a pu être assigné à ${PHASE_LABELS[phase.type_phase]} (${element.nom_element}). Donnez le rôle ${PHASE_LABELS[phase.type_phase]} à quelqu’un dans Employés, ou choisissez une personne dans le formulaire.`;
@@ -240,6 +246,7 @@ export function applyPhaseChainOnCreate(
   const thermo = Boolean(input.avec_thermolaquage);
   const pose = Boolean(input.avec_pose);
   const fabrication = input.avec_fabrication !== false;
+  const administratif = input.avec_administratif === true;
   const livraison = Boolean(input.avec_livraison);
   const delayDays = clampDelay(input.delai_laquage_jours);
   const laquageDebut = input.date_laquage_debut || null;
@@ -260,11 +267,15 @@ export function applyPhaseChainOnCreate(
 
         const skipPose = type === "pose" && !pose;
         const skipFab = type === "fabrication" && !fabrication;
+        const skipAdmin = type === "administratif" && input.avec_administratif === false;
         const skipThermo = type === "logistique" && !thermo;
         const skipLivraison = type === "livraison" && !livraison;
         const hours = Number(current.duree_estimee_heures) || 0;
         if (type === "fabrication" && fabrication && hours <= 0) {
           current.duree_estimee_heures = 8;
+        }
+        if (type === "administratif" && administratif && hours <= 0) {
+          current.duree_estimee_heures = DEFAULT_ADMIN_HOURS;
         }
         if (type === "pose" && pose && hours <= 0) {
           current.duree_estimee_heures = 8;
@@ -273,19 +284,27 @@ export function applyPhaseChainOnCreate(
         const skipEmpty =
           type !== "logistique" &&
           !(type === "fabrication" && fabrication) &&
+          !(type === "administratif" && administratif) &&
           plannedHours <= 0 &&
           !(type === "pose" && pose) &&
           !(type === "livraison" && livraison);
         const waitingOnBonCommande = Boolean(thermo);
 
-        if (skipPose || skipFab || skipThermo || skipLivraison || skipEmpty) {
-          if (skipPose || skipFab || skipThermo || skipLivraison) {
+        if (
+          skipPose ||
+          skipFab ||
+          skipAdmin ||
+          skipThermo ||
+          skipLivraison ||
+          skipEmpty
+        ) {
+          if (skipPose || skipFab || skipAdmin || skipThermo || skipLivraison) {
             current.date_debut = null;
             current.date_fin = null;
-            if (skipThermo || skipPose || skipFab || skipLivraison) {
+            if (skipThermo || skipPose || skipFab || skipAdmin || skipLivraison) {
               current.duree_estimee_heures = 0;
             }
-            if (skipThermo || skipFab) current.employe_id = null;
+            if (skipThermo || skipFab || skipAdmin) current.employe_id = null;
           }
           continue;
         }
@@ -510,7 +529,13 @@ function phaseHasContent(
 export function chantierPhaseOptions(
   snapshot: PlanningSnapshot,
   chantierId: string,
-): { avecPose: boolean; avecThermolaquage: boolean; avecLivraison: boolean; avecFabrication: boolean } {
+): {
+  avecAdministratif: boolean;
+  avecPose: boolean;
+  avecThermolaquage: boolean;
+  avecLivraison: boolean;
+  avecFabrication: boolean;
+} {
   const chantier = snapshot.chantiers.find((item) => item.id === chantierId);
   const elementIds = new Set(
     snapshot.elements
@@ -519,6 +544,9 @@ export function chantierPhaseOptions(
   );
   const phases = snapshot.phases.filter((phase) => elementIds.has(phase.element_id));
   return {
+    avecAdministratif: phases.some(
+      (phase) => phase.type_phase === "administratif" && phaseHasContent(phase),
+    ),
     avecFabrication: phases.some(
       (phase) => phase.type_phase === "fabrication" && phaseHasContent(phase),
     ),
@@ -598,6 +626,7 @@ function scheduleHoursOnAssignee(
 }
 
 type OptionEditOptions = {
+  avecAdministratif?: boolean;
   avecFabrication?: boolean;
   avecPose: boolean;
   avecThermolaquage: boolean;
@@ -748,6 +777,50 @@ function recaleElementChain(
   }
 }
 
+export function planRecaleAfterAssignees(
+  snapshot: PlanningSnapshot,
+  chantierId: string,
+  changedPhaseIds: Iterable<string>,
+  delayDays?: number | null,
+): { patches: PhasePatch[]; inserts: PhaseInsert[]; deleteIds: string[] } {
+  const delay = clampDelay(delayDays);
+  const patches: PhasePatch[] = [];
+  const inserts: PhaseInsert[] = [];
+  const deleteIds: string[] = [];
+  const changed = new Set(changedPhaseIds);
+  if (changed.size === 0) return { patches, inserts, deleteIds };
+  const elements = snapshot.elements.filter(
+    (element) => element.chantier_id === chantierId,
+  );
+  for (const element of elements) {
+    const siblings = snapshot.phases.filter(
+      (phase) => phase.element_id === element.id,
+    );
+    let fromType: TypePhase | null = null;
+    for (const phase of siblings) {
+      if (!changed.has(phase.id)) continue;
+      if (
+        !fromType ||
+        PHASE_ORDER.indexOf(phase.type_phase) < PHASE_ORDER.indexOf(fromType)
+      ) {
+        fromType = phase.type_phase;
+      }
+    }
+    if (fromType) {
+      recaleElementChain(
+        snapshot,
+        element.id,
+        fromType,
+        delay,
+        patches,
+        inserts,
+        deleteIds,
+      );
+    }
+  }
+  return { patches, inserts, deleteIds };
+}
+
 function cascadeAfterAssigneeChanges(
   snapshot: PlanningSnapshot,
   chantierId: string,
@@ -837,7 +910,7 @@ function applyAssigneeEdits(
       : earliestAvailableWorkDate(snapshot);
 
     const assignExisting = (
-      type: "fabrication" | "pose" | "livraison",
+      type: "administratif" | "fabrication" | "pose" | "livraison",
       preferred: string | null | undefined,
       dateIfMissing: boolean,
     ) => {
@@ -851,7 +924,10 @@ function applyAssigneeEdits(
       if (!debut && dateIfMissing) {
         debut = fallbackStart;
         fin = fallbackStart;
-        hours = Math.max(8, Number(hours) || 0);
+        hours = Math.max(
+          type === "administratif" ? DEFAULT_ADMIN_HOURS : 8,
+          Number(hours) || 0,
+        );
         extra.date_debut = debut;
         extra.date_fin = fin;
         extra.duree_estimee_heures = hours;
@@ -876,6 +952,9 @@ function applyAssigneeEdits(
       }
     };
 
+    if (options.avecAdministratif) {
+      assignExisting("administratif", undefined, true);
+    }
     assignExisting(
       "fabrication",
       options.employeFabricationId,
@@ -925,6 +1004,7 @@ export function planChantierOptionEdits(
   snapshot: PlanningSnapshot,
   chantierId: string,
   options: {
+    avecAdministratif?: boolean;
     avecFabrication?: boolean;
     avecPose: boolean;
     avecThermolaquage: boolean;
@@ -947,7 +1027,9 @@ export function planChantierOptionEdits(
   const wantLivraison = Boolean(options.avecLivraison);
   const wantFab = options.avecFabrication !== false;
   const current = chantierPhaseOptions(snapshot, chantierId);
+  const wantAdmin = options.avecAdministratif ?? current.avecAdministratif;
   const flagsChanged =
+    current.avecAdministratif !== wantAdmin ||
     current.avecFabrication !== wantFab ||
     current.avecPose !== options.avecPose ||
     current.avecThermolaquage !== options.avecThermolaquage ||
@@ -959,12 +1041,16 @@ export function planChantierOptionEdits(
   const elements = snapshot.elements.filter(
     (element) => element.chantier_id === chantierId,
   );
+  const resolvedOptions: OptionEditOptions = {
+    ...options,
+    avecAdministratif: wantAdmin,
+  };
 
   if (!flagsChanged) {
     applyAssigneeEdits(
       snapshot,
       chantierId,
-      options,
+      resolvedOptions,
       wantLivraison,
       patches,
       inserts,
@@ -977,11 +1063,13 @@ export function planChantierOptionEdits(
     const siblings = snapshot.phases.filter(
       (phase) => phase.element_id === element.id,
     );
+    const admin = siblings.find((item) => item.type_phase === "administratif");
     const fab = siblings.find((item) => item.type_phase === "fabrication");
     const log = siblings.find((item) => item.type_phase === "logistique");
     const liv = siblings.find((item) => item.type_phase === "livraison");
     const pose = siblings.find((item) => item.type_phase === "pose");
     const kept = siblings.filter((phase) => {
+      if (phase.type_phase === "administratif" && !wantAdmin) return false;
       if (phase.type_phase === "fabrication" && !wantFab) return false;
       if (phase.type_phase === "logistique" && !options.avecThermolaquage) {
         return false;
@@ -991,10 +1079,66 @@ export function planChantierOptionEdits(
       return true;
     });
 
+    if (!wantAdmin && admin) deleteIds.push(admin.id);
     if (!wantFab && fab) deleteIds.push(fab.id);
     if (!options.avecThermolaquage && log) deleteIds.push(log.id);
     if (!wantLivraison && liv) deleteIds.push(liv.id);
     if (!options.avecPose && pose) deleteIds.push(pose.id);
+
+    let recaleFromAdmin = false;
+    if (wantAdmin) {
+      const adminHours = Math.max(
+        DEFAULT_ADMIN_HOURS,
+        Number(admin?.duree_estimee_heures) || 0,
+      );
+      const range = scheduleHoursOnAssignee(
+        snapshot,
+        admin?.employe_id || null,
+        earliestAvailableWorkDate(snapshot),
+        adminHours,
+      );
+      if (admin && !deleteIds.includes(admin.id)) {
+        const shouldRecale = !current.avecAdministratif || !admin.date_debut;
+        if (shouldRecale) {
+          recaleFromAdmin = true;
+          patches.push({
+            id: admin.id,
+            date_debut: range.start,
+            date_fin: range.end,
+            employe_id: pickEmployeeForPhase(
+              snapshot,
+              "administratif",
+              range.start,
+              range.end,
+              admin.employe_id,
+            ),
+            heure_debut: admin.heure_debut ?? "07:30",
+            duree_estimee_heures: adminHours,
+          });
+        }
+      } else if (!admin) {
+        recaleFromAdmin = true;
+        inserts.push({
+          element_id: element.id,
+          type_phase: "administratif",
+          duree_estimee_heures: adminHours,
+          date_debut: range.start,
+          date_fin: range.end,
+          heure_debut: "07:30",
+          employe_id: pickEmployeeForPhase(
+            snapshot,
+            "administratif",
+            range.start,
+            range.end,
+            null,
+          ),
+          statut: "a_faire",
+          urgent: false,
+          heures_supplementaires_par_jour: 0,
+          dates_estimatives: estimative,
+        });
+      }
+    }
 
     if (wantFab) {
       const fabHours = Math.max(8, Number(fab?.duree_estimee_heures) || 0);
@@ -1204,12 +1348,24 @@ export function planChantierOptionEdits(
         });
       }
     }
+
+    if (recaleFromAdmin) {
+      recaleElementChain(
+        snapshot,
+        element.id,
+        "administratif",
+        delayDays,
+        patches,
+        inserts,
+        deleteIds,
+      );
+    }
   }
 
   applyAssigneeEdits(
     snapshot,
     chantierId,
-    options,
+    resolvedOptions,
     wantLivraison,
     patches,
     inserts,
@@ -1986,6 +2142,66 @@ function runPhaseChainSelfCheck() {
     throw new Error("phase-chain: thermo ne doit pas chevaucher la fabrication");
   }
 
+  const assignedOnly: PlanningSnapshot = {
+    ...cascadeBase,
+    elements: [
+      ...cascadeBase.elements,
+      { id: "el-other", chantier_id: "ch-cascade", nom_element: "Pergola" },
+    ],
+    phases: [
+      ...cascadeBase.phases.map((phase) =>
+        phase.id === "fab-cascade" ? { ...phase, employe_id: "emp-b" } : phase,
+      ),
+      {
+        id: "fab-other",
+        element_id: "el-other",
+        type_phase: "fabrication",
+        duree_estimee_heures: 8,
+        date_debut: "2026-09-14",
+        date_fin: "2026-09-14",
+        heure_debut: "07:30",
+        employe_id: "emp-a",
+        statut: "a_faire",
+        urgent: false,
+      },
+      {
+        id: "log-other",
+        element_id: "el-other",
+        type_phase: "logistique",
+        duree_estimee_heures: 40,
+        date_debut: "2026-09-15",
+        date_fin: "2026-09-19",
+        heure_debut: null,
+        employe_id: null,
+        statut: "a_faire",
+        urgent: false,
+      },
+    ],
+  };
+  const recaled = planRecaleAfterAssignees(
+    assignedOnly,
+    "ch-cascade",
+    ["fab-cascade"],
+    5,
+  );
+  const recaleFab = recaled.patches.find((item) => item.id === "fab-cascade");
+  const recaleLog = recaled.patches.find((item) => item.id === "log-cascade");
+  const recaleOtherFab = recaled.patches.find((item) => item.id === "fab-other");
+  const recaleOtherLog = recaled.patches.find((item) => item.id === "log-other");
+  if (recaleFab?.date_debut !== "2026-09-16" || recaleFab.date_fin !== "2026-09-18") {
+    throw new Error(
+      `phase-chain: recale par élément, fab Table, reçu ${recaleFab?.date_debut} → ${recaleFab?.date_fin}`,
+    );
+  }
+  if (!recaleLog?.date_debut || recaleLog.date_debut <= recaleFab.date_fin!) {
+    throw new Error(
+      `phase-chain: recale par élément, thermo Table doit suivre la fab, reçu ${recaleLog?.date_debut}`,
+    );
+  }
+  if (recaleOtherFab || recaleOtherLog) {
+    throw new Error("phase-chain: changer le fabricant de Table ne doit pas recaler Pergola");
+  }
+
   const nobody = applyPhaseChainOnCreate(
     { ...snapshot, employees: [] },
     {
@@ -2099,6 +2315,55 @@ function runPhaseChainSelfCheck() {
     throw new Error(
       `phase-chain: le 2e élément ne doit pas chevaucher le 1er sur le même salarié (${firstFab.date_debut}→${firstFab.date_fin} / ${secondFab.date_debut}→${secondFab.date_fin})`,
     );
+  }
+
+  const adminSnap: PlanningSnapshot = {
+    ...snapshot,
+    employees: [
+      {
+        id: "emp-a",
+        nom: "A",
+        roles: ["fabrication", "pose", "administratif"],
+        actif: true,
+      },
+    ],
+  };
+  const flaggedAdmin = applyPhaseChainOnCreate(adminSnap, {
+    nom_client: "Avec admin",
+    adresse: "",
+    lien_dossier_onedrive: null,
+    priorite: "normal",
+    date_debut: "2026-09-14",
+    avec_administratif: true,
+    avec_fabrication: true,
+    avec_pose: false,
+    avec_thermolaquage: false,
+    avec_livraison: false,
+    elements: [
+      {
+        nom_element: "Portail",
+        phases: [
+          { ...basePhase, type_phase: "administratif", duree_estimee_heures: 0 },
+          { ...basePhase, type_phase: "fabrication", duree_estimee_heures: 8 },
+        ],
+      },
+    ],
+  });
+  const flaggedAdminPhase = flaggedAdmin.elements[0]?.phases.find(
+    (item) => item.type_phase === "administratif",
+  );
+  const flaggedFab = flaggedAdmin.elements[0]?.phases.find(
+    (item) => item.type_phase === "fabrication",
+  );
+  if (!flaggedAdminPhase?.date_debut || flaggedAdminPhase.duree_estimee_heures < 4) {
+    throw new Error("phase-chain: Administratif à Oui doit être calé (demi-journée par défaut)");
+  }
+  if (
+    flaggedFab?.date_debut &&
+    flaggedAdminPhase.date_fin &&
+    flaggedFab.date_debut <= flaggedAdminPhase.date_fin
+  ) {
+    throw new Error("phase-chain: fabrication après Administratif à Oui");
   }
 }
 

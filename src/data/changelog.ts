@@ -19,6 +19,31 @@ export const CHANGELOG: ChangelogEntry[] = [
     ],
   },
   {
+    id: "2026-09-22-recale-chaine-salarie",
+    title: "Changer de salarié recale la suite de l’élément",
+    items: [
+      "Dans Modifier le chantier, si vous changez le fabricant (ou le poseur) d’un élément, le thermolaquage, la livraison et la pose de CET élément suivent les nouvelles dates — plus de chevauchement avec l’ancienne fabrication.",
+      "Les autres éléments du même chantier ne bougent pas. Les dates planifiées du haut ne sont réappliquées que si vous les avez vraiment modifiées.",
+    ],
+  },
+  {
+    id: "2026-09-22-vue-ensemble-mois-scroll",
+    title: "Planning : le mois entier, on change de période en défilant",
+    items: [
+      "En Vue d’ensemble, la grille montre le mois du 1er au dernier jour. Elle s’élargit ; s’il manque de place, on défile horizontalement plutôt que d’écraser les cases.",
+      "Les flèches ‹ › disparaissent. On passe au mois, à la semaine ou au jour suivant en défilant vers le bas (vers le haut pour revenir). Le bouton du milieu (septembre, la semaine, aujourd’hui) ramène à aujourd’hui.",
+    ],
+  },
+  {
+    id: "2026-09-22-admin-oui-non",
+    title: "Administratif : Oui ou Non comme les autres phases",
+    items: [
+      "À la création et dans Modifier, Administratif a les boutons Oui / Non, comme Pose ou Fabrication.",
+      "Oui : la phase se cale en premier (une demi-journée si vous ne mettez pas de durée). La personne se choisit dans le tableau de chaque élément, comme le fabricant.",
+      "Non : plus de phase Administratif. Un chantier déjà créé sans dates admin reste en Non tant que vous ne passez pas à Oui.",
+    ],
+  },
+  {
     id: "2026-09-20-leo-coupe-dessus",
     title: "Plan portail : vue de dessus et coupe",
     items: [
