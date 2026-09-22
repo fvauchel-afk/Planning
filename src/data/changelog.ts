@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-21-fleches-periode-planning",
+    title: "Planning équipe : flèches gauche / droite",
+    items: [
+      "À gauche et à droite de la grille (et aussi autour du titre de période), de petites flèches permettent de passer au mois précédent ou suivant, à la semaine précédente ou suivante, ou au jour précédent ou suivant — selon la vue choisie.",
+      "Plus besoin de faire défiler tout le calendrier horizontalement rien que pour changer de période : un clic sur ‹ ou › suffit.",
+    ],
+  },
+  {
     id: "2026-09-21-conflit-frise",
     title: "Conflit : une frise avant / après",
     items: [

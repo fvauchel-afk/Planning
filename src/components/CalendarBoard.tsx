@@ -88,6 +88,46 @@ function halfSelectKey(
   return `${rowId}|${phaseId}|${date}|${half}`;
 }
 
+function periodShiftLabel(view: ViewMode, direction: -1 | 1): string {
+  if (view === "day") {
+    return direction < 0 ? "Jour précédent" : "Jour suivant";
+  }
+  if (view === "week") {
+    return direction < 0 ? "Semaine précédente" : "Semaine suivante";
+  }
+  return direction < 0 ? "Mois précédent" : "Mois suivant";
+}
+
+function PeriodArrow({
+  direction,
+  view,
+  onClick,
+  size = "side",
+}: {
+  direction: -1 | 1;
+  view: ViewMode;
+  onClick: () => void;
+  size?: "side" | "toolbar";
+}) {
+  const label = periodShiftLabel(view, direction);
+  const glyph = direction < 0 ? "‹" : "›";
+  return (
+    <button
+      type="button"
+      title={label}
+      aria-label={label}
+      onClick={onClick}
+      className={
+        size === "side"
+          ? "sticky top-1/3 z-[1] flex h-14 w-9 shrink-0 items-center justify-center self-center rounded-lg border border-stone-300 bg-white text-2xl leading-none text-stone-800 shadow-sm hover:bg-stone-50"
+          : "rounded border border-stone-300 bg-white px-2.5 py-1.5 text-lg leading-none text-stone-800"
+      }
+    >
+      {glyph}
+    </button>
+  );
+}
+
 export function CalendarBoard() {
   const { snapshot, loading, error, usingSupabase, applyPhaseEdits, reorderEmployees } =
     usePlanning();
@@ -568,13 +608,12 @@ export function CalendarBoard() {
             ))}
           </div>
           <div className="inline-flex items-center gap-1">
-            <button
-              type="button"
+            <PeriodArrow
+              direction={-1}
+              view={view}
+              size="toolbar"
               onClick={() => shift(-1)}
-              className="rounded border border-stone-300 bg-white px-2 py-1.5 text-sm"
-            >
-              ←
-            </button>
+            />
             <button
               type="button"
               onClick={goToday}
@@ -583,13 +622,12 @@ export function CalendarBoard() {
             >
               {periodLabel}
             </button>
-            <button
-              type="button"
+            <PeriodArrow
+              direction={1}
+              view={view}
+              size="toolbar"
               onClick={() => shift(1)}
-              className="rounded border border-stone-300 bg-white px-2 py-1.5 text-sm"
-            >
-              →
-            </button>
+            />
           </div>
         </div>
       </div>
@@ -708,6 +746,13 @@ export function CalendarBoard() {
       </div>
 
       {view === "day" ? (
+        <div className="flex items-stretch gap-2">
+          <PeriodArrow
+            direction={-1}
+            view={view}
+            onClick={() => shift(-1)}
+          />
+          <div className="min-w-0 flex-1">
         <DayDetail
           iso={cursorIso}
           todayIso={todayIso}
@@ -758,8 +803,21 @@ export function CalendarBoard() {
             void finishDrag(event.clientX, event.clientY, phaseId);
           }}
         />
+          </div>
+          <PeriodArrow
+            direction={1}
+            view={view}
+            onClick={() => shift(1)}
+          />
+        </div>
       ) : (
-        <div className={`overflow-auto rounded-lg border border-stone-300 bg-white shadow-sm ${dragPreview || reordering ? "select-none" : ""}`}>
+        <div className="flex items-stretch gap-2">
+          <PeriodArrow
+            direction={-1}
+            view={view}
+            onClick={() => shift(-1)}
+          />
+          <div className={`min-w-0 flex-1 overflow-auto rounded-lg border border-stone-300 bg-white shadow-sm ${dragPreview || reordering ? "select-none" : ""}`}>
           <table className="min-w-full border-collapse text-sm">
             <thead>
               <tr className="bg-stone-100">
@@ -1025,6 +1083,12 @@ export function CalendarBoard() {
             </tbody>
           </table>
         </div>
+          <PeriodArrow
+            direction={1}
+            view={view}
+            onClick={() => shift(1)}
+          />
+        </div>
       )}
       {editingChantier && (
         <ChantierEditModal
@@ -1137,21 +1201,19 @@ function DayDetail({
         >
           {formatLongDate(iso)}
         </h3>
-        <div className="flex gap-1">
-          <button
-            type="button"
-            className="rounded border border-stone-300 bg-white px-2 py-1 text-sm"
+        <div className="flex items-center gap-1">
+          <PeriodArrow
+            direction={-1}
+            view="day"
+            size="toolbar"
             onClick={() => onSelectDay(addDays(iso, -1))}
-          >
-            Jour précédent
-          </button>
-          <button
-            type="button"
-            className="rounded border border-stone-300 bg-white px-2 py-1 text-sm"
+          />
+          <PeriodArrow
+            direction={1}
+            view="day"
+            size="toolbar"
             onClick={() => onSelectDay(addDays(iso, 1))}
-          >
-            Jour suivant
-          </button>
+          />
         </div>
       </div>
       <div className="overflow-hidden rounded-lg border border-stone-300 bg-white">
