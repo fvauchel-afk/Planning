@@ -9,6 +9,9 @@ import {
   isCompanyHoliday,
   isEmployeeAbsent,
   isSlotBlockedForRow,
+  occupySlots,
+  overlappingOwners,
+  slotsFromExistingPhase,
   todayIso,
 } from "@/lib/engine/slots";
 import {
@@ -250,10 +253,11 @@ export function applyPhaseChainOnCreate(
   const laquageFin = input.date_laquage_fin || null;
   const chainStart =
     input.date_debut || earliestAvailableWorkDate(snapshot);
+  const occupancy = buildOccupancy(snapshot);
 
   const chained: NewChantierInput = {
     ...input,
-    elements: input.elements.map((element) => {
+    elements: input.elements.map((element, elementIndex) => {
       const phases = element.phases.map((phase) => ({ ...phase }));
       let prevEnd: string | null = null;
 
@@ -354,6 +358,32 @@ export function applyPhaseChainOnCreate(
 
         current.date_debut = start;
         current.date_fin = end < start ? start : end;
+        if (type !== "logistique" && current.employe_id) {
+          const hoursForRange = Number(current.duree_estimee_heures) || 0;
+          for (let hop = 0; hop < SEARCH_DAYS; hop += 1) {
+            const slots = slotsFromExistingPhase(snapshot, {
+              type_phase: type,
+              employe_id: current.employe_id,
+              date_debut: current.date_debut,
+              date_fin: current.date_fin,
+              duree_estimee_heures: hoursForRange,
+              heure_debut: current.heure_debut ?? null,
+            });
+            if (overlappingOwners(occupancy, slots).length === 0) {
+              occupySlots(occupancy, slots, `incoming-${elementIndex}`);
+              break;
+            }
+            start = nextWorkingDayAfter(current.date_debut);
+            end = rangeEndFromHours(
+              snapshot,
+              current.employe_id,
+              start,
+              hoursForRange,
+            );
+            current.date_debut = start;
+            current.date_fin = end < start ? start : end;
+          }
+        }
         if (
           waitingOnBonCommande &&
           (type === "logistique" || type === "livraison" || type === "pose")
@@ -2238,6 +2268,52 @@ function runPhaseChainSelfCheck() {
   if (longPhase?.date_fin !== "2026-09-21") {
     throw new Error(
       `phase-chain: 32 h dès le mardi 15 sept. (35 h/sem.) doivent finir le lundi 21, reçu ${longPhase?.date_fin}`,
+    );
+  }
+
+  const twins = applyPhaseChainOnCreate(snapshot, {
+    nom_client: "Multi",
+    adresse: "",
+    lien_dossier_onedrive: null,
+    priorite: "normal",
+    date_debut: "2026-09-14",
+    avec_pose: false,
+    avec_thermolaquage: false,
+    elements: [
+      {
+        nom_element: "Table",
+        phases: [
+          {
+            ...basePhase,
+            type_phase: "fabrication",
+            duree_estimee_heures: 16,
+            employe_id: "emp-a",
+          },
+        ],
+      },
+      {
+        nom_element: "Pergola",
+        phases: [
+          {
+            ...basePhase,
+            type_phase: "fabrication",
+            duree_estimee_heures: 16,
+            date_debut: "2026-09-14",
+            date_fin: "2026-09-15",
+            employe_id: "emp-a",
+          },
+        ],
+      },
+    ],
+  });
+  const firstFab = twins.elements[0]?.phases.find((item) => item.type_phase === "fabrication");
+  const secondFab = twins.elements[1]?.phases.find((item) => item.type_phase === "fabrication");
+  if (!firstFab?.date_fin || !secondFab?.date_debut) {
+    throw new Error("phase-chain: les deux fabrications du même salarié doivent être datées");
+  }
+  if (secondFab.date_debut <= firstFab.date_fin) {
+    throw new Error(
+      `phase-chain: le 2e élément ne doit pas chevaucher le 1er sur le même salarié (${firstFab.date_debut}→${firstFab.date_fin} / ${secondFab.date_debut}→${secondFab.date_fin})`,
     );
   }
 

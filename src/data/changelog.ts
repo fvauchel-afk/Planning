@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-22-elements-sans-chevauchement",
+    title: "Nouveau chantier : plus de superposition entre éléments",
+    items: [
+      "Si deux éléments (table et pergola) sont sur le même salarié, le second commence après le premier, heure par heure, pas seulement jour par jour.",
+      "Si les dates du formulaire se marchent encore dessus, le message de conflit cite l’autre élément du même chantier et propose le prochain créneau libre.",
+    ],
+  },
+  {
     id: "2026-09-22-recale-chaine-salarie",
     title: "Changer de salarié recale la suite de l’élément",
     items: [
