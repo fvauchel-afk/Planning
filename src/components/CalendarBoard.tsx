@@ -50,6 +50,7 @@ import { halfFromLabel } from "@/lib/engine/slots";
 import { usePlanning } from "@/lib/planning-context";
 import { useFormDraftReopen } from "@/lib/form-draft";
 import { useEmployeeRowReorder } from "@/lib/use-employee-row-reorder";
+import { usePlanningSelection } from "@/lib/use-planning-selection";
 import { useSession } from "@/lib/auth/session-context";
 import {
   LOGISTIQUE_ROW_ID,
@@ -59,7 +60,6 @@ import {
   type Employee,
 } from "@/lib/types";
 import {
-  emptyCellKey,
   type EmptyCellPick,
 } from "@/lib/engine/create-from-selection";
 import { WelcomeBanner } from "@/components/WelcomeBanner";
@@ -140,10 +140,7 @@ export function CalendarBoard() {
   const [editingChantier, setEditingChantier] = useState<Chantier | null>(null);
   const [emptyPicks, setEmptyPicks] = useState<EmptyCellPick[]>([]);
   const [createFromSelection, setCreateFromSelection] = useState(false);
-  const emptyPickKeys = useMemo(
-    () => new Set(emptyPicks.map(emptyCellKey)),
-    [emptyPicks],
-  );
+
 
   useEffect(() => {
     if (reopen?.kind !== "chantier") return;
@@ -223,6 +220,68 @@ export function CalendarBoard() {
         }
       },
     });
+  const rowIds = useMemo(() => rows.map((row) => row.id), [rows]);
+  const selection = usePlanningSelection(rowIds);
+  const paintMovedRef = useRef(false);
+
+  useEffect(() => {
+    const picks: EmptyCellPick[] = [];
+    const halves: IndependentHalf[] = [];
+    for (const cell of selection.cells) {
+      if (
+        cell.rowId === TRANSPORT_ROW_ID ||
+        cell.rowId === LOGISTIQUE_ROW_ID
+      ) {
+        continue;
+      }
+      const slot = cell.half === 0 ? "matin" : "apres_midi";
+      const asg = assignmentsForCell(snapshot, cell.rowId, cell.date, slot);
+      if (asg.length > 0) {
+        for (const assignment of asg) {
+          halves.push({
+            rowId: cell.rowId,
+            phaseId: assignment.phase.id,
+            date: cell.date,
+            half: cell.half,
+          });
+        }
+        continue;
+      }
+      const row = rows.find((item) => item.id === cell.rowId);
+      const absences = absencesForCell(
+        snapshot.absences,
+        row?.employee?.id ?? null,
+        cell.date,
+      );
+      const slotOff = hoursForSlot(snapshot, cell.rowId, cell.date, cell.half) <= 0;
+      if (session?.isAdmin && row?.employee && absences.length === 0 && !slotOff) {
+        picks.push({ rowId: cell.rowId, date: cell.date, half: cell.half });
+      }
+    }
+    setEmptyPicks(picks);
+    setSelectedHalves(halves);
+  }, [selection.cells, snapshot, rows, session]);
+
+  function beginPlanSelect(
+    event: {
+      pointerId: number;
+      ctrlKey: boolean;
+      metaKey: boolean;
+      shiftKey: boolean;
+      clientX: number;
+      clientY: number;
+    },
+    cell: { rowId: string; date: string; half: 0 | 1 },
+  ) {
+    paintMovedRef.current = false;
+    selection.beginPaint(event, cell);
+  }
+
+  function extendPlanSelect(clientX: number, clientY: number) {
+    if (!selection.painting()) return;
+    paintMovedRef.current = true;
+    selection.extendPaint(clientX, clientY);
+  }
 
   const chantiersInView = useMemo(() => {
     if (loading) return [];
@@ -327,29 +386,6 @@ export function CalendarBoard() {
     setDragPreview({ cells: keys, blocked: result.blocked });
   }
 
-  function toggleHalfSelection(
-    rowId: string,
-    phaseId: string,
-    date: string,
-    half: 0 | 1,
-  ) {
-    const key = halfSelectKey(rowId, phaseId, date, half);
-    setSelectedHalves((current) => {
-      const exists = current.some(
-        (item) =>
-          halfSelectKey(item.rowId, item.phaseId, item.date, item.half) === key,
-      );
-      if (exists) {
-        return current.filter(
-          (item) =>
-            halfSelectKey(item.rowId, item.phaseId, item.date, item.half) !==
-            key,
-        );
-      }
-      return [...current, { rowId, phaseId, date, half }];
-    });
-  }
-
   function onEmptyCellClick(
     rowId: string,
     date: string,
@@ -358,18 +394,7 @@ export function CalendarBoard() {
   ) {
     if (!session?.isAdmin) return;
     if (rowId === TRANSPORT_ROW_ID || rowId === LOGISTIQUE_ROW_ID) return;
-    const pick: EmptyCellPick = { rowId, date, half };
-    const key = emptyCellKey(pick);
-    if (additive) {
-      setEmptyPicks((current) => {
-        if (current.some((item) => emptyCellKey(item) === key)) {
-          return current.filter((item) => emptyCellKey(item) !== key);
-        }
-        return [...current, pick];
-      });
-      return;
-    }
-    setEmptyPicks([pick]);
+    if (additive || paintMovedRef.current) return;
     setCreateFromSelection(true);
   }
 
@@ -458,7 +483,10 @@ export function CalendarBoard() {
         patches: result.patches,
         inserts: result.inserts,
       });
-      if (drag.scope === "libre") setSelectedHalves([]);
+      if (drag.scope === "libre") {
+        setSelectedHalves([]);
+        selection.clear();
+      }
     } catch (err) {
       setDragError(
         err instanceof Error ? err.message : "Déplacement impossible à enregistrer.",
@@ -562,21 +590,41 @@ export function CalendarBoard() {
       </div>
 
       <p className="rounded border border-stone-200 bg-stone-50 px-3 py-2 text-sm text-stone-700">
-        Ctrl+clic (Cmd sur Mac) pour cocher plusieurs blocs, puis glisser vers
-        une case <strong>vide</strong>. Seuls ces blocs bougent — pas toute la
-        suite du chantier, et pas de saut automatique vers le prochain trou.
+        Clic-glisser sur la grille, Ctrl+clic (Cmd sur Mac) ou Maj+clic pour
+        choisir plusieurs cases — vides ou déjà occupées. Les blocs cochés se
+        glissent vers une case <strong>vide</strong> ; un clic sur une case
+        vide ouvre encore la création de chantier.
         {selectedHalves.length > 0
           ? ` ${selectedHalves.length} bloc${selectedHalves.length > 1 ? "s" : ""} choisi${selectedHalves.length > 1 ? "s" : ""}.`
           : ""}
       </p>
       {dragError ? <FormNotice>{dragError}</FormNotice> : null}
       {error ? <FormNotice>{error}</FormNotice> : null}
+      {session?.isAdmin && emptyPicks.length === 0 && selectedHalves.length > 0 ? (
+        <div className="flex flex-wrap items-center gap-2 rounded border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-950">
+          <span>
+            {selectedHalves.length} bloc{selectedHalves.length > 1 ? "s" : ""}{" "}
+            choisi{selectedHalves.length > 1 ? "s" : ""} — glissez vers une case
+            vide, ou Échap pour annuler.
+          </span>
+          <button
+            type="button"
+            onClick={() => selection.clear()}
+            className="rounded border border-sky-300 bg-white px-3 py-1.5 text-sm"
+          >
+            Tout désélectionner
+          </button>
+        </div>
+      ) : null}
       {session?.isAdmin && emptyPicks.length > 0 ? (
         <div className="flex flex-wrap items-center gap-2 rounded border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-950">
           <span>
             {emptyPicks.length} case{emptyPicks.length > 1 ? "s" : ""} vide
-            {emptyPicks.length > 1 ? "s" : ""} — Ctrl+clic (Cmd sur Mac) pour en
-            ajouter d’autres, y compris sur d’autres salariés.
+            {emptyPicks.length > 1 ? "s" : ""}
+            {selectedHalves.length > 0
+              ? ` et ${selectedHalves.length} bloc${selectedHalves.length > 1 ? "s" : ""}`
+              : ""}{" "}
+            — clic-glisser, Ctrl+clic (Cmd sur Mac) ou Maj+clic pour étendre.
           </span>
           <button
             type="button"
@@ -689,7 +737,6 @@ export function CalendarBoard() {
           draggingId={draggingId}
           dragPreview={dragPreview}
           selectedKeys={selectedKeys}
-          emptyPickKeys={emptyPickKeys}
           rowHandleProps={rowHandleProps}
           focusCell={focusCell}
           onSelectDay={setCursorIso}
@@ -697,15 +744,23 @@ export function CalendarBoard() {
           onReception={setReceptionPhaseId}
           onAbsence={setAbsenceEmployee}
           onEmptyCellClick={onEmptyCellClick}
+          onPlanSelectStart={beginPlanSelect}
+          onPlanSelectMove={extendPlanSelect}
+          onPlanSelectEnd={(pointerId) => selection.endPaint(pointerId)}
+          isPlanCellSelected={(cell) => selection.isSelected(cell)}
           onChipDragStart={(event, rowId, chantierId, phaseId, date, half, startMin) => {
-            if (dragScope === "libre" && (event.ctrlKey || event.metaKey)) {
+            if (event.ctrlKey || event.metaKey || event.shiftKey) {
               event.preventDefault();
-              toggleHalfSelection(rowId, phaseId, date, half);
+              beginPlanSelect(event, { rowId, date, half });
               return;
             }
             beginChipDrag(event, rowId, chantierId, phaseId, date, half, startMin);
           }}
           onChipDragMove={(event) => {
+            if (selection.painting()) {
+              extendPlanSelect(event.clientX, event.clientY);
+              return;
+            }
             const drag = dragRef.current;
             if (!drag || drag.pointerId !== event.pointerId) return;
             if (
@@ -720,7 +775,8 @@ export function CalendarBoard() {
             updateDragPreview(event.clientX, event.clientY);
           }}
           onChipDragEnd={(event, phaseId) => {
-            if (event.ctrlKey || event.metaKey) return;
+            selection.endPaint(event.pointerId);
+            if (event.ctrlKey || event.metaKey || event.shiftKey) return;
             if (!dragRef.current) {
               setSelectedPhaseId(phaseId);
               return;
@@ -863,9 +919,10 @@ export function CalendarBoard() {
                           slot,
                         );
                       const assignments = cellAssignments;
+                      const cellId = { rowId: row.id, date: iso, half };
                       const cellKey = `${row.id}|${iso}|${half}`;
                       const dropTarget = dragPreview?.cells.has(cellKey);
-                      const emptySelected = emptyPickKeys.has(cellKey);
+                      const emptySelected = selection.isSelected(cellId);
                       const canCreate =
                         Boolean(session?.isAdmin) &&
                         row.employee &&
@@ -880,6 +937,21 @@ export function CalendarBoard() {
                       <td
                         key={`${row.id}-${iso}-${slot}`}
                         data-plan-cell={cellKey}
+                        onPointerDown={(event) => {
+                          if (event.button !== 0) return;
+                          const target = event.target as HTMLElement;
+                          if (target.closest("button")) return;
+                          event.preventDefault();
+                          event.currentTarget.setPointerCapture(event.pointerId);
+                          beginPlanSelect(event, cellId);
+                        }}
+                        onPointerMove={(event) => {
+                          extendPlanSelect(event.clientX, event.clientY);
+                        }}
+                        onPointerUp={(event) => selection.endPaint(event.pointerId)}
+                        onPointerCancel={(event) =>
+                          selection.endPaint(event.pointerId)
+                        }
                         className={`h-16 border-b border-l border-stone-200 p-1 ${
                           emptySelected
                             ? "bg-sky-100 ring-2 ring-inset ring-sky-600"
@@ -897,11 +969,14 @@ export function CalendarBoard() {
                         } ${canCreate ? "cursor-pointer" : ""}`}
                         onClick={(event) => {
                           if (!canCreate || dragPreview) return;
+                          if (event.ctrlKey || event.metaKey || event.shiftKey) {
+                            return;
+                          }
                           onEmptyCellClick(
                             row.id,
                             iso,
                             half,
-                            event.ctrlKey || event.metaKey,
+                            false,
                           );
                         }}
                       >
@@ -931,21 +1006,15 @@ export function CalendarBoard() {
                               showLivraisonAddress={row.id === TRANSPORT_ROW_ID}
                               allowDrag={row.id !== TRANSPORT_ROW_ID}
                               clockLabel={assignmentClockLabel(snapshot, assignment)}
-
+                              onSelectCell={(event) => {
+                                event.preventDefault();
+                                beginPlanSelect(event, {
+                                  rowId: row.id,
+                                  date: iso,
+                                  half,
+                                });
+                              }}
                               onPointerDragStart={(event) => {
-                                if (
-                                  dragScope === "libre" &&
-                                  (event.ctrlKey || event.metaKey)
-                                ) {
-                                  event.preventDefault();
-                                  toggleHalfSelection(
-                                    row.id,
-                                    assignment.phase.id,
-                                    iso,
-                                    half,
-                                  );
-                                  return;
-                                }
                                 beginChipDrag(
                                   event,
                                   row.id,
@@ -956,6 +1025,10 @@ export function CalendarBoard() {
                                 );
                               }}
                               onPointerDragMove={(event) => {
+                                if (selection.painting()) {
+                                  extendPlanSelect(event.clientX, event.clientY);
+                                  return;
+                                }
                                 const drag = dragRef.current;
                                 if (!drag || drag.pointerId !== event.pointerId) {
                                   return;
@@ -972,7 +1045,10 @@ export function CalendarBoard() {
                                 updateDragPreview(event.clientX, event.clientY);
                               }}
                               onPointerDragEnd={(event, phaseId) => {
-                                if (event.ctrlKey || event.metaKey) return;
+                                selection.endPaint(event.pointerId);
+                                if (event.ctrlKey || event.metaKey || event.shiftKey) {
+                                  return;
+                                }
                                 if (!dragRef.current) {
                                   setSelectedPhaseId(phaseId);
                                   return;
@@ -1062,7 +1138,6 @@ function DayDetail({
   draggingId,
   dragPreview,
   selectedKeys,
-  emptyPickKeys,
   rowHandleProps,
   focusCell,
   onSelectDay,
@@ -1070,6 +1145,10 @@ function DayDetail({
   onReception,
   onAbsence,
   onEmptyCellClick,
+  onPlanSelectStart,
+  onPlanSelectMove,
+  onPlanSelectEnd,
+  isPlanCellSelected,
   onChipDragStart,
   onChipDragMove,
   onChipDragEnd,
@@ -1082,7 +1161,6 @@ function DayDetail({
   draggingId: string | null;
   dragPreview: { cells: Set<string>; blocked: boolean } | null;
   selectedKeys: Set<string>;
-  emptyPickKeys: Set<string>;
   rowHandleProps: ReturnType<typeof useEmployeeRowReorder>["rowHandleProps"];
   focusCell: { rowId: string; date: string; half: 0 | 1 } | null;
   onSelectDay: (iso: string) => void;
@@ -1095,6 +1173,20 @@ function DayDetail({
     half: 0 | 1,
     additive: boolean,
   ) => void;
+  onPlanSelectStart: (
+    event: {
+      pointerId: number;
+      ctrlKey: boolean;
+      metaKey: boolean;
+      shiftKey: boolean;
+      clientX: number;
+      clientY: number;
+    },
+    cell: { rowId: string; date: string; half: 0 | 1 },
+  ) => void;
+  onPlanSelectMove: (clientX: number, clientY: number) => void;
+  onPlanSelectEnd: (pointerId: number) => void;
+  isPlanCellSelected: (cell: { rowId: string; date: string; half: 0 | 1 }) => boolean;
   onChipDragStart: (
     event: PointerEvent<HTMLButtonElement>,
     rowId: string,
@@ -1262,7 +1354,8 @@ function DayDetail({
                         iso,
                         slot,
                       );
-                      const emptySelected = emptyPickKeys.has(cellKey);
+                      const cellId = { rowId: row.id, date: iso, half: window.half };
+                      const emptySelected = isPlanCellSelected(cellId);
                       const canCreate =
                         canReorder &&
                         Boolean(row.employee) &&
@@ -1285,14 +1378,25 @@ function DayDetail({
                           left: `${((window.start - dayStart) / span) * 100}%`,
                           width: `${((window.end - window.start) / span) * 100}%`,
                         }}
+                        onPointerDown={(event) => {
+                          if (event.button !== 0) return;
+                          event.preventDefault();
+                          event.currentTarget.setPointerCapture(event.pointerId);
+                          onPlanSelectStart(event, cellId);
+                        }}
+                        onPointerMove={(event) => {
+                          onPlanSelectMove(event.clientX, event.clientY);
+                        }}
+                        onPointerUp={(event) => onPlanSelectEnd(event.pointerId)}
+                        onPointerCancel={(event) =>
+                          onPlanSelectEnd(event.pointerId)
+                        }
                         onClick={(event) => {
                           if (!canCreate || dragPreview) return;
-                          onEmptyCellClick(
-                            row.id,
-                            iso,
-                            window.half,
-                            event.ctrlKey || event.metaKey,
-                          );
+                          if (event.ctrlKey || event.metaKey || event.shiftKey) {
+                            return;
+                          }
+                          onEmptyCellClick(row.id, iso, window.half, false);
                         }}
                       />
                       );
@@ -1357,7 +1461,20 @@ function DayDetail({
                               }`}
                               onPointerDown={
                                 allowDrag
-                                  ? (event) =>
+                                  ? (event) => {
+                                      if (
+                                        event.ctrlKey ||
+                                        event.metaKey ||
+                                        event.shiftKey
+                                      ) {
+                                        event.preventDefault();
+                                        onPlanSelectStart(event, {
+                                          rowId: row.id,
+                                          date: iso,
+                                          half: slot.half,
+                                        });
+                                        return;
+                                      }
                                       onChipDragStart(
                                         event,
                                         row.id,
@@ -1366,15 +1483,29 @@ function DayDetail({
                                         iso,
                                         slot.half,
                                         start,
-                                      )
+                                      );
+                                    }
                                   : undefined
                               }
-                              onPointerMove={allowDrag ? onChipDragMove : undefined}
-                              onPointerUp={(event) =>
-                                allowDrag
-                                  ? onChipDragEnd(event, assignment.phase.id)
-                                  : onOpenPhase(assignment.phase.id)
-                              }
+                              onPointerMove={(event) => {
+                                onPlanSelectMove(event.clientX, event.clientY);
+                                if (allowDrag) onChipDragMove(event);
+                              }}
+                              onPointerUp={(event) => {
+                                onPlanSelectEnd(event.pointerId);
+                                if (
+                                  event.ctrlKey ||
+                                  event.metaKey ||
+                                  event.shiftKey
+                                ) {
+                                  return;
+                                }
+                                if (allowDrag) {
+                                  onChipDragEnd(event, assignment.phase.id);
+                                  return;
+                                }
+                                onOpenPhase(assignment.phase.id);
+                              }}
                               onPointerCancel={(event) => {
                                 if (allowDrag) {
                                   onChipDragEnd(event, assignment.phase.id);
@@ -1457,6 +1588,7 @@ function PhaseChipButton({
   showLivraisonAddress,
   allowDrag = true,
   clockLabel,
+  onSelectCell,
   onPointerDragStart,
   onPointerDragMove,
   onPointerDragEnd,
@@ -1468,6 +1600,7 @@ function PhaseChipButton({
   showLivraisonAddress?: boolean;
   allowDrag?: boolean;
   clockLabel?: string | null;
+  onSelectCell?: (event: PointerEvent<HTMLButtonElement>) => void;
   onPointerDragStart: (event: PointerEvent<HTMLButtonElement>) => void;
   onPointerDragMove: (event: PointerEvent<HTMLButtonElement>) => void;
   onPointerDragEnd: (
@@ -1483,10 +1616,21 @@ function PhaseChipButton({
           ? `touch-none ${dragging ? "cursor-grabbing" : "cursor-grab"}`
           : "cursor-pointer"
       } ${selected ? "rounded ring-2 ring-sky-600" : ""}`}
-      onPointerDown={allowDrag ? onPointerDragStart : undefined}
+      onPointerDown={(event) => {
+        if (event.ctrlKey || event.metaKey || event.shiftKey) {
+          onSelectCell?.(event);
+          return;
+        }
+        if (allowDrag) onPointerDragStart(event);
+      }}
       onPointerMove={allowDrag ? onPointerDragMove : undefined}
-      onPointerUp={(event) => onPointerDragEnd(event, assignment.phase.id)}
-      onPointerCancel={(event) => onPointerDragEnd(event, assignment.phase.id)}
+      onPointerUp={(event) => {
+        if (event.ctrlKey || event.metaKey || event.shiftKey) return;
+        onPointerDragEnd(event, assignment.phase.id);
+      }}
+      onPointerCancel={(event) =>
+        onPointerDragEnd(event, assignment.phase.id)
+      }
     >
       <AssignmentChip
         assignment={assignment}
