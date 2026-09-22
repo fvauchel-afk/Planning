@@ -688,7 +688,6 @@ export function CalendarBoard() {
           canReorder={Boolean(session?.isAdmin)}
           draggingId={draggingId}
           dragPreview={dragPreview}
-          dragScope={dragScope}
           selectedKeys={selectedKeys}
           emptyPickKeys={emptyPickKeys}
           rowHandleProps={rowHandleProps}
@@ -1062,7 +1061,6 @@ function DayDetail({
   canReorder,
   draggingId,
   dragPreview,
-  dragScope,
   selectedKeys,
   emptyPickKeys,
   rowHandleProps,
@@ -1083,7 +1081,6 @@ function DayDetail({
   canReorder: boolean;
   draggingId: string | null;
   dragPreview: { cells: Set<string>; blocked: boolean } | null;
-  dragScope: DragScope;
   selectedKeys: Set<string>;
   emptyPickKeys: Set<string>;
   rowHandleProps: ReturnType<typeof useEmployeeRowReorder>["rowHandleProps"];
