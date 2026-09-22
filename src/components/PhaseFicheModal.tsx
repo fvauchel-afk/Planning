@@ -14,6 +14,7 @@ import { useSession } from "@/lib/auth/session-context";
 import { phaseIsEstimative } from "@/lib/dates-estimatives";
 import { needsAlgoValidation, propositionFromDelay } from "@/lib/signalements";
 import { generateDelaySolutions, propositionFromSolutions } from "@/lib/engine/plan-solutions";
+import { linkedPosePhases } from "@/lib/engine/linked-pose";
 import { formatLongDate, formatOvertimeHours, shiftToReach } from "@/lib/dates";
 import {
   planBestDelayInWindow,
@@ -583,6 +584,14 @@ export function PhaseFicheModal({
                 </span>
               </label>
             </fieldset>
+            {phase.type_phase === "pose" &&
+            linkedPosePhases(snapshot, phase.id).length > 1 ? (
+              <p className="text-xs text-stone-600">
+                Tous les poseurs de cet élément bougent ensemble, sur les mêmes
+                dates. S’il manque de la place, le planning cherche le prochain
+                créneau où ils sont tous libres en même temps.
+              </p>
+            ) : null}
             <label className="block text-sm">
               <span className="mb-1 block font-medium">Note (optionnel)</span>
               <textarea

@@ -11,6 +11,10 @@ import {
 } from "@/lib/types";
 import type { Displacement } from "./planner";
 import {
+  linkedPosePhases,
+  planLinkedPoseMove,
+} from "@/lib/engine/linked-pose";
+import {
   MIN_LOGISTICS_WORKING_DAYS,
   SEARCH_DAYS,
   isSlotBlockedForRow,
@@ -422,6 +426,9 @@ function relocatableForScope(
   scope: DelayScope,
 ): Set<string> {
   const relocatable = collectRelocatable(work, origin);
+  for (const pose of linkedPosePhases(work, origin.id)) {
+    if (pose.date_debut && pose.date_fin) relocatable.add(pose.id);
+  }
   if (scope !== "chantier") return relocatable;
   for (const phase of remainingOfChantier(work, origin)) {
     if (phase.id !== origin.id && phase.date_debut && phase.date_fin) {
@@ -429,6 +436,48 @@ function relocatableForScope(
     }
   }
   return relocatable;
+}
+
+function attachLinkedPoseDelay(
+  snapshot: PlanningSnapshot,
+  origin: PhasePlanning,
+  result: DelayPlanResult,
+): DelayPlanResult {
+  if (origin.type_phase !== "pose") return result;
+  if (linkedPosePhases(snapshot, origin.id).length < 2) return result;
+  const planned = result.patches.find((item) => item.id === origin.id);
+  const debut =
+    planned?.date_debut ?? result.chosenStart ?? origin.date_debut;
+  const fin = planned?.date_fin ?? origin.date_fin;
+  if (!debut) return result;
+  const move = planLinkedPoseMove(
+    snapshot,
+    origin,
+    origin.employe_id ?? "",
+    debut,
+    fin,
+  );
+  if (!move) return result;
+  if (move.blocked) {
+    return {
+      ...result,
+      status: "conflict",
+      message: move.message,
+    };
+  }
+  const ids = new Set(move.patches.map((item) => item.id));
+  return {
+    ...result,
+    patches: [
+      ...result.patches.filter((item) => !ids.has(item.id)),
+      ...move.patches,
+    ],
+    chosenStart: move.date_debut,
+    message:
+      result.status === "conflict"
+        ? result.message
+        : `${result.message} ${move.message}`,
+  };
 }
 
 function prioritaireDatesMoved(
@@ -526,9 +575,13 @@ function planMoveOriginStart(
     originDates,
     relocatableForScope(work, originForPack, scope),
   );
-  return resultFromPacked(snapshot, origin, packed, {
-    chosenStart: packed.dates.get(origin.id)?.debut,
-  });
+  return attachLinkedPoseDelay(
+    snapshot,
+    origin,
+    resultFromPacked(snapshot, origin, packed, {
+      chosenStart: packed.dates.get(origin.id)?.debut,
+    }),
+  );
 }
 
 function scoreDelayPlan(
@@ -692,7 +745,11 @@ export function planDelayCascade(
     originDates,
     relocatableForScope(work, originForPack, scope),
   );
-  const result = resultFromPacked(snapshot, origin, packed);
+  const result = attachLinkedPoseDelay(
+    snapshot,
+    origin,
+    resultFromPacked(snapshot, origin, packed),
+  );
   if (result.status === "ok") {
     const verb = direction < 0 ? "avancée" : "décalage";
     return {
