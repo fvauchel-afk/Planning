@@ -138,6 +138,7 @@ export function ChantierForm() {
   const [dateFin, setDateFin] = useState("");
   const [datesEstimatives, setDatesEstimatives] = useState(true);
   const [avecPose, setAvecPose] = useState<boolean | null>(null);
+  const [avecAdministratif, setAvecAdministratif] = useState<boolean | null>(null);
   const [avecFabrication, setAvecFabrication] = useState<boolean | null>(null);
   const [avecThermolaquage, setAvecThermolaquage] = useState<boolean | null>(null);
   const [avecLivraison, setAvecLivraison] = useState<boolean | null>(null);
@@ -216,6 +217,7 @@ export function ChantierForm() {
   }
 
   function linkedPhaseType(): TypePhase | null {
+    if (avecAdministratif === true) return "administratif";
     if (avecFabrication === true) return "fabrication";
     if (avecFabrication === false && avecPose === true) return "pose";
     return null;
@@ -310,6 +312,10 @@ export function ChantierForm() {
       setError("Indiquez si le chantier comprend une installation / pose.");
       return null;
     }
+    if (avecAdministratif === null) {
+      setError("Indiquez si le chantier comprend une phase Administratif.");
+      return null;
+    }
     if (avecFabrication === null) {
       setError("Indiquez si le chantier comprend une fabrication.");
       return null;
@@ -352,6 +358,7 @@ export function ChantierForm() {
       date_fin: urgent ? dateFin || null : null,
       dates_estimatives: datesEstimatives,
       avec_pose: avecPose,
+      avec_administratif: avecAdministratif,
       avec_fabrication: avecFabrication,
       avec_thermolaquage: avecThermolaquage,
       avec_livraison: avecLivraison,
@@ -716,7 +723,7 @@ export function ChantierForm() {
       <div>
         <h2 className="font-serif text-3xl text-stone-900">Nouveau chantier</h2>
         <p className="mt-1 text-sm text-stone-600">
-          Indiquez si le chantier a une pose, du thermolaquage et une livraison. Le délai de
+          Indiquez si le chantier a un Administratif, une pose, du thermolaquage et une livraison. Le délai de
           5 jours ouvrés du sous-traitant démarre à l’envoi du bon de commande.
         </p>
         {hasPendingSignalements(snapshot) ? (
@@ -846,7 +853,7 @@ export function ChantierForm() {
           </legend>
           <p className="text-xs text-stone-600">
             Le début est le premier jour de la première phase : Administratif
-            s’il a une durée plus bas, sinon Fabrication, sinon Pose. Les
+            s’il est à Oui plus bas, sinon Fabrication, sinon Pose. Les
             phases suivantes (thermolaquage, livraison, pose) se calent à la
             suite. Laissez le début vide pour un calage automatique au plus tôt.
             En urgent, la date de fin est le dernier jour de la dernière phase
@@ -900,6 +907,39 @@ export function ChantierForm() {
               Confirmé
             </label>
           </div>
+        </fieldset>
+        <fieldset className="rounded-lg border border-stone-300 bg-stone-50/60 p-3 text-sm md:col-span-2">
+          <legend className="px-1 font-medium text-stone-800">
+            Administratif <span className="text-red-700">*</span>
+          </legend>
+          <div className="flex flex-wrap gap-4">
+            <label className="inline-flex items-center gap-2">
+              <input
+                type="radio"
+                name="avec-administratif"
+                required
+                checked={avecAdministratif === true}
+                onChange={() => setAvecAdministratif(true)}
+              />
+              Oui
+            </label>
+            <label className="inline-flex items-center gap-2">
+              <input
+                type="radio"
+                name="avec-administratif"
+                required
+                checked={avecAdministratif === false}
+                onChange={() => setAvecAdministratif(false)}
+              />
+              Non
+            </label>
+          </div>
+          {avecAdministratif ? (
+            <p className="mt-3 text-xs text-stone-600">
+              La personne se choisit dans le tableau de chaque élément. Sans
+              durée, une demi-journée est calée en tête de chaîne.
+            </p>
+          ) : null}
         </fieldset>
         <fieldset className="rounded-lg border border-stone-300 bg-stone-50/60 p-3 text-sm md:col-span-2">
           <legend className="px-1 font-medium text-stone-800">
@@ -1222,6 +1262,9 @@ export function ChantierForm() {
                 <tbody>
                   {element.phases
                     .filter((phase) => {
+                      if (phase.type_phase === "administratif" && avecAdministratif !== true) {
+                        return false;
+                      }
                       if (phase.type_phase === "pose" && avecPose === false) {
                         return false;
                       }
