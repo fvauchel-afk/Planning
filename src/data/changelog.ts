@@ -11,6 +11,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-09-22-vue-ensemble-mois-scroll",
+    title: "Planning : le mois entier, on change de période en défilant",
+    items: [
+      "En Vue d’ensemble, la grille montre le mois du 1er au dernier jour. Elle s’élargit ; s’il manque de place, on défile horizontalement plutôt que d’écraser les cases.",
+      "Les flèches ‹ › disparaissent. On passe au mois, à la semaine ou au jour suivant en défilant vers le bas (vers le haut pour revenir). Le bouton du milieu (septembre, la semaine, aujourd’hui) ramène à aujourd’hui.",
+    ],
+  },
+  {
     id: "2026-09-22-admin-oui-non",
     title: "Administratif : Oui ou Non comme les autres phases",
     items: [
