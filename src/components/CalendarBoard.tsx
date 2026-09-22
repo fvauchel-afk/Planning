@@ -192,6 +192,8 @@ export function CalendarBoard() {
   const rowIds = useMemo(() => rows.map((row) => row.id), [rows]);
   const selection = usePlanningSelection(rowIds);
   const paintMovedRef = useRef(false);
+  const paintOriginRef = useRef<{ x: number; y: number } | null>(null);
+  const ficheTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     const picks: EmptyCellPick[] = [];
@@ -240,17 +242,50 @@ export function CalendarBoard() {
       shiftKey: boolean;
       clientX: number;
       clientY: number;
+      currentTarget?: EventTarget | null;
     },
     cell: { rowId: string; date: string; half: 0 | 1 },
   ) {
     paintMovedRef.current = false;
+    paintOriginRef.current = { x: event.clientX, y: event.clientY };
+    const node = event.currentTarget as HTMLElement | undefined;
+    if (node?.setPointerCapture) {
+      try {
+        node.setPointerCapture(event.pointerId);
+      } catch {
+        /* capture optionnelle */
+      }
+    }
     selection.beginPaint(event, cell);
   }
 
   function extendPlanSelect(clientX: number, clientY: number) {
     if (!selection.painting()) return;
+    const origin = paintOriginRef.current;
+    if (
+      !paintMovedRef.current &&
+      origin &&
+      Math.abs(clientX - origin.x) < 8 &&
+      Math.abs(clientY - origin.y) < 8
+    ) {
+      return;
+    }
     paintMovedRef.current = true;
     selection.extendPaint(clientX, clientY);
+  }
+
+  function scheduleFiche(phaseId: string) {
+    if (ficheTimerRef.current) window.clearTimeout(ficheTimerRef.current);
+    ficheTimerRef.current = window.setTimeout(() => {
+      ficheTimerRef.current = null;
+      setSelectedPhaseId(phaseId);
+    }, 280);
+  }
+
+  function cancelFicheTimer() {
+    if (!ficheTimerRef.current) return;
+    window.clearTimeout(ficheTimerRef.current);
+    ficheTimerRef.current = null;
   }
 
   const chantiersInView = useMemo(() => {
@@ -368,6 +403,48 @@ export function CalendarBoard() {
     setCreateFromSelection(true);
   }
 
+  function handleChipPointerDown(
+    event: PointerEvent<HTMLButtonElement>,
+    rowId: string,
+    chantierId: string,
+    phaseId: string,
+    date: string,
+    half: 0 | 1,
+    startMin?: number,
+  ) {
+    if (event.button !== 0) return;
+    if (event.ctrlKey || event.metaKey || event.shiftKey) {
+      event.preventDefault();
+      beginPlanSelect(event, { rowId, date, half });
+      return;
+    }
+    const already = selection.isSelected({ rowId, date, half });
+    if (event.detail >= 2 || already) {
+      cancelFicheTimer();
+      beginChipDrag(event, rowId, chantierId, phaseId, date, half, startMin);
+      return;
+    }
+    beginPlanSelect(event, { rowId, date, half });
+  }
+
+  function handleChipPointerUp(
+    event: PointerEvent<HTMLButtonElement>,
+    phaseId: string,
+  ) {
+    selection.endPaint(event.pointerId);
+    if (event.ctrlKey || event.metaKey || event.shiftKey) return;
+    if (paintMovedRef.current) {
+      paintMovedRef.current = false;
+      return;
+    }
+    if (!dragRef.current) {
+      scheduleFiche(phaseId);
+      return;
+    }
+    if (dragRef.current.pointerId !== event.pointerId) return;
+    void finishDrag(event.clientX, event.clientY, phaseId);
+  }
+
   function beginChipDrag(
     event: PointerEvent<HTMLButtonElement>,
     rowId: string,
@@ -428,9 +505,10 @@ export function CalendarBoard() {
     setDragPreview(null);
     if (!drag) return;
     if (!drag.moved) {
-      setSelectedPhaseId(phaseId);
+      scheduleFiche(phaseId);
       return;
     }
+    cancelFicheTimer();
     const drop =
       view === "day" && drag.startMin != null
         ? planDayDropFromPoint(clientX, clientY)
@@ -440,7 +518,7 @@ export function CalendarBoard() {
     if (result.blocked) {
       setDragError(
         drag.scope === "libre"
-          ? "Créneau non libre : les blocs sont revenus à leur place. Déposez sur une case vide, pendant les horaires du salarié (pas d’absence, pas de 0 h)."
+          ? "Impossible de poser les blocs ici (absence, hors horaire, ou pas assez de place pour recaler la suite). Ils reviennent à leur place."
           : "Créneau occupé : le chantier est revenu à sa place. Impossible de déposer sur une absence ou un créneau hors horaire (0 h).",
       );
       return;
@@ -533,11 +611,11 @@ export function CalendarBoard() {
             est écrite sur le bloc). En vue Jour, vous déposez au cran de
             30 minutes ; un trou en fin de journée reste vide. Le thermolaquage sous-traité et les livraisons ont chacun leur ligne.
             Les livraisons restent aussi sur la ligne du salarié responsable.
-            Glissez un ou plusieurs blocs vers une case vide, y compris en vue
-            Jour. Seuls ces blocs bougent — pas toute la suite du chantier, et
-            pas de saut automatique vers le prochain trou. Un dépôt sur une
-            case déjà prise, une absence ou un créneau hors horaire à 0 h
-            (vendredi après-midi en 35 h, week-end) est annulé.
+            Glissez depuis un bloc pour sélectionner tout ce que vous survolez.
+            Un second glissé depuis un bloc déjà sélectionné (ou un double-clic)
+            déplace le groupe. Déposer au milieu d’un autre chantier l’ouvre et
+            recale la suite. Un clic sans bouger ouvre la fiche (légère pause
+            pour laisser le double-clic).
             Glissez une ligne de salarié (clic gauche maintenu sur le nom)
             pour changer l’ordre d’affichage, enregistré pour tout le monde.
             Défilez vers le bas pour passer au mois, à la semaine ou au jour
@@ -744,12 +822,15 @@ export function CalendarBoard() {
           onPlanSelectEnd={(pointerId) => selection.endPaint(pointerId)}
           isPlanCellSelected={(cell) => selection.isSelected(cell)}
           onChipDragStart={(event, rowId, chantierId, phaseId, date, half, startMin) => {
-            if (event.ctrlKey || event.metaKey || event.shiftKey) {
-              event.preventDefault();
-              beginPlanSelect(event, { rowId, date, half });
-              return;
-            }
-            beginChipDrag(event, rowId, chantierId, phaseId, date, half, startMin);
+            handleChipPointerDown(
+              event,
+              rowId,
+              chantierId,
+              phaseId,
+              date,
+              half,
+              startMin,
+            );
           }}
           onChipDragMove={(event) => {
             if (selection.painting()) {
@@ -770,14 +851,7 @@ export function CalendarBoard() {
             updateDragPreview(event.clientX, event.clientY);
           }}
           onChipDragEnd={(event, phaseId) => {
-            selection.endPaint(event.pointerId);
-            if (event.ctrlKey || event.metaKey || event.shiftKey) return;
-            if (!dragRef.current) {
-              setSelectedPhaseId(phaseId);
-              return;
-            }
-            if (dragRef.current.pointerId !== event.pointerId) return;
-            void finishDrag(event.clientX, event.clientY, phaseId);
+            handleChipPointerUp(event, phaseId);
           }}
         />
         </div>
@@ -1011,7 +1085,7 @@ export function CalendarBoard() {
                                 });
                               }}
                               onPointerDragStart={(event) => {
-                                beginChipDrag(
+                                handleChipPointerDown(
                                   event,
                                   row.id,
                                   assignment.chantier.id,
@@ -1041,18 +1115,7 @@ export function CalendarBoard() {
                                 updateDragPreview(event.clientX, event.clientY);
                               }}
                               onPointerDragEnd={(event, phaseId) => {
-                                selection.endPaint(event.pointerId);
-                                if (event.ctrlKey || event.metaKey || event.shiftKey) {
-                                  return;
-                                }
-                                if (!dragRef.current) {
-                                  setSelectedPhaseId(phaseId);
-                                  return;
-                                }
-                                if (dragRef.current.pointerId !== event.pointerId) {
-                                  return;
-                                }
-                                void finishDrag(event.clientX, event.clientY, phaseId);
+                                handleChipPointerUp(event, phaseId);
                               }}
                             />
                             <LaunchValidateButton
@@ -1436,19 +1499,6 @@ function DayDetail({
                               onPointerDown={
                                 allowDrag
                                   ? (event) => {
-                                      if (
-                                        event.ctrlKey ||
-                                        event.metaKey ||
-                                        event.shiftKey
-                                      ) {
-                                        event.preventDefault();
-                                        onPlanSelectStart(event, {
-                                          rowId: row.id,
-                                          date: iso,
-                                          half: slot.half,
-                                        });
-                                        return;
-                                      }
                                       onChipDragStart(
                                         event,
                                         row.id,
@@ -1587,19 +1637,14 @@ function PhaseChipButton({
       type="button"
       className={`block w-full text-left ${
         allowDrag
-          ? `touch-none ${dragging ? "cursor-grabbing" : "cursor-grab"}`
+          ? `touch-none ${dragging ? "cursor-grabbing" : selected ? "cursor-grab" : "cursor-crosshair"}`
           : "cursor-pointer"
       } ${selected ? "rounded ring-2 ring-sky-600" : ""}`}
       onPointerDown={(event) => {
-        if (event.ctrlKey || event.metaKey || event.shiftKey) {
-          onSelectCell?.(event);
-          return;
-        }
-        if (allowDrag) onPointerDragStart(event);
+        onPointerDragStart(event);
       }}
       onPointerMove={allowDrag ? onPointerDragMove : undefined}
       onPointerUp={(event) => {
-        if (event.ctrlKey || event.metaKey || event.shiftKey) return;
         onPointerDragEnd(event, assignment.phase.id);
       }}
       onPointerCancel={(event) =>

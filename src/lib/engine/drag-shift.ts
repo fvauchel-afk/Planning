@@ -1745,9 +1745,315 @@ function landingConflictsIgnoringFreed(
   return false;
 }
 
+function independentMoveEdits(
+  snapshot: PlanningSnapshot,
+  toRowId: string,
+  byPhase: Map<
+    string,
+    { from: OccupiedHalf; to: OccupiedHalf; fromRowId: string }[]
+  >,
+  previewDrop: DragShiftPreviewCell[],
+): { patches: PhasePatch[]; inserts: PhaseInsert[]; preview: DragShiftPreviewCell[] } {
+  const patches: PhasePatch[] = [];
+  const inserts: PhaseInsert[] = [];
+  const preview: DragShiftPreviewCell[] = [];
+  for (const [phaseId, pieces] of Array.from(byPhase.entries())) {
+    const phase = snapshot.phases.find((item) => item.id === phaseId);
+    if (!phase) continue;
+    const origin = blockForPhaseOnRow(
+      snapshot,
+      pieces[0]?.fromRowId ?? toRowId,
+      phaseId,
+    );
+    if (!origin) continue;
+    const movingKeys = new Set(
+      pieces.map((item) => `${item.from.date}|${item.from.half}`),
+    );
+    const staying = origin.halves.filter(
+      (half) => !movingKeys.has(`${half.date}|${half.half}`),
+    );
+    const placed: { rowId: string; halves: OccupiedHalf[] }[] = [
+      ...groupAdjacentHalves(staying).map((halves) => ({
+        rowId: origin.rowId,
+        halves,
+      })),
+      ...groupAdjacentHalves(pieces.map((item) => item.to)).map((halves) => ({
+        rowId: toRowId,
+        halves,
+      })),
+    ].filter((group) => group.halves.length > 0);
+    placed.sort((left, right) =>
+      compareHalves(left.halves[0]!, right.halves[0]!),
+    );
+    if (placed.length === 0) continue;
+    const hoursOf = (rowId: string, halves: OccupiedHalf[]) =>
+      halves.reduce(
+        (sum, half) => sum + hoursForOccupiedHalf(snapshot, rowId, half),
+        0,
+      );
+    const first = placed[0]!;
+    const sourceRow = first.rowId === toRowId ? origin.rowId : first.rowId;
+    const firstHours =
+      hoursOf(sourceRow, first.halves) || hoursOf(first.rowId, first.halves);
+    patches.push({
+      id: phase.id,
+      date_debut: first.halves[0]!.date,
+      date_fin: first.halves[first.halves.length - 1]!.date,
+      employe_id: first.rowId,
+      heure_debut: heureForHalf(first.halves[0]!.half, phase.heure_debut),
+      duree_estimee_heures: firstHours || phase.duree_estimee_heures,
+    });
+    preview.push(...previewCellsForHalves(first.rowId, first.halves));
+    for (const group of placed.slice(1)) {
+      const groupSource = group.rowId === toRowId ? origin.rowId : group.rowId;
+      const hours =
+        hoursOf(groupSource, group.halves) ||
+        hoursOf(group.rowId, group.halves) ||
+        4;
+      inserts.push(
+        insertFromPhase(
+          phase,
+          group.halves[0]!,
+          group.halves[group.halves.length - 1]!,
+          hours,
+          group.rowId,
+        ),
+      );
+      preview.push(...previewCellsForHalves(group.rowId, group.halves));
+    }
+  }
+  return {
+    patches,
+    inserts,
+    preview: preview.length ? preview : previewDrop,
+  };
+}
+
+/** Ouvre le chantier visé et recale sa suite après le groupe déposé. */
+function tryInsertIndependentHalves(input: {
+  snapshot: PlanningSnapshot;
+  toRowId: string;
+  moving: IndependentHalf[];
+  landingHalves: OccupiedHalf[];
+  byPhase: Map<
+    string,
+    { from: OccupiedHalf; to: OccupiedHalf; fromRowId: string }[]
+  >;
+  delta: number;
+  previewDrop: DragShiftPreviewCell[];
+}): DragShiftResult | null {
+  const landingHalves = [...input.landingHalves].sort(compareHalves);
+  if (landingHalves.length === 0) return null;
+  const landingStart = landingHalves[0]!;
+  const landingEnd = landingHalves[landingHalves.length - 1]!;
+  const movingPhaseIds = new Set(input.moving.map((item) => item.phaseId));
+  const destBlocks = chantierBlocksForRow(input.snapshot, input.toRowId).filter(
+    (block) =>
+      halvesOverlap(block.halves, landingHalves) &&
+      !block.phaseIds.every((id) => movingPhaseIds.has(id)),
+  );
+  if (destBlocks.length === 0) return null;
+
+  const { occupancy } = occupancyForRow(input.snapshot, input.toRowId);
+  const rowBlocks = chantierBlocksForRow(input.snapshot, input.toRowId);
+  const following: ChantierBlock[] = [];
+  const seenFollow = new Set<string>();
+  for (const target of destBlocks) {
+    for (const neighbor of gluedNeighbors(
+      input.snapshot,
+      occupancy,
+      rowBlocks,
+      target,
+      1,
+    )) {
+      if (neighbor.phaseIds.every((id) => movingPhaseIds.has(id))) continue;
+      if (seenFollow.has(neighbor.key)) continue;
+      seenFollow.add(neighbor.key);
+      following.push(neighbor);
+    }
+  }
+
+  const suffixQueue: OccupiedHalf[] = [];
+  const seenSuffix = new Set<string>();
+  const pushSuffix = (half: OccupiedHalf) => {
+    const key = halfKey(half);
+    if (seenSuffix.has(key)) return;
+    seenSuffix.add(key);
+    suffixQueue.push(half);
+  };
+  const orderedTargets = [...destBlocks].sort((left, right) =>
+    compareHalves(left.halves[0]!, right.halves[0]!),
+  );
+  for (const target of orderedTargets) {
+    for (const half of target.halves) {
+      if (compareHalves(half, landingStart) >= 0) pushSuffix(half);
+    }
+  }
+  for (const block of following) {
+    for (const half of block.halves) pushSuffix(half);
+  }
+  if (suffixQueue.length === 0) return null;
+
+  const packed: OccupiedHalf[] = [];
+  let cursor = landingEnd;
+  for (let i = 0; i < suffixQueue.length; i += 1) {
+    const next = nextOpenWorkHalf(input.snapshot, input.toRowId, cursor);
+    if (!next) return null;
+    packed.push(next);
+    cursor = next;
+  }
+  const remap = new Map<string, OccupiedHalf>();
+  suffixQueue.forEach((old, index) => {
+    remap.set(halfKey(old), packed[index]!);
+  });
+
+  const occupantPhaseIds = new Set([
+    ...orderedTargets.flatMap((block) => block.phaseIds),
+    ...following.flatMap((block) => block.phaseIds),
+  ]);
+  const ignored = new Set([
+    ...Array.from(movingPhaseIds),
+    ...Array.from(occupantPhaseIds),
+  ]);
+  if (
+    landingHasConflict(
+      input.snapshot,
+      [
+        { rowId: input.toRowId, halves: landingHalves },
+        { rowId: input.toRowId, halves: packed },
+      ],
+      ignored,
+    )
+  ) {
+    return null;
+  }
+
+  const remapHalves = (halves: OccupiedHalf[]): OccupiedHalf[] =>
+    halves.map((half) => remap.get(halfKey(half)) ?? half);
+
+  const phaseHalvesOnRow = (phaseId: string): OccupiedHalf[] => {
+    const phase = input.snapshot.phases.find((item) => item.id === phaseId);
+    if (!phase) return [];
+    const slots = slotsFromExistingPhase(input.snapshot, phase).filter(
+      (slot) => slot.rowId === input.toRowId,
+    );
+    const unique = new Map<string, OccupiedHalf>();
+    for (const slot of slots) {
+      const half: OccupiedHalf = { date: slot.date, half: slot.half };
+      unique.set(halfKey(half), half);
+    }
+    return Array.from(unique.values()).sort(compareHalves);
+  };
+
+  const applyRemapToPhase = (
+    phase: PhasePlanning,
+    halves: OccupiedHalf[],
+  ): PhasePatch | null => {
+    const mapped = remapHalves(halves).sort(compareHalves);
+    if (mapped.length === 0) return null;
+    const first = mapped[0]!;
+    const last = mapped[mapped.length - 1]!;
+    const hours = halves.reduce(
+      (sum, half) =>
+        sum + hoursForOccupiedHalf(input.snapshot, input.toRowId, half),
+      0,
+    );
+    return {
+      id: phase.id,
+      date_debut: first.date,
+      date_fin: last.date,
+      employe_id: input.toRowId,
+      heure_debut: heureForHalf(first.half, phase.heure_debut),
+      duree_estimee_heures: hours,
+    };
+  };
+
+  const byId = new Map<string, PhasePatch>();
+  const occupantInserts: PhaseInsert[] = [];
+  for (const phaseId of orderedTargets.flatMap((block) => block.phaseIds)) {
+    if (movingPhaseIds.has(phaseId)) continue;
+    const phase = input.snapshot.phases.find((item) => item.id === phaseId);
+    if (!phase) continue;
+    const halves = phaseHalvesOnRow(phaseId);
+    const prefix = halves.filter(
+      (half) => compareHalves(half, landingStart) < 0,
+    );
+    const suffix = halves.filter(
+      (half) => compareHalves(half, landingStart) >= 0,
+    );
+    if (suffix.length === 0) continue;
+    if (prefix.length === 0) {
+      const patch = applyRemapToPhase(phase, suffix);
+      if (patch) byId.set(patch.id, patch);
+      continue;
+    }
+    const prefixHours = prefix.reduce(
+      (sum, half) =>
+        sum + hoursForOccupiedHalf(input.snapshot, input.toRowId, half),
+      0,
+    );
+    const suffixHours = suffix.reduce(
+      (sum, half) =>
+        sum + hoursForOccupiedHalf(input.snapshot, input.toRowId, half),
+      0,
+    );
+    const prefixLast = prefix[prefix.length - 1]!;
+    byId.set(phase.id, {
+      id: phase.id,
+      date_debut: prefix[0]!.date,
+      date_fin: prefixLast.date,
+      employe_id: phase.employe_id,
+      heure_debut: heureForHalf(prefix[0]!.half, phase.heure_debut),
+      duree_estimee_heures: prefixHours,
+    });
+    const mappedSuffix = remapHalves(suffix).sort(compareHalves);
+    const suffixFirst = mappedSuffix[0];
+    const suffixLast = mappedSuffix[mappedSuffix.length - 1];
+    if (suffixFirst && suffixLast && suffixHours > 0) {
+      occupantInserts.push(
+        insertFromPhase(
+          phase,
+          suffixFirst,
+          suffixLast,
+          suffixHours,
+          input.toRowId,
+        ),
+      );
+    }
+  }
+
+  for (const block of following) {
+    for (const phaseId of block.phaseIds) {
+      if (byId.has(phaseId) || movingPhaseIds.has(phaseId)) continue;
+      const phase = input.snapshot.phases.find((item) => item.id === phaseId);
+      if (!phase) continue;
+      const patch = applyRemapToPhase(phase, phaseHalvesOnRow(phaseId));
+      if (patch) byId.set(patch.id, patch);
+    }
+  }
+
+  const moved = independentMoveEdits(
+    input.snapshot,
+    input.toRowId,
+    input.byPhase,
+    input.previewDrop,
+  );
+  return {
+    delta: input.delta === 0 ? 0 : 1,
+    patches: [...moved.patches, ...Array.from(byId.values())],
+    inserts: [...moved.inserts, ...occupantInserts],
+    chain: [...orderedTargets, ...following],
+    preview: [
+      ...moved.preview,
+      ...previewCellsForHalves(input.toRowId, packed),
+    ],
+    blocked: false,
+  };
+}
+
 /**
  * Déplace uniquement les demi-journées choisies vers le créneau visé.
- * Pas de cascade, pas de saut vers le prochain trou : occupé / 0 h / absence = refusé.
+ * Un dépôt sur un chantier existant l’ouvre et recale la suite, comme un chantier entier.
  */
 export function shiftIndependentHalves(input: {
   snapshot: PlanningSnapshot;
@@ -1817,95 +2123,41 @@ export function shiftIndependentHalves(input: {
     byPhase.set(piece.phaseId, list);
   }
 
+  const previewLandings = landings.flatMap((item) =>
+    previewCellsForHalves(item.rowId, item.halves),
+  );
   if (landingConflictsIgnoringFreed(input.snapshot, landings, freed)) {
+    const inserted = tryInsertIndependentHalves({
+      snapshot: input.snapshot,
+      toRowId: input.toRowId,
+      moving,
+      landingHalves: landings.flatMap((item) => item.halves),
+      byPhase,
+      delta,
+      previewDrop: previewLandings,
+    });
+    if (inserted) return inserted;
     return {
       delta,
       patches: [],
       chain: [],
-      preview: landings.flatMap((item) =>
-        previewCellsForHalves(item.rowId, item.halves),
-      ),
+      preview: previewLandings,
       blocked: true,
     };
   }
 
-  const patches: PhasePatch[] = [];
-  const inserts: PhaseInsert[] = [];
-  const preview: DragShiftPreviewCell[] = [];
-  for (const [phaseId, pieces] of Array.from(byPhase.entries())) {
-    const phase = input.snapshot.phases.find((item) => item.id === phaseId);
-    if (!phase) continue;
-    const origin = blockForPhaseOnRow(
-      input.snapshot,
-      pieces[0]?.fromRowId ?? input.fromRowId,
-      phaseId,
-    );
-    if (!origin) continue;
-    const movingKeys = new Set(
-      pieces.map((item) => `${item.from.date}|${item.from.half}`),
-    );
-    const staying = origin.halves.filter(
-      (half) => !movingKeys.has(`${half.date}|${half.half}`),
-    );
-    const placed: { rowId: string; halves: OccupiedHalf[] }[] = [
-      ...groupAdjacentHalves(staying).map((halves) => ({
-        rowId: origin.rowId,
-        halves,
-      })),
-      ...groupAdjacentHalves(pieces.map((item) => item.to)).map((halves) => ({
-        rowId: input.toRowId,
-        halves,
-      })),
-    ].filter((group) => group.halves.length > 0);
-    placed.sort((left, right) =>
-      compareHalves(left.halves[0]!, right.halves[0]!),
-    );
-    if (placed.length === 0) continue;
-    const hoursOf = (rowId: string, halves: OccupiedHalf[]) =>
-      halves.reduce(
-        (sum, half) =>
-          sum + hoursForOccupiedHalf(input.snapshot, rowId, half),
-        0,
-      );
-    const first = placed[0]!;
-    const sourceRow = first.rowId === input.toRowId ? origin.rowId : first.rowId;
-    const firstHours =
-      hoursOf(sourceRow, first.halves) || hoursOf(first.rowId, first.halves);
-    patches.push({
-      id: phase.id,
-      date_debut: first.halves[0]!.date,
-      date_fin: first.halves[first.halves.length - 1]!.date,
-      employe_id: first.rowId,
-      heure_debut: heureForHalf(first.halves[0]!.half, phase.heure_debut),
-      duree_estimee_heures: firstHours || phase.duree_estimee_heures,
-    });
-    preview.push(...previewCellsForHalves(first.rowId, first.halves));
-    for (const group of placed.slice(1)) {
-      const groupSource =
-        group.rowId === input.toRowId ? origin.rowId : group.rowId;
-      const hours =
-        hoursOf(groupSource, group.halves) ||
-        hoursOf(group.rowId, group.halves) ||
-        4;
-      inserts.push(
-        insertFromPhase(
-          phase,
-          group.halves[0]!,
-          group.halves[group.halves.length - 1]!,
-          hours,
-          group.rowId,
-        ),
-      );
-      preview.push(...previewCellsForHalves(group.rowId, group.halves));
-    }
-  }
-
+  const moved = independentMoveEdits(
+    input.snapshot,
+    input.toRowId,
+    byPhase,
+    previewDrop,
+  );
   return {
     delta: delta === 0 ? 0 : 1,
-    patches,
-    inserts,
+    patches: moved.patches,
+    inserts: moved.inserts,
     chain: [],
-    preview: preview.length ? preview : previewDrop,
+    preview: moved.preview,
     blocked: false,
   };
 }
@@ -2000,9 +2252,21 @@ function runDragShiftSelfCheck() {
     grab: { date: "2026-09-07", half: 0 },
     drop: { date: "2026-09-08", half: 0 },
   });
-  if (!ontoOccupied.blocked) {
+  if (ontoOccupied.blocked) {
     throw new Error(
-      "drag-shift: un dépôt libre sur un créneau déjà pris doit être refusé (pas de saut)",
+      "drag-shift: un dépôt libre sur un créneau déjà pris doit ouvrir le chantier visé",
+    );
+  }
+  const insertedA = ontoOccupied.patches.find((item) => item.id === "ph-a");
+  if (insertedA?.date_debut !== "2026-09-08") {
+    throw new Error(
+      `drag-shift: le bloc inséré doit atterrir le 8, reçu ${insertedA?.date_debut}`,
+    );
+  }
+  const shiftedB = ontoOccupied.patches.find((item) => item.id === "ph-b");
+  if (!shiftedB || (shiftedB.date_debut ?? "") < "2026-09-08") {
+    throw new Error(
+      "drag-shift: l’occupant doit être recalé après le groupe inséré",
     );
   }
   const ontoFree = shiftIndependentHalves({
