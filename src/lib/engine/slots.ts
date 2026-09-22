@@ -143,6 +143,23 @@ export function isEmployeeAbsent(
   );
 }
 
+/**
+ * Ligne d’atelier sous-traitant (Thermolaquage, ou un salarié dont le seul rôle
+ * est `logistique`) : plusieurs chantiers peuvent partager le même créneau.
+ */
+export function isSousTraitancePlanningRow(
+  snapshot: PlanningSnapshot,
+  rowId: string,
+): boolean {
+  if (rowId === LOGISTIQUE_ROW_ID) return true;
+  const employee = snapshot.employees.find((item) => item.id === rowId);
+  if (!employee) return false;
+  return (
+    employee.roles.includes("logistique") &&
+    employee.roles.every((role) => role === "logistique")
+  );
+}
+
 export function isSlotBlockedForRow(
   snapshot: PlanningSnapshot,
   rowId: string,
