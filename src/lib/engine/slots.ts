@@ -597,12 +597,12 @@ export function overlappingOwners(
         ) {
           continue;
         }
-        if (!span.ownerId.startsWith("incoming")) ids.add(span.ownerId);
+        ids.add(span.ownerId);
       }
       continue;
     }
     const owner = occupancy.get(slotKey(slot.rowId, slot.date, slot.half));
-    if (owner && !owner.startsWith("incoming")) ids.add(owner);
+    if (owner) ids.add(owner);
   }
   return Array.from(ids);
 }

@@ -84,44 +84,16 @@ function halfSelectKey(
   return `${rowId}|${phaseId}|${date}|${half}`;
 }
 
-function periodShiftLabel(view: ViewMode, direction: -1 | 1): string {
-  if (view === "day") {
-    return direction < 0 ? "Jour précédent" : "Jour suivant";
-  }
-  if (view === "week") {
-    return direction < 0 ? "Semaine précédente" : "Semaine suivante";
-  }
-  return direction < 0 ? "Mois précédent" : "Mois suivant";
+function shiftCursor(view: ViewMode, iso: string, direction: number): string {
+  if (view === "day") return addDays(iso, direction);
+  if (view === "week") return addDays(iso, direction * 7);
+  return addMonths(iso, direction);
 }
 
-function PeriodArrow({
-  direction,
-  view,
-  onClick,
-  size = "side",
-}: {
-  direction: -1 | 1;
-  view: ViewMode;
-  onClick: () => void;
-  size?: "side" | "toolbar";
-}) {
-  const label = periodShiftLabel(view, direction);
-  const glyph = direction < 0 ? "‹" : "›";
-  return (
-    <button
-      type="button"
-      title={label}
-      aria-label={label}
-      onClick={onClick}
-      className={
-        size === "side"
-          ? "sticky top-1/3 z-[1] flex h-14 w-9 shrink-0 items-center justify-center self-center rounded-lg border border-stone-300 bg-white text-2xl leading-none text-stone-800 shadow-sm hover:bg-stone-50"
-          : "rounded border border-stone-300 bg-white px-2.5 py-1.5 text-lg leading-none text-stone-800"
-      }
-    >
-      {glyph}
-    </button>
-  );
+function daysForCursor(view: ViewMode, iso: string): string[] {
+  if (view === "day") return [iso];
+  if (view === "week") return eachDay(startOfWeekIso(iso), 7);
+  return eachDayInclusive(startOfMonthIso(iso), endOfMonthIso(iso));
 }
 
 export function CalendarBoard() {
@@ -134,6 +106,7 @@ export function CalendarBoard() {
   const [selectedHalves, setSelectedHalves] = useState<IndependentHalf[]>([]);
   const [todayIso, setTodayIso] = useState(() => toISODate(new Date()));
   const [cursorIso, setCursorIso] = useState(todayIso);
+  const periodPaneRef = useRef<HTMLDivElement>(null);
   const [selectedPhaseId, setSelectedPhaseId] = useState<string | null>(null);
   const [receptionPhaseId, setReceptionPhaseId] = useState<string | null>(null);
   const [absenceEmployee, setAbsenceEmployee] = useState<Employee | null>(null);
@@ -189,11 +162,7 @@ export function CalendarBoard() {
     };
   }, []);
 
-  const days = useMemo(() => {
-    if (view === "day") return [cursorIso];
-    if (view === "week") return eachDay(startOfWeekIso(cursorIso), 7);
-    return eachDayInclusive(startOfMonthIso(cursorIso), endOfMonthIso(cursorIso));
-  }, [cursorIso, view]);
+  const days = useMemo(() => daysForCursor(view, cursorIso), [cursorIso, view]);
   const rangeStart = days[0] ?? cursorIso;
   const rangeEnd = days[days.length - 1] ?? cursorIso;
   const periodLabel =
@@ -498,16 +467,53 @@ export function CalendarBoard() {
   }
 
   function shift(direction: number) {
-    if (view === "day") {
-      setCursorIso((current) => addDays(current, direction));
-      return;
-    }
-    if (view === "week") {
-      setCursorIso((current) => addDays(current, direction * 7));
-      return;
-    }
-    setCursorIso((current) => addMonths(current, direction));
+    setCursorIso((current) => shiftCursor(view, current, direction));
   }
+
+  const periodWheelLock = useRef(false);
+  function onPeriodWheel(event: {
+    deltaX: number;
+    deltaY: number;
+    currentTarget: HTMLDivElement;
+    preventDefault: () => void;
+  }) {
+    if (Math.abs(event.deltaX) >= Math.abs(event.deltaY)) return;
+    if (Math.abs(event.deltaY) < 28) return;
+    const el = event.currentTarget;
+    const goingDown = event.deltaY > 0;
+    const fits = el.scrollHeight <= el.clientHeight + 8;
+    const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 8;
+    const atTop = el.scrollTop <= 8;
+    if (!fits) {
+      if (goingDown && !atBottom) return;
+      if (!goingDown && !atTop) return;
+    }
+    event.preventDefault();
+    if (periodWheelLock.current) return;
+    periodWheelLock.current = true;
+    shift(goingDown ? 1 : -1);
+    window.setTimeout(() => {
+      periodWheelLock.current = false;
+    }, 420);
+    requestAnimationFrame(() => {
+      el.scrollTop = goingDown ? 0 : Math.max(0, el.scrollHeight - el.clientHeight);
+    });
+  }
+
+  useEffect(() => {
+    const el = periodPaneRef.current;
+    if (!el) return;
+    const handler = (event: WheelEvent) => {
+      onPeriodWheel({
+        deltaX: event.deltaX,
+        deltaY: event.deltaY,
+        currentTarget: el,
+        preventDefault: () => event.preventDefault(),
+      });
+    };
+    el.addEventListener("wheel", handler, { passive: false });
+    return () => el.removeEventListener("wheel", handler);
+  });
 
   function goToday() {
     setCursorIso(toISODate(new Date()));
@@ -534,6 +540,10 @@ export function CalendarBoard() {
             (vendredi après-midi en 35 h, week-end) est annulé.
             Glissez une ligne de salarié (clic gauche maintenu sur le nom)
             pour changer l’ordre d’affichage, enregistré pour tout le monde.
+            Défilez vers le bas pour passer au mois, à la semaine ou au jour
+            suivant (plus de flèches ‹ ›). La Vue d’ensemble montre le mois
+            entier, du 1er au dernier jour : élargissez ou faites défiler
+            horizontalement si besoin.
             {usingSupabase
               ? " Données connectées à Supabase."
               : ""}
@@ -566,12 +576,6 @@ export function CalendarBoard() {
             ))}
           </div>
           <div className="inline-flex items-center gap-1">
-            <PeriodArrow
-              direction={-1}
-              view={view}
-              size="toolbar"
-              onClick={() => shift(-1)}
-            />
             <button
               type="button"
               onClick={goToday}
@@ -580,12 +584,6 @@ export function CalendarBoard() {
             >
               {periodLabel}
             </button>
-            <PeriodArrow
-              direction={1}
-              view={view}
-              size="toolbar"
-              onClick={() => shift(1)}
-            />
           </div>
         </div>
       </div>
@@ -722,13 +720,10 @@ export function CalendarBoard() {
       </div>
 
       {view === "day" ? (
-        <div className="flex items-stretch gap-2">
-          <PeriodArrow
-            direction={-1}
-            view={view}
-            onClick={() => shift(-1)}
-          />
-          <div className="min-w-0 flex-1">
+        <div
+          ref={periodPaneRef}
+          className="max-h-[calc(100dvh-12rem)] min-h-[24rem] overflow-auto"
+        >
         <DayDetail
           iso={cursorIso}
           todayIso={todayIso}
@@ -740,7 +735,6 @@ export function CalendarBoard() {
           selectedKeys={selectedKeys}
           rowHandleProps={rowHandleProps}
           focusCell={focusCell}
-          onSelectDay={setCursorIso}
           onOpenPhase={setSelectedPhaseId}
           onReception={setReceptionPhaseId}
           onAbsence={setAbsenceEmployee}
@@ -786,22 +780,20 @@ export function CalendarBoard() {
             void finishDrag(event.clientX, event.clientY, phaseId);
           }}
         />
-          </div>
-          <PeriodArrow
-            direction={1}
-            view={view}
-            onClick={() => shift(1)}
-          />
         </div>
       ) : (
-        <div className="flex items-stretch gap-2">
-          <PeriodArrow
-            direction={-1}
-            view={view}
-            onClick={() => shift(-1)}
-          />
-          <div className={`min-w-0 flex-1 overflow-auto rounded-lg border border-stone-300 bg-white shadow-sm ${dragPreview || reordering ? "select-none" : ""}`}>
-          <table className="min-w-full border-collapse text-sm">
+        <div
+          ref={periodPaneRef}
+          className={`max-h-[calc(100dvh-12rem)] min-h-[24rem] overflow-auto rounded-lg border border-stone-300 bg-white shadow-sm ${dragPreview || reordering ? "select-none" : ""}`}
+        >
+          <table
+            className={`${view === "week" ? "min-w-full" : ""} border-collapse text-sm`}
+            style={
+              view === "overview"
+                ? { minWidth: `${160 + days.length * 148}px` }
+                : undefined
+            }
+          >
             <thead>
               <tr className="bg-stone-100">
                 <th className="sticky left-0 z-10 min-w-[160px] border-b border-r border-stone-300 bg-stone-100 px-3 py-2 text-left font-medium">
@@ -814,7 +806,9 @@ export function CalendarBoard() {
                     <th
                       key={iso}
                       colSpan={2}
-                      className={`min-w-[110px] border-b border-l border-stone-300 px-1 py-2 text-center ${
+                      className={`border-b border-l border-stone-300 px-1 py-2 text-center ${
+                        view === "overview" ? "min-w-[9rem]" : "min-w-[110px]"
+                      } ${
                         isToday
                           ? "bg-yellow-200 text-stone-900"
                           : isSunday(iso)
@@ -1084,12 +1078,6 @@ export function CalendarBoard() {
             </tbody>
           </table>
         </div>
-          <PeriodArrow
-            direction={1}
-            view={view}
-            onClick={() => shift(1)}
-          />
-        </div>
       )}
       {editingChantier && (
         <ChantierEditModal
@@ -1142,7 +1130,6 @@ function DayDetail({
   selectedKeys,
   rowHandleProps,
   focusCell,
-  onSelectDay,
   onOpenPhase,
   onReception,
   onAbsence,
@@ -1165,7 +1152,6 @@ function DayDetail({
   selectedKeys: Set<string>;
   rowHandleProps: ReturnType<typeof useEmployeeRowReorder>["rowHandleProps"];
   focusCell: { rowId: string; date: string; half: 0 | 1 } | null;
-  onSelectDay: (iso: string) => void;
   onOpenPhase: (phaseId: string) => void;
   onReception: (phaseId: string) => void;
   onAbsence: (employee: Employee) => void;
@@ -1216,20 +1202,6 @@ function DayDetail({
         >
           {formatLongDate(iso)}
         </h3>
-        <div className="flex items-center gap-1">
-          <PeriodArrow
-            direction={-1}
-            view="day"
-            size="toolbar"
-            onClick={() => onSelectDay(addDays(iso, -1))}
-          />
-          <PeriodArrow
-            direction={1}
-            view="day"
-            size="toolbar"
-            onClick={() => onSelectDay(addDays(iso, 1))}
-          />
-        </div>
       </div>
       <div className="overflow-hidden rounded-lg border border-stone-300 bg-white">
         <div className="grid grid-cols-[200px_1fr] border-b border-stone-200 bg-stone-100 text-sm font-medium">
